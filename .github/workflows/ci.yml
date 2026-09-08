@@ -28,9 +28,21 @@ jobs:
       - name: Shell syntax
         run: for f in scripts/*.sh; do sh -n "$f"; done
 
-  python:
+  # hashFiles() is not available in a job-level `if` (steps only), so a
+  # probe job checks out the tree and exports whether the app exists yet.
+  detect:
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('pyproject.toml') != '' }}
+    outputs:
+      python: ${{ steps.probe.outputs.python }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: probe
+        run: test -f pyproject.toml && echo "python=true" >> "$GITHUB_OUTPUT" || echo "python=false" >> "$GITHUB_OUTPUT"
+
+  python:
+    needs: detect
+    if: needs.detect.outputs.python == 'true'
+    runs-on: ubuntu-latest
     services:
       db:
         image: pgvector/pgvector:pg16
