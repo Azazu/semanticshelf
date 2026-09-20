@@ -10,21 +10,37 @@ with Compose v2, `make`, Node 22 (for the OpenSpec CLI:
 ```bash
 cp .env.example .env          # adjust FORWARD_DB_PORT if 5433 is taken
 make init                     # uv sync, start pgvector, alembic upgrade head
-make run                      # http://127.0.0.1:8000/docs
+make run                      # http://127.0.0.1:8000/api/docs
 ```
+
+The variables the application reads are listed in
+[`../reference/settings.md`](../reference/settings.md); `DATABASE_URL`
+is the only required one. `make run` starts uvicorn with
+`--factory app.main:create_app`, so the settings are read when the app is
+built, not when the module is imported.
+
+What to look at once it runs:
+
+- `http://127.0.0.1:8000/health` — liveness: `{"status":"ok","version":…}`,
+  touches nothing.
+- `http://127.0.0.1:8000/ready` — readiness: 200 when the database
+  answers within `READINESS_TIMEOUT_SECONDS` and its Alembic revision is
+  the code's head, otherwise a 503 problem-details body whose `checks`
+  member names each check's outcome (exception class names only, never a
+  driver message). Docker healthchecks use this one.
+- `http://127.0.0.1:8000/api/docs` — Swagger UI; the document itself is
+  at `/api/openapi.json`.
+
+Every error is an RFC 9457 problem-details body, every response carries
+`X-Request-ID` (yours if you send one, generated otherwise), and every log
+line written for a request carries the same id.
+
+The baseline migration runs `CREATE EXTENSION IF NOT EXISTS vector`, which
+needs the database owner role; the Compose database and the CI service
+both run as that role.
 
 Model weights download on first use into `MODEL_CACHE` (gitignored);
 unit tests never need them.
-
-## Before the application exists
-
-Until the FastAPI scaffold lands (it brings `alembic.ini` and
-`app/main.py` together), `make migrate`, `make revision MSG='…'`,
-`make run` and `make test-integration` print
-`[SKIP] no alembic.ini — application not scaffolded yet` and exit 0, so
-`make init` ends on that line after the database is healthy. `make check`
-is real from the start: ruff, the format check, mypy strict and the unit
-tests run against the package as it is.
 
 ## Daily
 
@@ -33,8 +49,8 @@ tests run against the package as it is.
 | database up / down | `make up` / `make down` |
 | dev server | `make run` |
 | migrations | `make migrate`, `make revision MSG='…'` |
-| the gate floor | `make check` (lock check + ruff + mypy + unit tests) |
-| integration tests | `make test-integration` (needs the container) |
+| the gate floor | `make check` (lock check + ruff + mypy + unit and api tests, no database) |
+| integration tests | `make test-integration` (needs the migrated container and `DATABASE_URL`) |
 
 ## Reset (DESTRUCTIVE)
 

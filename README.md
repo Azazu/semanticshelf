@@ -2,10 +2,12 @@
 
 Semantic search over images: CLIP text→image and DINOv2 image→image embeddings in PostgreSQL + pgvector, served by FastAPI.
 
-**Stage:** specified — agent workflow, documentation layout, CI and the
-technical specification (`docs/explanation/requirements.md`) are in
-place; application code arrives through reviewed OpenSpec changes
-(see `openspec/ROADMAP.md`).
+**Stage:** scaffolded — the FastAPI application skeleton (settings,
+structured logs with request ids, RFC 9457 errors, async database
+engine, Alembic baseline, liveness and readiness probes, Swagger UI) is in
+place; features arrive through reviewed OpenSpec changes
+(see `openspec/ROADMAP.md`; the specification is
+`docs/explanation/requirements.md`).
 
 ## Start reading here
 
@@ -23,7 +25,8 @@ place; application code arrives through reviewed OpenSpec changes
 ```bash
 cp .env.example .env
 make init      # uv sync (downloads Python 3.12 once), start the database, migrate
-make check     # lock check + lint + format check + types + unit tests
+make check     # lock check + lint + format check + types + unit and api tests
+make run       # http://127.0.0.1:8000/api/docs · /health · /ready
 ```
 
 ## Licence

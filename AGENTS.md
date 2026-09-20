@@ -337,7 +337,7 @@ brief); ordered plan: `openspec/ROADMAP.md`.
 |---|---|
 | `make init` | first run: `uv sync`, start the database, `alembic upgrade head` |
 | `make up` / `make down` | start / stop the database container |
-| `make run` | `uvicorn app.main:app --reload` |
+| `make run` | `uvicorn --factory app.main:create_app --reload` |
 | `make migrate` / `make revision MSG='…'` | apply migrations / autogenerate a revision |
 | `make test` / `make lint` / `make fmt` / `make types` | pytest / ruff check / ruff format / mypy |
 | `make lock-check` | `uv lock --check`: `uv.lock` matches `pyproject.toml` (CI syncs with `--frozen`, which does not check) |

@@ -41,7 +41,7 @@ run: ## Development server with reload
 ifdef APP_MISSING
 	@echo "$(SKIP_MSG)"
 else
-	$(RUN) uvicorn app.main:app --reload --host 127.0.0.1 --port $${APP_PORT:-8000}
+	$(RUN) uvicorn --factory app.main:create_app --reload --host 127.0.0.1 --port $${APP_PORT:-8000}
 endif
 
 migrate: ## Apply migrations

@@ -8,19 +8,19 @@ Authoritative live source: `make help`.
 |---|---|
 | `make init` | first run: uv sync, start the database, migrate |
 | `make up` / `make down` / `make ps` / `make logs` | database container lifecycle |
-| `make run` | uvicorn dev server with reload |
+| `make run` | uvicorn dev server with reload (`--factory app.main:create_app`, port `APP_PORT`, default 8000) |
 | `make revision MSG='…'` | autogenerate an Alembic revision |
 | `make migrate` | apply migrations |
-| `make test` / `make test-integration` | unit tests (fake embedder) / pgvector integration tests |
+| `make test` / `make test-integration` | unit and api tests (no database) / pgvector integration tests (`DATABASE_URL`, migrated database) |
 | `make lock-check` | `uv lock --check`: `uv.lock` matches `pyproject.toml` |
 | `make lint` / `make fmt` / `make fmt-check` / `make types` | ruff check / ruff format / format check / mypy |
-| `make check` | lock check + lint + format + types + unit tests — the gate floor |
+| `make check` | lock check + lint + format + types + unit and api tests — the gate floor |
 
-Guarded targets: while `alembic.ini` does not exist (the application
-scaffold has not landed yet), `make run`, `make migrate`,
-`make revision MSG='…'` and `make test-integration` print
-`[SKIP] no alembic.ini — application not scaffolded yet` and exit 0.
-`make check` is never guarded.
+Guarded targets: `make run`, `make migrate`, `make revision MSG='…'` and
+`make test-integration` print `[SKIP] no alembic.ini — application not
+scaffolded yet` and exit 0 while `alembic.ini` is absent. The file exists
+since the application scaffold, so the guard is inert and the targets are
+real; `make check` is never guarded.
 
 ## Workflow scripts
 

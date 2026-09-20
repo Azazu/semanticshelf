@@ -25,6 +25,8 @@ implementing change)_
 
 - [`reference/commands.md`](reference/commands.md) — contributor
   command surface: make targets, scripts, agent slash commands
+- [`reference/settings.md`](reference/settings.md) — every environment
+  variable the service reads, with defaults and the template lines
 
 ## Tutorials (learning-oriented)
 
