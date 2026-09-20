@@ -14,7 +14,6 @@ carries the full scope, exit criteria and the declared tier.
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 2 | `scaffold-fastapi-app` | app factory, settings, structlog + request id, problem-details errors, `/health`, `/ready`, async engine, Alembic baseline, `/api/docs`, test layers with the fake-embedder fixture | medium |
 | 3 | `add-assets-and-embeddings-schema` | `assets`, `embeddings`, `indexing_jobs` with dimension CHECK and per-model HNSW index, repositories, migration round trip in CI, ADR-001 | medium |
 | 4 | `add-embedder-protocol-and-clip` | `Embedder` protocol, lazy registry, inference threadpool, fake embedder, CLIP adapter, `models warm`, on-demand real-model smoke | high |
 | 5 | `add-asset-upload-and-storage` | asset CRUD, `/file`, `/thumbnail`, listing, tag/meta rules, storage layout, dedup, thumbnails, crash-safe writes, `storage prune` | high |
