@@ -63,3 +63,14 @@
 | # | Severity | Location | Finding | Status |
 |---|----------|----------|---------|--------|
 | 1 | blocker | `proposal.md` What Changes 4 and Impact; `tasks.md` §§2.1, 3.1, 4.4, 6.1 | The reopened scope now adds a `lock-check` target and makes it the first step of `make check`, but `tasks.md` has no implementation task for that scope: task 2.1 implements only the four guarded application targets, task 3.1 is positive verification, and task 4.4 is only the failing-input demonstration. The wrap-up is also stale: task 6.1 assigns the 4.4 evidence to `chore(uv)` and describes the Makefile commit only as the guard, so it does not account coherently for the persistent `lock-check` change. This fails the Gate 1 requirement that every scope claim have both an implementation task and a verification task. Add the explicit Makefile implementation work and reconcile the positive-check/evidence and commit mapping with it. | fixed |
+
+## Confirmation 3 · Gate 1 · Round 2
+**Reviewer:** codex
+**Date:** 2026-09-20
+**Reviewed-Commit:** bae45a9ee57959912b31785023612221ae2da53b
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — task 2.2 now explicitly implements the `lock-check` target and makes it the first prerequisite of `make check`; task 3.1 includes its positive execution; and task 6.1 assigns the persistent Makefile change, the green aggregate run, and the lock-drift evidence to the `chore(make)` commit that actually carries them. |
