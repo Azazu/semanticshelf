@@ -7,7 +7,7 @@ doubt it wins over default agent behavior. Process record:
 
 Semantic search over images: CLIP text→image and DINOv2 image→image embeddings in PostgreSQL + pgvector, served by FastAPI.
 
-**Review mode:** manual
+**Review mode:** auto
 
 ## Agent Roles
 
@@ -15,7 +15,7 @@ Semantic search over images: CLIP text→image and DINOv2 image→image embeddin
 |---|---|
 | Claude Code | Executor: explores, authors OpenSpec proposals/designs/tasks, implements, runs checks |
 | Codex | Independent reviewer at the gates a change's risk tier requires; does not implement |
-| User | Final arbiter; the only party who merges to `main` and pushes; in `manual` review mode also the party who runs Codex |
+| User | Final arbiter; the only party who merges to `main` and pushes (branches before Gate 2, `main` after merge); in `manual` review mode also the party who runs Codex |
 
 The `**Review mode:**` line above is read by `scripts/gate-run.sh`
 (`auto` when absent). `auto`: the runner invokes Codex itself.
@@ -36,6 +36,7 @@ Claude  /opsx:propose             → proposal, specs delta, design, tasks
         (high tier)  /gate-review <id> 1   → Codex Gate 1 on the artifacts
 Claude  /opsx:apply               → implement, commit per logical block
 Claude  make check                → lint + static analysis + tests, all green
+User    git push -u origin change/<id> → CI green on the exact HEAD (medium/high)
         (medium/high) /gate-review <id> 2  → Codex Gate 2 on the code diff
 Claude  /workflow:fix-findings    → fix, update Status, re-review (confirm)
         (manual mode) every /gate-review is two steps: `request` — the
@@ -133,9 +134,9 @@ operations of the other mode.
 
 | Mode | Operations | What the runner does |
 |---|---|---|
-| `auto` | `<id> <gate> full` · `<id> <gate> confirm <round>` | lock, repository validation, the mechanical floor (`scripts/pregate-verify.sh`), the bounded hermetic Codex call, verification of the reviewer's output, commit of `review.md` with a `Co-Authored-By: Codex` trailer |
+| `auto` | `<id> <gate> full` · `<id> <gate> confirm <round>` | lock, repository validation, the mechanical floor (`scripts/pregate-verify.sh`), the bounded hermetic Codex call, verification of the reviewer's output, commit of `review.md` |
 | `manual` | `<id> <gate> request [<round>]` | lock, validation, the floor, then PRINTS the prompt (identifiers only) and stops; nothing is written or committed. The executor reports "review needed: gate N, commit X" to the user and ends the turn |
-| `manual` | `<id> <gate> record` | after the user ran Codex: verifies that only `review.md` changed, that the last record is a Round/Confirmation for the gate bound to the current HEAD with a valid verdict, then commits it with the Codex trailer |
+| `manual` | `<id> <gate> record` | after the user ran Codex: verifies that only `review.md` changed, that the last record is a Round/Confirmation for the gate bound to the current HEAD with a valid verdict, then commits it |
 
 Between `request` and `record` nothing may be committed on the branch:
 the record must bind to the commit that was requested. The user hands
@@ -157,6 +158,12 @@ repository, or the printed `codex exec` one-liner) and lets it write
   modified file, or a record not bound to the reviewed commit → the gate
   is NOT passed, nothing is committed, `review.md` is left modified for
   inspection. The executor never completes or edits a reviewer's record.
+- **Reviewer quota.** Codex's usage limits are far below the executor's.
+  When a run fails on a quota or rate limit (non-zero exit with the
+  limit named in the runner's log tail), the executor stops: it writes a
+  `blocked` handoff naming the limit, tells the user, and ends the
+  session. It never retries in a loop and never substitutes its own
+  review for the reviewer's.
 - Quick, record-less alternative for a sanity pass (not a gate):
   `codex exec review --base main`.
 
@@ -199,7 +206,9 @@ reviewer's job is unknown weaknesses, not the executor's missing steps.
   (test, diff, or rendered output); every documented command was run in
   its exact form; every changed document re-read whole after the last
   edit; for `high` tier every new or changed check has a demonstrated
-  failing input (a test that fails when the guard is removed).
+  failing input (a test that fails when the guard is removed); the user
+  has pushed the branch and the CI run on the exact HEAD is green (the
+  executor asks for the push and waits; a red run is fixed first).
 - **Mechanical floor:** `scripts/pregate-verify.sh <gate1|gate2> <id>`
   — run by `/gate-review` before the reviewer (FAIL aborts) and by
   `/workflow:handoff` when targeting `awaiting-gate-1/2`.
@@ -212,7 +221,9 @@ reviewer's job is unknown weaknesses, not the executor's missing steps.
 - Conventional Commits, English, imperative mood (`feat:`, `fix:`,
   `docs:`, `test:`, `refactor:`, `chore:`, `ci:`, `review:`).
 - Commit per logical task block; small commits — the history is read.
-- Agent-authored commits end with the agent's `Co-Authored-By` trailer.
+- Commits carry no agent trailers (`Co-Authored-By` or similar) and no
+  other authorship marks: the repository is a public portfolio and its
+  contributor graph shows the developer only.
 - Merging into `main` is the user's action (`/git:merge` executes it on
   the user's behalf after the verifier passes).
 - **Agents never push, force-push, rebase shared history, or delete

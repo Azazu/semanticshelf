@@ -49,7 +49,9 @@ limited budget: every mandatory step must pay for itself.
 6. **Pull, not push.** The reviewer receives identifiers only and gathers
    context itself. The prompts are constants in `scripts/gate-run.sh`;
    the executor cannot add hints. The sandbox cannot commit; the runner
-   verifies and commits with a Codex co-author trailer.
+   verifies and commits the record. No commit carries an agent trailer:
+   the repository is a public portfolio whose contributor graph must show
+   the developer only.
 7. **The runner is the only path to the reviewer.** `scripts/gate-run.sh`
    performs the mechanical floor (`scripts/pregate-verify.sh`: strict
    validation, whitespace, tier and non-goals declared, tasks and paths

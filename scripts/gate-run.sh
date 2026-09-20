@@ -114,7 +114,7 @@ if [ "$OP" = record ]; then
     *) die "record verdict '${verdict:-missing}' is not valid for a $KIND" 1 ;;
   esac
   git add "$REVIEW" || die "cannot stage $REVIEW" 1
-  git commit -q -m "review: gate $GATE $OPNAME — $verdict ($ID)" -m "Reviewed-Commit: $SHA" -m "Co-Authored-By: Codex <noreply@openai.com>" || die "cannot commit $REVIEW" 1
+  git commit -q -m "review: gate $GATE $OPNAME — $verdict ($ID)" -m "Reviewed-Commit: $SHA" || die "cannot commit $REVIEW" 1
   say "$KIND recorded: $verdict"
   say "committed $(git rev-parse --short HEAD)"
   exit 0
@@ -170,7 +170,7 @@ esac
 
 # 11. the commit
 git add "$REVIEW" || die "cannot stage $REVIEW" 1
-git commit -q -m "review: gate $GATE $OP — $verdict ($ID)" -m "Reviewed-Commit: $SHA" -m "Co-Authored-By: Codex <noreply@openai.com>" || die "cannot commit $REVIEW" 1
+git commit -q -m "review: gate $GATE $OP — $verdict ($ID)" -m "Reviewed-Commit: $SHA" || die "cannot commit $REVIEW" 1
 say "$KIND recorded: $verdict (${ELAPSED}s)"
 say "committed $(git rev-parse --short HEAD)"
 exit 0

@@ -94,8 +94,8 @@ English.
 large, or the reason is not obvious. Flag security-sensitive changes
 (auth, money, payments, input handling, dependencies) explicitly.
 
-**Trailer**: `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`
-(or the acting agent's trailer).
+**Trailer**: none. Commits carry no `Co-Authored-By` or other agent
+trailers (AGENTS.md, Git Conventions).
 
 ### Step 7: Present and confirm
 

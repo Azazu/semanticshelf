@@ -114,7 +114,7 @@ echo ok > "$STUB/mode"
 HEAD0=$(git rev-parse HEAD)
 texit 0 "$G" c 2 full
 tgrep "^review: gate 2 full — approved (c)" git log -1 --format=%s
-tgrep "Co-Authored-By: Codex" git log -1 --format=%b
+tempty sh -c "git log -1 --format=%B | grep -i co-authored"   # no agent trailers
 tgrep "^Round approved $HEAD0" "$WV" decision openspec/changes/c/review.md 2
 tempty git status --porcelain
 tnofile "$LOCK"
@@ -165,7 +165,7 @@ texit 1 "$G" c 2 record; git checkout -q -- .; git clean -qfd
 printf '\n## Round 2 · Gate 2\n**Reviewer:** codex\n**Date:** 2026-01-01\n**Reviewed-Commit:** %s\n**Verdict:** changes-requested\n\n### Findings\n| # | Severity | Location | Finding | Status |\n|---|---|---|---|---|\n| 1 | major | tasks.md | vague | open |\n' "$HEADM" >> openspec/changes/c/review.md
 texit 0 "$G" c 2 record
 tgrep "^review: gate 2 full — changes-requested (c)" git log -1 --format=%s
-tgrep "Co-Authored-By: Codex" git log -1 --format=%b
+tempty sh -c "git log -1 --format=%B | grep -i co-authored"   # no agent trailers
 tgrep "^Round changes-requested $HEADM" "$WV" decision openspec/changes/c/review.md 2
 tempty git status --porcelain
 texit 1 "$G" c 2 request 2                                                 # finding #1 still open → refused
