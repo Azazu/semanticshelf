@@ -1,15 +1,15 @@
 # Handoff — bootstrap-dev-environment
 
 **Updated:** 2026-09-20 · claude
-**State:** awaiting-gate-2
+**State:** ready-to-merge
 **Branch:** change/bootstrap-dev-environment
 
 ## Done this session
 - All 20 tasks done; user acceptance (make init, green branch run) recorded.
-- Gate 2 round 1 (2eb9317) blocker: the `lock-check` scope needed a Gate 1 decision. Gate 1 reopened: round 2 (344396a) asked for an implementation task and a coherent commit plan; confirmation 3 (02a0401) confirmed. Gate 2 finding 1 set to fixed.
+- Gate 1: round 1 fixed and confirmed (confirmations 1–2); reopened for the `lock-check` scope, round 2 fixed and confirmed (confirmation 3). Gate 2: round 1 blocker resolved by the reopened Gate 1, confirmation 1 confirmed (09b15c4, Reviewed-Commit 2dc16c9).
 
 ## Next step
-- `/gate-review bootstrap-dev-environment 2 confirm 1`. On confirmation: user runs `/git:merge bootstrap-dev-environment`, pushes `main`, then `/opsx:archive`.
+- User: push the branch once more (only review, handoff and task wording changed since the last green run) and confirm the run is green, then `/git:merge bootstrap-dev-environment`, push `main`, `/opsx:archive bootstrap-dev-environment`.
 
 ## Blockers
 - None.
