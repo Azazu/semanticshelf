@@ -27,3 +27,17 @@
 | 2 | confirmed — task 6.1 now assigns the persistent smoke test to the `test:` commit and assigns each remaining persistent artifact to a feasible commit whose body records the relevant probe evidence. |
 | 3 | confirmed — the proposal, design decision 9, and task 5.5 consistently prohibit a workflow edit under this approval and require a blocked handoff, revised artifacts, and a new Gate 1 review before any such edit. |
 | 4 | changes-requested — task 5.1's bounded list still omits `make revision MSG='…'`, although this change plans to document all four guarded targets in `docs/reference/commands.md` and task 2.1 runs that command. Name its exact execution and evidence alongside `make migrate`, `make run`, and `make test-integration` so the bounded verification claim covers every command this change adds or changes. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-20
+**Reviewed-Commit:** 204b7bdc6dc25ce3e01eba8f1f871e35a784180c
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — task 4.6 and the design check table specify a valid-Python formatting probe that `make lint` accepts and `make fmt-check` rejects, followed by restoration and recorded evidence. |
+| 2 | confirmed — task 6.1 assigns the persistent smoke test to the `test:` commit and attaches every probe's evidence to a feasible commit with a real persistent diff. |
+| 3 | confirmed — the proposal, design decision 9, and task 5.5 consistently forbid editing `.github/workflows/ci.yml` under this approval and require a blocked handoff, revised artifacts, and a new Gate 1 review if CI requires an edit. |
+| 4 | confirmed — task 5.1 now bounds the claim to commands added or changed by this change, separates later user acceptance, excludes unrelated pre-existing commands, and explicitly includes `make revision MSG='…'` as executed by task 2.1 via `make revision MSG=x` with evidence assigned in task 6.1. |
