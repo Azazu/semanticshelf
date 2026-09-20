@@ -52,3 +52,14 @@
 | # | Severity | Location | Finding | Status |
 |---|----------|----------|---------|--------|
 | 1 | blocker | `Makefile` `lock-check`/`check`; `proposal.md` What Changes 4; `design.md` Decision 9 and check table; `tasks.md` 4.4 | The last Gate 1 confirmation reviewed commit `204b7bdc6dc25ce3e01eba8f1f871e35a784180c`, whose approved scope explicitly left `make check` unchanged and treated `uv sync --frozen` as the lock-drift check. During implementation, the change added a new mandatory `make lock-check` gate check, made it part of `make check`, and revised the proposal, design, and failing-input plan around the newly discovered `--frozen` semantics. This is a scope and verification-architecture change in a high-tier CI/verifier change, not an artifact edit that merely describes the implementation. AGENTS.md therefore requires Gate 1 to be reopened; the prose saying the user approved the addition is neither a Gate 1 decision record nor a formal waiver. Obtain a Gate 1 approval/waiver for the revised scope before Gate 2 can pass. | open |
+
+## Round 2 · Gate 1
+**Reviewer:** codex
+**Date:** 2026-09-20
+**Reviewed-Commit:** aa690a49dfb403a987a4209dd59c9b15225bc1f7
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | blocker | `proposal.md` What Changes 4 and Impact; `tasks.md` §§2.1, 3.1, 4.4, 6.1 | The reopened scope now adds a `lock-check` target and makes it the first step of `make check`, but `tasks.md` has no implementation task for that scope: task 2.1 implements only the four guarded application targets, task 3.1 is positive verification, and task 4.4 is only the failing-input demonstration. The wrap-up is also stale: task 6.1 assigns the 4.4 evidence to `chore(uv)` and describes the Makefile commit only as the guard, so it does not account coherently for the persistent `lock-check` change. This fails the Gate 1 requirement that every scope claim have both an implementation task and a verification task. Add the explicit Makefile implementation work and reconcile the positive-check/evidence and commit mapping with it. | open |
