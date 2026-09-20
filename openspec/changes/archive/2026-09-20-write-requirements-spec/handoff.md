@@ -1,7 +1,7 @@
 # Handoff — write-requirements-spec
 
 **Updated:** 2026-09-20 · claude
-**State:** ready-to-merge
+**State:** merged
 **Branch:** change/write-requirements-spec
 
 ## Done this session
@@ -10,8 +10,7 @@
 - Strict validation and `scripts/workflow-verify.sh merge` pass; no agent trailers on the branch.
 
 ## Next step
-- The user pushes the rewritten `main` once: `git push --force-with-lease origin main` (local `main` already points at the trailer-free history; `main-clean` is the same commit and can be deleted).
-- Then `/git:merge write-requirements-spec` (tier low: no gate), push `main`, watch the CI run, then `/opsx:archive write-requirements-spec` and `/workflow:start bootstrap-dev-environment`.
+- Merged into `main` (a6320a2) and pushed; CI green. Archive this change, then `/workflow:start bootstrap-dev-environment`.
 
 ## Blockers
 - None.

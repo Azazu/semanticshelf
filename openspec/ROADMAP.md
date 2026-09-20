@@ -10,12 +10,6 @@ Derived from section 7 of the technical specification
 same in both. Each row is a summary; the change's `proposal.md`
 carries the full scope, exit criteria and the declared tier.
 
-## Stage 0 — specification
-
-| # | Change id | Scope (summary) | Tier |
-|---|---|---|---|
-| 0 | `write-requirements-spec` | the technical specification in English, the decision record of the requirements interview, roadmap and agent-context reconciliation | low |
-
 ## Stage 1 — skeleton, schema, CLIP, upload, background indexing
 
 | # | Change id | Scope (summary) | Tier |
