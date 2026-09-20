@@ -207,8 +207,13 @@ reviewer's job is unknown weaknesses, not the executor's missing steps.
   its exact form; every changed document re-read whole after the last
   edit; for `high` tier every new or changed check has a demonstrated
   failing input (a test that fails when the guard is removed); the user
-  has pushed the branch and the CI run on the exact HEAD is green (the
-  executor asks for the push and waits; a red run is fixed first).
+  has pushed the branch and the CI run on the exact HEAD is green. The
+  executor never queries GitHub Actions: the user watches the run and
+  reports a failure, which is fixed before the gate. Prevention is the
+  executor's duty: before asking for a push it runs locally every check
+  CI runs (`openspec validate --all --strict`, every `scripts/*_test.sh`,
+  `sh -n` over `scripts/*.sh`, `make check`, the integration suite when
+  the database is up).
 - **Mechanical floor:** `scripts/pregate-verify.sh <gate1|gate2> <id>`
   — run by `/gate-review` before the reviewer (FAIL aborts) and by
   `/workflow:handoff` when targeting `awaiting-gate-1/2`.
@@ -349,9 +354,13 @@ app/
   schemas/           Pydantic request/response models — never the ORM classes
   services/          use cases: indexing, search, assets
   ml/                embedders behind one Protocol: clip.py, dinov2.py, fake.py
-  workers/           background extraction (BackgroundTasks now, Celery later if argued)
+  workers/           job claim/execute/finish over indexing_jobs (BackgroundTasks
+                     runner in stage 1, the `worker` CLI process from stage 3)
+  cli.py             typer app: index-folder, worker, demo-dataset, storage, models
+ui/                  Streamlit demo (own dependency group), HTTP client of the API
 alembic/             migrations
-tests/               unit/ (fake embedder, no DB), integration/ (pgvector, marked)
+tests/               unit/ (fake embedder, no DB), integration/ (pgvector, marked),
+                     api/ (httpx against the app factory), models/ (real weights, on demand)
 ```
 
 ### Code style
@@ -370,13 +379,16 @@ tests/               unit/ (fake embedder, no DB), integration/ (pgvector, marke
 
 ### Domain rules (from the brief)
 
-- `assets(id, path/url, meta JSONB, tags[])`;
+- `assets(id, sha256, meta JSONB, tags[])` — the file path is derived
+  from the id, never stored, never taken from a client;
   `embeddings(asset_id, model, vector, created_at)` — the `model` column
   is part of the identity: vectors of different models are never
-  compared.
+  compared; `indexing_jobs` is the queue (at-least-once, idempotent
+  upsert, leases). Full rules: `docs/explanation/requirements.md`.
 - Vector dimension per model is fixed and checked on insert.
-- Similarity is cosine; the API exposes a threshold and pagination;
-  results carry `score`.
+- Similarity is cosine on L2-normalised vectors; the API exposes
+  `min_score`, `limit`/`offset` with `has_more` (no total); results
+  carry `score`. Errors are RFC 9457 problem details.
 - Index choice (HNSW vs IVFFlat) is a per-model migration decision,
   recorded in an ADR.
 - Uploaded files are stored outside the web root under a generated name;
