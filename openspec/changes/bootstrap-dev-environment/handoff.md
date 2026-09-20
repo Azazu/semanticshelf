@@ -1,15 +1,15 @@
 # Handoff — bootstrap-dev-environment
 
 **Updated:** 2026-09-20 · claude
-**State:** awaiting-gate-2
+**State:** fixing-g2
 **Branch:** change/bootstrap-dev-environment
 
 ## Done this session
-- All 19 tasks done. User acceptance reported 2026-09-20: `make init` ended on the SKIP line with a healthy `db` (task 5.3); the branch run on GitHub Actions is green, `workflow` and `python` jobs (task 5.4).
-- Design corrected during apply (user-approved): `uv sync --frozen` does not detect lock drift; `make check` starts with `uv lock --check`. Workflow file untouched (task 5.5).
+- All 19 tasks done; user acceptance (make init, green branch run) recorded.
+- Gate 2 round 1 (Codex, 2eb9317): changes-requested, one blocker — the `lock-check` addition during apply is a scope change after Gate 1 and needs a Gate 1 decision on the revised artifacts, not prose. Correct: Gate 1 is reopened as round 2 on the current artifacts.
 
 ## Next step
-- `/gate-review bootstrap-dev-environment 2` (auto). After approval: `/git:merge bootstrap-dev-environment` by the user, push `main`, `/opsx:archive`.
+- `scripts/gate-run.sh bootstrap-dev-environment 1 full` (Gate 1 round 2 on the revised scope). On approval: set Gate 2 finding 1 to fixed, `/gate-review bootstrap-dev-environment 2 confirm 1`.
 
 ## Blockers
 - None.
