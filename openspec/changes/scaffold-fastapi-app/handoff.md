@@ -5,11 +5,11 @@
 **Branch:** change/scaffold-fastapi-app
 
 ## Done this session
-- All 17 tasks done. User acceptance reported 2026-09-20: the environment template aligned with `docs/reference/settings.md`, `make init` and `make run` up, `/ready` reports ready (task 6.2); the branch run on GitHub Actions is green, `workflow` and `python` jobs including the integration step (task 7.2).
-- Two design revisions recorded (decisions 1 and 4): `--factory` start; the 500 rendered by the request-id middleware.
+- All 17 tasks done; user acceptance recorded (template aligned, `/ready` ready locally, branch run green).
+- Gate 2 round 1 (ab7214e): three majors, all fixed in b3cc79f — problem-details 503 with a `checks` member and problem+json in OpenAPI; class-name-only reasons with credential-material tests on both check paths; migration check bounded and skipped after a database failure, silent-database test. Statuses set to fixed.
 
 ## Next step
-- `/gate-review scaffold-fastapi-app 2` (auto). After approval: user runs `/git:merge scaffold-fastapi-app`, pushes `main`, then `/opsx:archive` (specs `health-probes` and `http-api-conventions` sync into `openspec/specs/`).
+- `/gate-review scaffold-fastapi-app 2 confirm 1`. On confirmation: user pushes the branch once more, reports the run, then `/git:merge scaffold-fastapi-app`, push `main`, `/opsx:archive`.
 
 ## Blockers
 - None.
