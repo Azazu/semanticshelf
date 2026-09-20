@@ -5,12 +5,10 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain import EMBEDDING_MODELS, Asset
-from app.models import Asset as AssetRow
 from app.repositories import AssetRepository, EmbeddingRepository, IndexingJobRepository
 from tests.integration.conftest import explain
 
@@ -43,18 +41,6 @@ async def add_asset(
         tags=tags,
         meta=meta,
     )
-
-
-def find_statement(
-    *, tags_all: Sequence[str] = (), meta: Mapping[str, Any] | None = None
-) -> sa.Select[Any]:
-    """The shape `AssetRepository.find` builds, for reading a plan."""
-    statement = sa.select(AssetRow.id)
-    if tags_all:
-        statement = statement.where(AssetRow.tags.contains(list(tags_all)))
-    if meta:
-        statement = statement.where(AssetRow.meta.contains(dict(meta)))
-    return statement
 
 
 async def test_the_same_content_cannot_be_stored_twice(session: AsyncSession) -> None:
@@ -117,12 +103,16 @@ async def test_tags_and_metadata_are_queryable(session: AsyncSession) -> None:
 
 
 async def test_an_index_answers_each_containment_query(session: AsyncSession) -> None:
+    """The plan of the statement the repository itself builds, so a filter that
+    regresses to a non-indexable predicate cannot pass this unnoticed."""
     assets = AssetRepository(session)
     await add_asset(assets, "1" * 64, tags=["dragon"], meta={"dataset": "demo"})
     await session.flush()
 
-    tags_plan = await explain(session, find_statement(tags_all=["dragon"]), no_seqscan=True)
-    meta_plan = await explain(session, find_statement(meta={"dataset": "demo"}), no_seqscan=True)
+    tags_plan = await explain(session, assets.find_statement(tags_all=["dragon"]), no_seqscan=True)
+    meta_plan = await explain(
+        session, assets.find_statement(meta={"dataset": "demo"}), no_seqscan=True
+    )
     assert "ix_assets_tags" in tags_plan, tags_plan
     assert "ix_assets_meta" in meta_plan, meta_plan
 

@@ -12,7 +12,9 @@ catches the subtler kind, where both directions succeed and differ.
 import os
 import subprocess
 import sys
+from collections.abc import AsyncIterator
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
@@ -25,7 +27,7 @@ from app.core.settings import Settings
 pytestmark = pytest.mark.integration
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-THROWAWAY_DATABASE = "semanticshelf_roundtrip"
+DATABASE_PREFIX = "semanticshelf_roundtrip_"
 DOMAIN_TABLES = {"assets", "embeddings", "indexing_jobs"}
 
 FINGERPRINT = sa.text("""
@@ -81,32 +83,35 @@ async def read_table_names(url: URL) -> set[str]:
 
 
 @pytest.fixture
-async def throwaway_database(db_settings: Settings) -> URL:
+async def throwaway_database(db_settings: Settings) -> AsyncIterator[URL]:
+    """A database this invocation creates, uses and drops.
+
+    The name is unique per run and the fixture never drops a database it did
+    not create: a fixed name would let a run destroy someone else's database
+    of that name, and two runs would forcibly drop each other's.
+    """
+    name = DATABASE_PREFIX + uuid4().hex[:12]
     configured = make_url(db_settings.database_url)
     admin_url = configured.set(database="postgres")
-    target_url = configured.set(database=THROWAWAY_DATABASE)
 
     engine = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
     try:
         async with engine.connect() as connection:
             try:
-                await connection.execute(
-                    sa.text(f'DROP DATABASE IF EXISTS "{THROWAWAY_DATABASE}" WITH (FORCE)')
-                )
-                await connection.execute(sa.text(f'CREATE DATABASE "{THROWAWAY_DATABASE}"'))
+                await connection.execute(sa.text(f'CREATE DATABASE "{name}"'))
             except ProgrammingError as exc:  # insufficient privilege, typically
                 pytest.skip(f"cannot create a throwaway database: {type(exc).__name__}")
     finally:
         await engine.dispose()
 
-    yield target_url
-
-    engine = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
-    async with engine.connect() as connection:
-        await connection.execute(
-            sa.text(f'DROP DATABASE IF EXISTS "{THROWAWAY_DATABASE}" WITH (FORCE)')
-        )
-    await engine.dispose()
+    try:
+        yield configured.set(database=name)
+    finally:
+        engine = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
+        async with engine.connect() as connection:
+            # Ours, by construction: only this invocation knows the name.
+            await connection.execute(sa.text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        await engine.dispose()
 
 
 async def test_down_and_up_again_lands_on_the_same_schema(throwaway_database: URL) -> None:

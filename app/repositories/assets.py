@@ -84,6 +84,24 @@ class AssetRepository:
         removed = (await self._session.execute(statement)).scalar_one_or_none()
         return removed is not None
 
+    def find_statement(
+        self,
+        *,
+        tags_all: Sequence[str] = (),
+        tags_any: Sequence[str] = (),
+        meta: Mapping[str, Any] | None = None,
+        limit: int = DEFAULT_LIMIT,
+    ) -> sa.Select[Any]:
+        """The statement `find()` runs. Exposed so a test can read its plan."""
+        statement = sa.select(AssetRow)
+        if tags_all:
+            statement = statement.where(AssetRow.tags.contains(list(tags_all)))
+        if tags_any:
+            statement = statement.where(AssetRow.tags.overlap(list(tags_any)))
+        if meta:
+            statement = statement.where(AssetRow.meta.contains(dict(meta)))
+        return statement.order_by(AssetRow.created_at.desc(), AssetRow.id.desc()).limit(limit)
+
     async def find(
         self,
         *,
@@ -97,13 +115,8 @@ class AssetRepository:
         `tags_all` and `meta` are containment (`@>`), `tags_any` is overlap
         (`&&`); each is served by one of the GIN indexes on the table.
         """
-        statement = sa.select(AssetRow)
-        if tags_all:
-            statement = statement.where(AssetRow.tags.contains(list(tags_all)))
-        if tags_any:
-            statement = statement.where(AssetRow.tags.overlap(list(tags_any)))
-        if meta:
-            statement = statement.where(AssetRow.meta.contains(dict(meta)))
-        statement = statement.order_by(AssetRow.created_at.desc(), AssetRow.id.desc()).limit(limit)
+        statement = self.find_statement(
+            tags_all=tags_all, tags_any=tags_any, meta=meta, limit=limit
+        )
         rows = (await self._session.execute(statement)).scalars().all()
         return [to_domain(row) for row in rows]
