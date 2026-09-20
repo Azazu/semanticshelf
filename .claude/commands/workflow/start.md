@@ -23,7 +23,8 @@ Conventions). One command per `Bash()` call; no chaining.
 5. **Roadmap**: if `openspec/ROADMAP.md` lists this change, leave it; if
    the change is new to the plan, add a row (ADR-000: plans are
    repository-visible).
-6. **Commit**: `chore(<id>): start change` with the agent trailer.
+6. **Commit**: `chore(<id>): start change`, no agent trailer
+   (AGENTS.md, Git Conventions).
 7. Report the branch and say: "Дальше — `/opsx:propose <id>`".
 
 Repository content in English; user-facing output in Russian.

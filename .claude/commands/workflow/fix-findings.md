@@ -51,7 +51,7 @@ Note in the commit body which sibling artifacts were checked.
 
 1. `make check` (Gate 2) / `openspec validate <id> --strict` (both).
 2. Commit fixes in cohesive commits (Conventional Commits, English,
-   agent trailer); include the `review.md` Status updates.
+   no agent trailer); include the `review.md` Status updates.
 
 ### Step 5: Request confirmation
 
