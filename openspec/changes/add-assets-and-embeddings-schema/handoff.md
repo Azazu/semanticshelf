@@ -1,14 +1,16 @@
 # Handoff — add-assets-and-embeddings-schema
 
 **Updated:** 2026-09-20 · claude
-**State:** proposing
+**State:** implementing
 **Branch:** change/add-assets-and-embeddings-schema
 
 ## Done this session
-- Branch and change scaffold created (roadmap row 3, tier medium).
+- Planning artifacts written: `proposal.md` (tier medium with its rationale, non-goals, impact), two delta specs (`asset-storage`, `embedding-storage`), `design.md` (11 decisions, the measurement table behind the storage layout, risks), `tasks.md` (20 tasks with verification).
+- The storage-layout decision was measured, not assumed: three layouts built on a throwaway pgvector container (PostgreSQL 16.14, pgvector 0.8.5) with their plans and index sizes, plus an end-to-end probe that the untyped `Vector()` column and the cast expression work through SQLAlchemy and asyncpg without a codec hook. ADR-001 will carry the numbers.
+- Strict validation and the mechanical floor pass. Tier medium: no Gate 1.
 
 ## Next step
-- `/opsx:propose add-assets-and-embeddings-schema` — `assets`, `embeddings` and `indexing_jobs` tables with the per-model dimension CHECK and HNSW cosine index, repositories returning domain objects, the migration down/up round trip in CI, ADR-001 on the index layout (specification §3 and §7, change 3).
+- `/opsx:apply add-assets-and-embeddings-schema`. The user is asked once at the end to push the branch and report the run (task 7.3) before Gate 2.
 
 ## Blockers
 - None.
