@@ -1,14 +1,14 @@
 # Handoff — scaffold-fastapi-app
 
 **Updated:** 2026-09-20 · claude
-**State:** proposing
+**State:** implementing
 **Branch:** change/scaffold-fastapi-app
 
 ## Done this session
-- Branch and change scaffold created (roadmap row 2, tier medium).
+- Planning artifacts written: `proposal.md` (tier medium, non-goals, impact), two delta specs (`health-probes`, `http-api-conventions`), `design.md` (decisions 1–10), `tasks.md` (17 tasks with verification). Strict validation and the mechanical floor pass. Tier medium: no Gate 1.
 
 ## Next step
-- `/opsx:propose scaffold-fastapi-app` — app factory and lifespan, settings, structlog and request id, problem-details errors, `/health`, `/ready`, async engine and session dependency, Alembic baseline, `/api/docs`, test layers with the fake-embedder fixture (specification §7, change 2).
+- `/opsx:apply scaffold-fastapi-app`. The user will be asked once to align the environment template with `docs/reference/settings.md` (task 6.2) and to push the branch (7.2) before Gate 2.
 
 ## Blockers
 - None.
