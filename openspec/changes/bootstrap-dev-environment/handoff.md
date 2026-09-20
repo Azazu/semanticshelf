@@ -5,10 +5,10 @@
 **Branch:** change/bootstrap-dev-environment
 
 ## Done this session
-- Gate 1 round 1 (Codex, fe12ca9): changes-requested, 4 findings. All four fixed in the artifacts: failing-input table incl. fmt-check, commit plan with real diffs, CI edit boundary with a new Gate 1 rule, bounded command claim in task 5.1. Statuses set to fixed.
+- Gate 1 round 1: 4 findings fixed; confirmation 1 (b326e84) confirmed 1–3, re-requested 4 (task 5.1 omitted `make revision`). Fixed: the bounded command list names every guarded target of task 2.1.
 
 ## Next step
-- Confirmation of round 1: `/gate-review bootstrap-dev-environment 1 confirm 1`. After confirmation: `/opsx:apply bootstrap-dev-environment`.
+- Second confirmation of round 1: `/gate-review bootstrap-dev-environment 1 confirm 1`. After confirmation: `/opsx:apply bootstrap-dev-environment`. If finding 4 fails again, stop and ask the user to arbitrate (two failed confirmations rule).
 
 ## Blockers
 - None.
