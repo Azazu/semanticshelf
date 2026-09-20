@@ -1,0 +1,55 @@
+# CI: strict OpenSpec validation, the workflow verifier's own suite,
+# and `make check` (unit tests with the fake embedder; integration
+# tests run against a pgvector service).
+name: ci
+
+on:
+  push:
+    branches: [main, "change/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install OpenSpec CLI (pinned)
+        run: npm install -g @fission-ai/openspec@1.11.0
+      - name: OpenSpec strict validation
+        run: openspec validate --all --strict
+      - name: Script suites (every scripts/*_test.sh)
+        run: for t in scripts/*_test.sh; do sh "$t" || exit 1; done
+      - name: Shell syntax
+        run: for f in scripts/*.sh; do sh -n "$f"; done
+
+  python:
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('pyproject.toml') != '' }}
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: app_test
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U app -d app_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: make check
+      - name: Integration tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://app:app@127.0.0.1:5432/app_test
+        run: make migrate && make test-integration

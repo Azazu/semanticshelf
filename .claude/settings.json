@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make:*)",
+      "Bash(openspec:*)",
+      "Bash(scripts/workflow-verify.sh:*)",
+      "Bash(scripts/pregate-verify.sh:*)",
+      "Bash(scripts/gate-run.sh:*)",
+      "Bash(scripts/workflow_verify_test.sh:*)",
+      "Bash(scripts/gate_run_test.sh:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git merge-base:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(rg:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)"
+    ],
+    "deny": [
+      "Bash(git push:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git rebase:*)",
+      "Bash(git branch -D:*)",
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)",
+      "Bash(su:*)",
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ],
+    "ask": []
+  }
+}

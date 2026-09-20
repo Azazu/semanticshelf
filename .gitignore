@@ -1,0 +1,32 @@
+# IDE
+.idea/
+.vscode/
+
+# Local agent settings (personal permission overrides)
+.claude/settings.local.json
+
+# Machine-specific MCP endpoints (IDE instance ports)
+.mcp.json
+.codex/config.toml
+
+# Env / secrets — never commit; reference by name
+.env
+.env.*
+!.env.example
+
+# OS / logs / caches
+.DS_Store
+*.log
+.cache/
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+# Local data: model weights and uploaded media
+.data/

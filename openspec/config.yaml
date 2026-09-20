@@ -1,0 +1,62 @@
+schema: spec-driven
+
+context: |
+  SemanticShelf — Semantic search over images: CLIP text→image and DINOv2 image→image embeddings in PostgreSQL + pgvector, served by FastAPI.
+  Stage: scaffold; application code arrives through OpenSpec changes
+  listed in openspec/ROADMAP.md.
+
+  Target stack:
+  - Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2 (async) + Alembic
+  - PostgreSQL 16 + pgvector (HNSW / IVFFlat indexes), Docker Compose
+  - ML: open-source embedding models — CLIP ViT-L/14 for text→image,
+    DINOv2-large for image→image, optionally CSD for style; torch runs
+    on CPU by default; model loading is lazy and never at import time
+  - Tooling: uv (env + lock), pytest + httpx AsyncClient, ruff (lint +
+    format), mypy (strict on app/), pre-commit optional
+  - Heavy compute (embedding extraction) runs in background tasks or a
+    worker, never inside a request handler
+  Domain: SemanticShelf — semantic search over images/assets: upload or
+  index a folder → extract embeddings → store in pgvector; text→image and
+  image→image search with filters (tags/categories), pagination and a
+  similarity threshold; REST API plus a small demo UI; stretch: style
+  search and RAG-generated captions/tags.
+
+  Conventions:
+  - English for code, docs, commits (chat with the user is in Russian)
+  - Significant decisions are recorded as ADRs in docs/adr/ (append-only)
+  - Agent workflow (roles, risk tiers, gates, branches, session-end): AGENTS.md
+  - Anti-overengineering: a new dependency, service or infrastructure
+    component needs a stated reason an existing one cannot cover; a
+    portfolio project earns points for depth on the critical paths, not
+    for breadth of tooling
+
+rules:
+  proposal:
+    - Declare **Risk-Tier:** low|medium|high on its own line near the top (AGENTS.md tiers)
+    - Include a "## Non-goals" section
+    - Every scope claim has task coverage in tasks.md (an implementation task AND a verification task)
+    - Justify every new dependency against the anti-overengineering rule in the context
+  design:
+    - For high tier, include a short "Applicability" table covering only the triggered questions (crash around an external effect, concurrent writers, money rounding, empty/zero/null, authorization boundary, deletion/expiry, idempotent retries); one n/a row for the rest
+    - Every guarantee names its mechanism and what it does NOT guarantee
+    - Prefer one authority plus references over restating a rule in several places
+  specs:
+    - Requirements use SHALL/MUST and carry at least one #### Scenario each
+  tasks:
+    - Every task is feasible at its lifecycle point (branch change/<id>, gate state)
+    - Every claimed outcome has an implementation task and a verification task (test, check, or rendered output)
+    - Commands appear in their exact runnable form; checked tasks name the files they produced in backticks
+
+operations:
+  apply:
+    guidance:
+      - Run scripts/workflow-verify.sh apply <id> first; a FAIL stops the apply — AGENTS.md is authoritative
+      - Work on branch change/<id>, never on main; commit per logical task block
+      - Run make check before marking the last task done
+      - Follow the session-end protocol in AGENTS.md before stopping (/workflow:handoff)
+  archive:
+    guidance:
+      - Run scripts/workflow-verify.sh archive <id> first; a FAIL stops the archive
+      - Archive only after the branch is merged into main (handoff State merged)
+      - The archive commit on main requires explicit user confirmation
+      - Run openspec validate <id> --strict before archiving; never skip spec synchronization
