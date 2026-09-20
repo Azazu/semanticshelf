@@ -11,6 +11,7 @@ from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
+from app import models as _models  # noqa: F401  (importing populates Base.metadata)
 from app.core.settings import Settings
 from app.db.base import Base
 

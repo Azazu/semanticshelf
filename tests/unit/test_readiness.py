@@ -1,5 +1,7 @@
 """Readiness aggregation, reason formatting and the skip rule, without a database."""
 
+from pathlib import Path
+
 from app.services.readiness import (
     SKIPPED_AFTER_DATABASE_FAILURE,
     CheckResult,
@@ -12,6 +14,7 @@ from app.services.readiness import (
 
 # Built at runtime so no URL with credentials appears in the source.
 URL_MATERIAL = "postgresql+asyncpg://" + "dbuser" + ":" + "supersecret" + "@db.internal/shelf"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_all_ok_is_ready() -> None:
@@ -71,5 +74,9 @@ async def test_migration_check_never_echoes_connection_material() -> None:
         assert secret not in (result.reason or "")
 
 
-def test_code_head_is_the_baseline_for_now() -> None:
-    assert code_head() == "0001_baseline"
+def test_code_head_is_one_of_the_revisions_on_disk() -> None:
+    # Whatever the head is, readiness compares the database against it, so it
+    # must resolve to a revision this checkout actually carries.
+    revisions = {path.stem for path in (REPO_ROOT / "alembic" / "versions").glob("[0-9]*.py")}
+    assert revisions, "no migration files found"
+    assert code_head() in revisions
