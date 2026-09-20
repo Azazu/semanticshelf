@@ -351,7 +351,11 @@ app/
   api/               routers by resource: assets.py, search.py, health.py
   core/              settings (pydantic-settings), logging, errors
   db/                engine/session, base, alembic env
-  models/            SQLAlchemy ORM (Asset, Embedding)
+  domain.py          frozen dataclasses, value domains, the model registry;
+                     imports no framework, so every layer may depend on it
+  models/            SQLAlchemy ORM (Asset, Embedding, IndexingJob)
+  repositories/      one per table; take a session, return domain objects,
+                     never hand an ORM instance outwards
   schemas/           Pydantic request/response models — never the ORM classes
   services/          use cases: indexing, search, assets
   ml/                embedders behind one Protocol: clip.py, dinov2.py, fake.py
@@ -386,7 +390,11 @@ tests/               unit/ (fake embedder, no DB), integration/ (pgvector, marke
   is part of the identity: vectors of different models are never
   compared; `indexing_jobs` is the queue (at-least-once, idempotent
   upsert, leases). Full rules: `docs/explanation/requirements.md`.
-- Vector dimension per model is fixed and checked on insert.
+- Vector dimension per model is fixed and checked on insert: one CHECK on
+  `embeddings` carries both the model allowlist and each key's width, and
+  the application declares the same registry in `app/domain.py`. One
+  partial HNSW index per model over the dimension-cast expression, so
+  every vector query must carry that cast (ADR-001).
 - Similarity is cosine on L2-normalised vectors; the API exposes
   `min_score`, `limit`/`offset` with `has_more` (no total); results
   carry `score`. Errors are RFC 9457 problem details.
