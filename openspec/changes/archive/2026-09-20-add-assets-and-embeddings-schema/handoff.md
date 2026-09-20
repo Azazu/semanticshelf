@@ -1,7 +1,7 @@
 # Handoff — add-assets-and-embeddings-schema
 
 **Updated:** 2026-09-20 · claude
-**State:** ready-to-merge
+**State:** merged
 **Branch:** change/add-assets-and-embeddings-schema
 
 ## Done this session
@@ -10,7 +10,7 @@
 - `make check` green (56) and the integration suite green (24) after the fix.
 
 ## Next step
-- Gate 2 passed: confirmation 1 (8232eed) confirmed both findings at commit 50411d2. The user pushes the branch once more so CI validates the reviewed commit, then `/git:merge add-assets-and-embeddings-schema`, `main` push, and `/opsx:archive` (syncs `asset-storage` and `embedding-storage` into `openspec/specs/`).
+- Merged into `main` (7a4311a) and pushed; CI green. Archive this change, syncing `asset-storage` and `embedding-storage` into `openspec/specs/`, then `/workflow:start add-embedder-protocol-and-clip`.
 
 ## Blockers
 - None.

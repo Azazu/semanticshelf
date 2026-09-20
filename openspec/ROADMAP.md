@@ -14,7 +14,6 @@ carries the full scope, exit criteria and the declared tier.
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 3 | `add-assets-and-embeddings-schema` | `assets`, `embeddings`, `indexing_jobs` with dimension CHECK and per-model HNSW index, repositories, migration round trip in CI, ADR-001 | medium |
 | 4 | `add-embedder-protocol-and-clip` | `Embedder` protocol, lazy registry, inference threadpool, fake embedder, CLIP adapter, `models warm`, on-demand real-model smoke | high |
 | 5 | `add-asset-upload-and-storage` | asset CRUD, `/file`, `/thumbnail`, listing, tag/meta rules, storage layout, dedup, thumbnails, crash-safe writes, `storage prune` | high |
 | 6 | `add-background-indexing` | transactional job enqueue, `BackgroundTasks` runner over the shared claim/execute/finish functions, `index_status`, `/jobs`, `/reindex`, leases, retries, ADR-003 | high |
