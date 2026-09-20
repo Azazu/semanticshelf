@@ -74,3 +74,14 @@
 | # | Resolution |
 |---|------------|
 | 1 | confirmed — task 2.2 now explicitly implements the `lock-check` target and makes it the first prerequisite of `make check`; task 3.1 includes its positive execution; and task 6.1 assigns the persistent Makefile change, the green aggregate run, and the lock-drift evidence to the `chore(make)` commit that actually carries them. |
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-20
+**Reviewed-Commit:** 2dc16c92737baf1f6b37ff9540dd4b8a9298d09f
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the revised `lock-check` scope was formally reopened at Gate 1 in round 2; after its implementation-task and commit-plan blocker was fixed, Confirmation 3 approved that scope at `bae45a9ee57959912b31785023612221ae2da53b`, satisfying the prerequisite identified by Gate 2 round 1. |
