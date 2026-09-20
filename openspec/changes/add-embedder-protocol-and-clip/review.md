@@ -13,3 +13,17 @@
 | 2 | major | `specs/health-probes/spec.md` Readiness probe; `design.md` decision 9; `docs/explanation/requirements.md` FR-MDL-7 | The proposed readiness mechanism cannot provide the normative “wrong checkpoint is caught before it writes a vector” guarantee. It compares only the application's static key/dimension declaration with the database constraint and explicitly never loads or inspects the checkpoint, so configuring `CLIP_MODEL_NAME` to a checkpoint with a different projection width can still report `models: ok`. Reconcile the guarantee with the mechanism: either add a checkpoint-compatibility mechanism and verification at the appropriate lifecycle point, or amend the normative claim and specify where an incompatible configured checkpoint is rejected before persistence. | fixed |
 | 3 | major | `design.md` goal and decisions 4–5; `tasks.md` 3.1–3.3 | The design claims model loading happens off the event loop, but the only specified registry API loads synchronously under its lock, while the pool task and its non-blocking test cover embedding work only. Warm-up task 3.3 checks which keys load, not which thread performs the potentially multi-gigabyte download/deserialization; no task binds first-use loading to the dedicated pool either. Name the execution path for loading (including lifespan warm-up and later first use) and add a verification that a slow load does not block the loop. | fixed |
 | 4 | major | `proposal.md` Non-goals; `docs/explanation/requirements.md` FR-MDL-4; `tasks.md` 1.2 and 4.1 | Device behavior is contradictory. The normative requirement says `DEVICE` allows `cuda` (unsupported only in CI), while the proposal makes GPU support a non-goal and describes the adapter as CPU-only; the tasks add `device` but never say whether it is validated, passed to the model/tensors, or restricted to CPU. Decide the supported values and behavior, reconcile the scope with FR-MDL-4, and add implementation and verification coverage for that decision. | fixed |
+
+## Confirmation 1 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-20
+**Reviewed-Commit:** 61470edcdbacc4b6b6c216d81f18125bd049dd23
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed |
+| 2 | confirmed |
+| 3 | confirmed |
+| 4 | confirmed |
