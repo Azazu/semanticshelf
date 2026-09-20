@@ -37,6 +37,10 @@ An asset SHALL carry a list of tags and a JSON metadata object, both optional an
 - **WHEN** assets are queried for a metadata key and value they carry
 - **THEN** exactly the assets whose metadata contains that pair are returned
 
+#### Scenario: An index answers each containment query
+- **WHEN** the execution plan of a tag query and of a metadata query is inspected with sequential scans made expensive
+- **THEN** each plan reaches its index rather than reading the table
+
 ### Requirement: Removing an asset removes everything derived from it
 Removing an asset SHALL remove, in the same transaction, every embedding and every indexing job that belongs to it. No derived row SHALL ever refer to an asset that is gone.
 

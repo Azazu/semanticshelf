@@ -38,8 +38,8 @@ A nearest-neighbour lookup SHALL take a model key and a query vector of that mod
 - **THEN** the results are that model's assets ordered by ascending cosine distance to the query vector
 
 #### Scenario: Model isolation
-- **WHEN** vectors of two models are stored and a lookup runs for one of them
-- **THEN** no asset appears in the result by virtue of the other model's vector, even when the two dimensions are equal
+- **WHEN** every asset carries a vector under two models, arranged so that the two models rank the assets in opposite orders, and a lookup runs for one of them
+- **THEN** each asset appears once, in that model's order, and never by virtue of the other model's vector
 
 #### Scenario: The index answers the query
 - **WHEN** the execution plan of the lookup is inspected

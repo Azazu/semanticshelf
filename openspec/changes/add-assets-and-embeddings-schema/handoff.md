@@ -5,12 +5,14 @@
 **Branch:** change/add-assets-and-embeddings-schema
 
 ## Done this session
-- Planning artifacts written: `proposal.md` (tier medium with its rationale, non-goals, impact), two delta specs (`asset-storage`, `embedding-storage`), `design.md` (11 decisions, the measurement table behind the storage layout, risks), `tasks.md` (20 tasks with verification).
-- The storage-layout decision was measured, not assumed: three layouts built on a throwaway pgvector container (PostgreSQL 16.14, pgvector 0.8.5) with their plans and index sizes, plus an end-to-end probe that the untyped `Vector()` column and the cast expression work through SQLAlchemy and asyncpg without a codec hook. ADR-001 will carry the numbers.
-- Strict validation and the mechanical floor pass. Tier medium: no Gate 1.
+- Tasks 1–6, 7.1 and 7.2 done across six commits (4a9a155, d736470, b8aa60c, b5f0d18, 7127a78, 436a135): the `pgvector` dependency, the domain vocabulary, the three tables with the per-model CHECK and HNSW indexes, the repositories, 24 integration tests including the migration round trip, and ADR-001.
+- Three failing inputs demonstrated and recorded in the commit bodies: a one-sided change to the model registry fails the constants test; removing the dimension cast turns the plan into `Limit → Sort` and fails the plan test; a downgrade that forgets a table fails the round trip with `DependentObjectsStillExistError`.
+- `make check` green without a database (56 tests), `make migrate && make test-integration` green against pgvector (24 tests), `alembic check` and a probe autogenerate revision both empty.
+- The delta spec for `asset-storage` gained one scenario during apply: the containment claim is now verified by reading the plan with sequential scans made expensive, because "without reading every asset" could not otherwise be tested at fixture size.
 
 ## Next step
-- `/opsx:apply add-assets-and-embeddings-schema`. The user is asked once at the end to push the branch and report the run (task 7.3) before Gate 2.
+- User (task 7.3): push the branch and report the run (`workflow` green; `python` green with the integration step against the service).
+- Executor: tick 7.3 and 7.4, `scripts/pregate-verify.sh gate2 add-assets-and-embeddings-schema`, `/gate-review add-assets-and-embeddings-schema 2`.
 
 ## Blockers
-- None.
+- None (waiting on the push above).
