@@ -90,7 +90,7 @@ Loading a model and embedding with it SHALL both run on a dedicated, bounded poo
 - **THEN** other work scheduled on the event loop continues to make progress before the load finishes
 
 ### Requirement: A deterministic embedder stands in for the real ones
-The service SHALL provide an embedder that produces vectors from its input alone, without weights, a network or a framework runtime, so the rest of the system can be exercised without a model. The same input SHALL always give the same vector; different inputs SHALL give different vectors; and text and an image carrying the same token SHALL land closer to each other than to an unrelated input, so ordering can be tested.
+The service SHALL provide an embedder that produces vectors from its input alone, without weights, a network or a framework runtime, so the rest of the system can be exercised without a model. The same input SHALL always give the same vector; different inputs SHALL give different vectors; and text and an image carrying the same label SHALL land closer to each other than to an unrelated input, so ordering can be tested.
 
 #### Scenario: Same input, same vector
 - **WHEN** the deterministic embedder embeds the same input twice, in different processes
@@ -101,5 +101,5 @@ The service SHALL provide an embedder that produces vectors from its input alone
 - **THEN** the two vectors differ
 
 #### Scenario: Related text and image
-- **WHEN** it embeds a token as text and an image carrying that same token
+- **WHEN** it embeds a label as text and an image carrying that same label
 - **THEN** those two vectors are closer to each other than either is to an unrelated input

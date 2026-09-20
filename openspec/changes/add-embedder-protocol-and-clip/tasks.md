@@ -7,7 +7,7 @@
 ## 2. The protocol, normalisation and the deterministic embedder
 
 - [ ] 2.1 Write `app/ml/base.py`: the `Embedder` protocol (`key`, `dim`, `embed_text`, `embed_images`), the `EmbeddingResult` carrying vectors and the truncation flags, `TextNotSupportedError`, and the normalisation helper that returns `float32` unit rows and refuses a zero-norm row. Verify: unit tests for the helper cover a plain vector, an already-normalised vector, a batch, and the zero vector that must raise.
-- [ ] 2.2 Write `app/ml/fake.py`: deterministic vectors from a hash of the input, no torch import, text and an image carrying the same token landing near each other, plus an image-only variant for testing the refusal. Verify: `tests/unit/test_fake_embedder.py` covers determinism across processes (the vector of a fixed input is compared with a constant recorded in the test), distinctness, the text-image relationship, and the refusal.
+- [ ] 2.2 Write `app/ml/fake.py`: deterministic vectors from a hash of the input, no torch import, text and an image carrying the same label landing near each other, plus an image-only variant for testing the refusal. Verify: `tests/unit/test_fake_embedder.py` covers determinism across processes (the vector of a fixed input is compared with a constant recorded in the test), distinctness, the text-image relationship, and the refusal.
 - [ ] 2.3 Write the shared conformance test parametrised over every available embedder (`tests/unit/test_embedder_protocol.py`): width, dtype, unit length, batch order, empty batch. Verify: it passes for both fake variants and is written so that adding an embedder means adding one parameter.
 
 ## 3. Registry and inference pool
