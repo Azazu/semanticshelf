@@ -1,8 +1,11 @@
 """Readiness checks: the database answers, the schema is at the code's head.
 
-Each check returns a `CheckResult`; a failure reason is the exception class
-and the first line of its message, trimmed, so a probe body can never carry a
-connection string or a stack trace. No check loads a model.
+Each check returns a `CheckResult`. A failure reason names exception classes
+only — never a message, which for a database driver can carry the connection
+URL, the user or the password. Both checks run under the same time budget,
+and the migration check is skipped when the database check failed, so a
+silent database yields a 503 within the configured timeout. No check loads a
+model.
 """
 
 import asyncio
@@ -17,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 import app
 
 ALEMBIC_DIR = Path(app.__file__).resolve().parent.parent / "alembic"
-_REASON_MAX = 200
+SKIPPED_AFTER_DATABASE_FAILURE = "skipped: database check failed"
 
 
 @dataclass(frozen=True)
@@ -27,8 +30,14 @@ class CheckResult:
 
 
 def describe(exc: BaseException) -> str:
-    first_line = str(exc).splitlines()[0] if str(exc) else ""
-    return f"{type(exc).__name__}: {first_line}"[:_REASON_MAX].rstrip(": ")
+    """Exception class names only; messages may contain URLs or credentials."""
+    name = type(exc).__name__
+    cause = exc.__cause__
+    return f"{name} from {type(cause).__name__}" if cause is not None else name
+
+
+def _timeout_reason(timeout: float) -> str:
+    return f"TimeoutError: no response within {timeout:g}s"
 
 
 async def check_database(engine: AsyncEngine, timeout: float) -> CheckResult:
@@ -38,7 +47,7 @@ async def check_database(engine: AsyncEngine, timeout: float) -> CheckResult:
             async with engine.connect() as connection:
                 await connection.execute(text("SELECT 1"))
     except TimeoutError:
-        return CheckResult(False, f"TimeoutError: no response within {timeout:g}s")
+        return CheckResult(False, _timeout_reason(timeout))
     except Exception as exc:
         return CheckResult(False, describe(exc))
     return CheckResult(True)
@@ -54,12 +63,17 @@ def code_head(script_dir: Path = ALEMBIC_DIR) -> str | None:
     return heads[0] if len(heads) == 1 else None
 
 
-async def check_migrations(engine: AsyncEngine, script_dir: Path = ALEMBIC_DIR) -> CheckResult:
-    """The database's Alembic revision equals the code's head."""
+async def check_migrations(
+    engine: AsyncEngine, timeout: float, script_dir: Path = ALEMBIC_DIR
+) -> CheckResult:
+    """The database's Alembic revision equals the code's head, within `timeout` seconds."""
     head = code_head(script_dir)
     try:
-        async with engine.connect() as connection:
-            current = await connection.run_sync(_current_revision)
+        async with asyncio.timeout(timeout):
+            async with engine.connect() as connection:
+                current = await connection.run_sync(_current_revision)
+    except TimeoutError:
+        return CheckResult(False, _timeout_reason(timeout))
     except Exception as exc:
         return CheckResult(False, describe(exc))
     if head is not None and current == head:
@@ -67,10 +81,23 @@ async def check_migrations(engine: AsyncEngine, script_dir: Path = ALEMBIC_DIR) 
     return CheckResult(False, f"database at {current or 'none'}, code head {head or 'none'}")
 
 
-def readiness_payload(results: dict[str, CheckResult]) -> tuple[int, dict[str, object]]:
-    """HTTP status and body for the readiness probe from the check results."""
+async def run_checks(
+    engine: AsyncEngine, timeout: float, script_dir: Path = ALEMBIC_DIR
+) -> dict[str, CheckResult]:
+    """All readiness checks; the migration check is skipped when the database is not answering."""
+    database = await check_database(engine, timeout)
+    migrations = (
+        await check_migrations(engine, timeout, script_dir)
+        if database.ok
+        else CheckResult(False, SKIPPED_AFTER_DATABASE_FAILURE)
+    )
+    return {"database": database, "migrations": migrations}
+
+
+def summarize(results: dict[str, CheckResult]) -> tuple[bool, dict[str, str]]:
+    """Whether the service is ready, and one line per check for the probe body."""
     ready = all(result.ok for result in results.values())
     checks = {
         name: "ok" if result.ok else (result.reason or "failed") for name, result in results.items()
     }
-    return (200 if ready else 503), {"status": "ready" if ready else "not-ready", "checks": checks}
+    return ready, checks

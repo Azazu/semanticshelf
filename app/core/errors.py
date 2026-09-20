@@ -4,7 +4,9 @@ Request validation (422 with the offending locations, never the submitted
 values) and HTTP exceptions raised by routes or by routing itself (404, 405,
 ...) are mapped here. Unhandled exceptions are rendered by
 `RequestIdMiddleware`, the outermost application-owned layer, so the 500 body
-and the single error log line share the request id.
+and the single error log line share the request id. Endpoints that answer an
+error status themselves (the readiness probe's 503) build a `ProblemDetails`
+subclass with their extension members and pass it to `problem_response`.
 """
 
 from collections.abc import Mapping
@@ -30,7 +32,7 @@ class ValidationIssue(BaseModel):
 
 
 class ProblemDetails(BaseModel):
-    """The body of every error response (RFC 9457)."""
+    """The body of every error response (RFC 9457). Subclasses add extension members."""
 
     type: str = Field(default="about:blank", description="about:blank or a stable /errors/<slug>.")
     title: str
@@ -42,25 +44,33 @@ class ProblemDetails(BaseModel):
     )
 
 
-def problem_response(
+def instance_for_current_request() -> str:
+    return f"urn:request:{current_request_id()}"
+
+
+def problem(
     *,
     status: int,
     title: str,
     detail: str = "",
     type_: str = "about:blank",
     errors: list[ValidationIssue] | None = None,
-    headers: Mapping[str, str] | None = None,
-) -> JSONResponse:
-    body = ProblemDetails(
+) -> ProblemDetails:
+    return ProblemDetails(
         type=type_,
         title=title,
         status=status,
         detail=detail,
-        instance=f"urn:request:{current_request_id()}",
+        instance=instance_for_current_request(),
         errors=errors,
     )
+
+
+def problem_response(
+    body: ProblemDetails, headers: Mapping[str, str] | None = None
+) -> JSONResponse:
     return JSONResponse(
-        status_code=status,
+        status_code=body.status,
         content=body.model_dump(exclude_none=True),
         media_type=PROBLEM_MEDIA_TYPE,
         headers=headers,
@@ -70,7 +80,7 @@ def problem_response(
 def internal_error_response() -> JSONResponse:
     """The 500 body: no detail, no exception text."""
     status = HTTPStatus.INTERNAL_SERVER_ERROR
-    return problem_response(status=status, title=status.phrase)
+    return problem_response(problem(status=status, title=status.phrase))
 
 
 async def validation_error_handler(request: Request, exc: Exception) -> Response:
@@ -81,11 +91,13 @@ async def validation_error_handler(request: Request, exc: Exception) -> Response
     ]
     status = HTTPStatus.UNPROCESSABLE_ENTITY
     return problem_response(
-        status=status,
-        title=status.phrase,
-        detail="Request validation failed",
-        type_=VALIDATION_TYPE,
-        errors=issues,
+        problem(
+            status=status,
+            title=status.phrase,
+            detail="Request validation failed",
+            type_=VALIDATION_TYPE,
+            errors=issues,
+        )
     )
 
 
@@ -94,7 +106,7 @@ async def http_exception_handler(request: Request, exc: Exception) -> Response:
     status = HTTPStatus(exc.status_code)
     detail = exc.detail if isinstance(exc.detail, str) and exc.detail != status.phrase else ""
     return problem_response(
-        status=exc.status_code, title=status.phrase, detail=detail, headers=exc.headers
+        problem(status=exc.status_code, title=status.phrase, detail=detail), headers=exc.headers
     )
 
 
@@ -103,9 +115,15 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 
 
-def problem_responses(*statuses: int) -> dict[int | str, dict[str, Any]]:
-    """OpenAPI `responses` entries documenting the problem-details body for the given statuses."""
+def problem_responses(
+    *statuses: int, model: type[ProblemDetails] = ProblemDetails
+) -> dict[int | str, dict[str, Any]]:
+    """OpenAPI `responses` entries for problem-details bodies.
+
+    FastAPI lists a response model under `application/json`; `app.core.openapi`
+    relabels every error response to `application/problem+json` when the
+    document is generated.
+    """
     return {
-        status: {"model": ProblemDetails, "description": HTTPStatus(status).phrase}
-        for status in statuses
+        status: {"model": model, "description": HTTPStatus(status).phrase} for status in statuses
     }

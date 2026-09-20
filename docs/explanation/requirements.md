@@ -137,7 +137,7 @@ Streamlit application in `ui/` (its own package, its own dependency group), a Co
 ### 2.10 Operations (OPS)
 
 - **FR-OPS-1** `GET /health` → 200 `{"status":"ok","version":"<app version>"}` with no dependency check (liveness).
-- **FR-OPS-2** `GET /ready` → 200 `{"status":"ready","checks":{...}}` or 503 `{"status":"not-ready",...}` after: `SELECT 1` within 3 s, `MEDIA_ROOT` exists and is writable, migration head applied (`alembic_version` equals the code's head), embedder dimensions consistent with the schema (FR-MDL-7). Models are not loaded by the probe. Docker healthchecks use `/ready`.
+- **FR-OPS-2** `GET /ready` → 200 `{"status":"ready","checks":{...}}` when every check passes, otherwise 503 as problem details (§4) with `type` `/errors/not-ready` and a `checks` extension member holding one line per check. Checks: `SELECT 1` within `READINESS_TIMEOUT_SECONDS` (default 3 s), migration head applied (`alembic_version` equals the code's head; queried under the same budget and skipped when the database check failed), `MEDIA_ROOT` exists and is writable, embedder dimensions consistent with the schema (FR-MDL-7). A reason names exception classes, a timeout or a revision comparison, never an exception message (a driver message can carry the connection URL). Models are not loaded by the probe. Docker healthchecks use `/ready`.
 - **FR-OPS-3** `GET /api/v1/stats` → asset count, counts per `(model, status)`, pending job age (oldest `created_at`), storage bytes — the UI's Status page and a smoke check for the README.
 - **FR-OPS-4** OpenAPI 3.1 at `/api/openapi.json`, Swagger UI at `/api/docs`; every operation has a summary, a description and an example; problem-details responses are documented per status code.
 

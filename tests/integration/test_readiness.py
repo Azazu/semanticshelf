@@ -45,8 +45,9 @@ async def test_not_ready_when_migrations_are_behind(db_settings: Settings) -> No
         async for client in make_client(app):
             response = await client.get("/ready")
         assert response.status_code == 503, response.text
+        assert response.headers["content-type"] == "application/problem+json"
         body = response.json()
-        assert body["status"] == "not-ready"
+        assert body["type"] == "/errors/not-ready"
         assert body["checks"]["database"] == "ok"
         assert body["checks"]["migrations"] == "database at none, code head 0001_baseline"
     finally:

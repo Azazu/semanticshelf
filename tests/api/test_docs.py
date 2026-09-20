@@ -18,7 +18,14 @@ async def test_openapi_document(client: httpx.AsyncClient) -> None:
             assert operation.get("summary"), path
             assert operation.get("description"), path
     ready = document["paths"]["/ready"]["get"]["responses"]
-    assert "503" in ready
+    assert set(ready["503"]["content"]) == {"application/problem+json"}
+    schema_ref = ready["503"]["content"]["application/problem+json"]["schema"]["$ref"]
+    assert schema_ref.endswith("/NotReadyProblem")
+    for path, operations in document["paths"].items():
+        for operation in operations.values():
+            for status, response in operation["responses"].items():
+                if int(status) >= 400:
+                    assert set(response["content"]) == {"application/problem+json"}, (path, status)
 
 
 async def test_swagger_ui_and_no_redoc(client: httpx.AsyncClient) -> None:

@@ -25,8 +25,9 @@ What to look at once it runs:
   touches nothing.
 - `http://127.0.0.1:8000/ready` — readiness: 200 when the database
   answers within `READINESS_TIMEOUT_SECONDS` and its Alembic revision is
-  the code's head, otherwise 503 with a reason per failed check. Docker
-  healthchecks use this one.
+  the code's head, otherwise a 503 problem-details body whose `checks`
+  member names each check's outcome (exception class names only, never a
+  driver message). Docker healthchecks use this one.
 - `http://127.0.0.1:8000/api/docs` — Swagger UI; the document itself is
   at `/api/openapi.json`.
 
