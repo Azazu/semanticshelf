@@ -37,6 +37,17 @@ An embedder that has no text tower SHALL refuse a text request with an error nam
 - **WHEN** text is embedded with a model that has no text tower
 - **THEN** the call fails with an error naming the key, and no vector is returned
 
+### Requirement: A checkpoint that does not fit its key is refused at load
+An adapter SHALL compare the width the loaded checkpoint actually produces with the width its key declares, and SHALL fail the load, naming the key and both widths, when they differ. The failure SHALL happen before any vector is returned, so a misconfigured checkpoint cannot reach storage. A declaration-only check elsewhere SHALL NOT be presented as covering this case.
+
+#### Scenario: Checkpoint of the wrong width
+- **WHEN** a model key is pointed at a checkpoint whose output width differs from the width the key declares
+- **THEN** loading fails with an error naming the key and both widths, and no vector is produced
+
+#### Scenario: Checkpoint that fits
+- **WHEN** a model key is pointed at a checkpoint of the declared width
+- **THEN** loading succeeds and every vector it returns has that width
+
 ### Requirement: A model is loaded at most once per process, and only when needed
 Loading SHALL be lazy: importing the application or starting it SHALL load no model, unless the configuration names models to warm up. The first use of a key SHALL load it, and concurrent first uses SHALL load it exactly once and share the result. A load that fails SHALL NOT be remembered as a failure, so a later attempt can succeed.
 
@@ -67,12 +78,16 @@ When a text input exceeds the model's context length, the embedder SHALL embed t
 - **WHEN** text within the model's context is embedded
 - **THEN** the result states that nothing was truncated
 
-### Requirement: Inference never runs on the event loop
-Embedding SHALL run on a dedicated, bounded pool of worker threads, not on the thread that serves requests, and the pool's size SHALL be configurable. While an embedding call is in flight the service SHALL keep answering.
+### Requirement: Neither loading nor inference runs on the event loop
+Loading a model and embedding with it SHALL both run on a dedicated, bounded pool of worker threads, not on the thread that serves requests, and the pool's size SHALL be configurable. Loading is the larger of the two — it reads gigabytes from disk or the network — so the asynchronous path SHALL obtain an embedder through that pool as well, and warm-up at start SHALL use the same path.
 
-#### Scenario: The loop keeps running
+#### Scenario: The loop keeps running during inference
 - **WHEN** an embedding call that takes noticeable time is in flight
 - **THEN** other work scheduled on the event loop continues to make progress before it finishes
+
+#### Scenario: The loop keeps running during a load
+- **WHEN** a model that takes noticeable time to load is requested through the asynchronous path
+- **THEN** other work scheduled on the event loop continues to make progress before the load finishes
 
 ### Requirement: A deterministic embedder stands in for the real ones
 The service SHALL provide an embedder that produces vectors from its input alone, without weights, a network or a framework runtime, so the rest of the system can be exercised without a model. The same input SHALL always give the same vector; different inputs SHALL give different vectors; and text and an image carrying the same token SHALL land closer to each other than to an unrelated input, so ordering can be tested.
