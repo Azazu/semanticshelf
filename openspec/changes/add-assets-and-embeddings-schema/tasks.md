@@ -13,7 +13,7 @@
 ## 3. Domain objects and repositories
 
 - [x] 3.1 Write `app/repositories/` with `AssetRepository` (add, get, get by content hash, delete), `EmbeddingRepository` (upsert, get, `nearest(model, vector, limit)`) and `IndexingJobRepository` (add for a model, list for an asset). Every method returns the frozen dataclasses of `app/domain.py` and never an ORM instance. `nearest()` is the only place that builds a vector query and always casts the column to the model's dimension (design decisions 1 and 2). Verify: `make types` green under `mypy --strict`, and a unit test asserts the repository module does not export any ORM class.
-- [x] 3.2 Update the `AGENTS.md` layout block with `domain.py` and `repositories/`. Verify: re-read the block whole; `rg -n 'repositories|domain' AGENTS.md` shows the layout and the domain-rule lines agreeing with the code.
+- [x] 3.2 Update the `AGENTS.md` layout block with `app/domain.py` and `app/repositories/`. Verify: re-read the block whole; `rg -n 'repositories|domain' AGENTS.md` shows the layout and the domain-rule lines agreeing with the code.
 
 ## 4. Storage guarantees against a real database
 
@@ -36,5 +36,5 @@
 
 - [x] 7.1 Commits per block, without agent trailers, each carrying the evidence of the tasks whose diff it holds: `chore(deps): add pgvector` (1.1), `feat(domain): model registry and domain objects` (1.2), `feat(db): assets, embeddings and indexing jobs` (2.1–2.4, including the readiness test that named the old head), `feat(repositories): asset, embedding and job repositories` (3.1–3.2, including the `AGENTS.md` layout), `test(db): storage guarantees and migration round trip` (4.1–4.3, 5.1–5.3), `docs(adr): record the per-model vector index layout` (6.1–6.2). Verify: `git log --format=%B main..HEAD | grep -c '^Co-Authored-By'` prints `0`.
 - [x] 7.2 `make check` green without a database (`env -u DATABASE_URL make check`) and `make migrate && make test-integration` green against a pgvector database. Verify: both outputs recorded in the commit bodies.
-- [ ] 7.3 Acceptance on GitHub (user pushes the branch): `workflow` green and `python` green, the integration step now running the storage and round-trip tests against the service. Verify: the user reports the run.
-- [ ] 7.4 `openspec validate add-assets-and-embeddings-schema --strict` and `scripts/pregate-verify.sh gate2 add-assets-and-embeddings-schema` pass; request Gate 2 with `/gate-review add-assets-and-embeddings-schema 2`.
+- [x] 7.3 Acceptance on GitHub (user pushes the branch): `workflow` green and `python` green, the integration step now running the storage and round-trip tests against the service. Verify: the user reports the run.
+- [x] 7.4 `openspec validate add-assets-and-embeddings-schema --strict` and `scripts/pregate-verify.sh gate2 add-assets-and-embeddings-schema` pass; request Gate 2 with `/gate-review add-assets-and-embeddings-schema 2`.
