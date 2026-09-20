@@ -340,7 +340,8 @@ brief); ordered plan: `openspec/ROADMAP.md`.
 | `make run` | `uvicorn app.main:app --reload` |
 | `make migrate` / `make revision MSG='…'` | apply migrations / autogenerate a revision |
 | `make test` / `make lint` / `make fmt` / `make types` | pytest / ruff check / ruff format / mypy |
-| `make check` | **the gate floor**: `lint` + format check + `types` + `test` — must be green before Gate 2 and merge |
+| `make lock-check` | `uv lock --check`: `uv.lock` matches `pyproject.toml` (CI syncs with `--frozen`, which does not check) |
+| `make check` | **the gate floor**: `lock-check` + `lint` + format check + `types` + `test` — must be green before Gate 2 and merge |
 
 ### Layout
 

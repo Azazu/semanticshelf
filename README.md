@@ -22,6 +22,10 @@ place; application code arrives through reviewed OpenSpec changes
 
 ```bash
 cp .env.example .env
-make init      # build containers, install dependencies, migrate
-make check     # lint + static analysis + tests
+make init      # uv sync (downloads Python 3.12 once), start the database, migrate
+make check     # lock check + lint + format check + types + unit tests
 ```
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).

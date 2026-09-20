@@ -12,8 +12,15 @@ Authoritative live source: `make help`.
 | `make revision MSG='…'` | autogenerate an Alembic revision |
 | `make migrate` | apply migrations |
 | `make test` / `make test-integration` | unit tests (fake embedder) / pgvector integration tests |
+| `make lock-check` | `uv lock --check`: `uv.lock` matches `pyproject.toml` |
 | `make lint` / `make fmt` / `make fmt-check` / `make types` | ruff check / ruff format / format check / mypy |
-| `make check` | lint + format + types + unit tests — the gate floor |
+| `make check` | lock check + lint + format + types + unit tests — the gate floor |
+
+Guarded targets: while `alembic.ini` does not exist (the application
+scaffold has not landed yet), `make run`, `make migrate`,
+`make revision MSG='…'` and `make test-integration` print
+`[SKIP] no alembic.ini — application not scaffolded yet` and exit 0.
+`make check` is never guarded.
 
 ## Workflow scripts
 
