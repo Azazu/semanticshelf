@@ -41,3 +41,14 @@
 | 2 | confirmed — task 6.1 assigns the persistent smoke test to the `test:` commit and attaches every probe's evidence to a feasible commit with a real persistent diff. |
 | 3 | confirmed — the proposal, design decision 9, and task 5.5 consistently forbid editing `.github/workflows/ci.yml` under this approval and require a blocked handoff, revised artifacts, and a new Gate 1 review if CI requires an edit. |
 | 4 | confirmed — task 5.1 now bounds the claim to commands added or changed by this change, separates later user acceptance, excludes unrelated pre-existing commands, and explicitly includes `make revision MSG='…'` as executed by task 2.1 via `make revision MSG=x` with evidence assigned in task 6.1. |
+
+## Round 1 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-20
+**Reviewed-Commit:** 19a3327069528dea8f384e0599e31a7b11fac53f
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | blocker | `Makefile` `lock-check`/`check`; `proposal.md` What Changes 4; `design.md` Decision 9 and check table; `tasks.md` 4.4 | The last Gate 1 confirmation reviewed commit `204b7bdc6dc25ce3e01eba8f1f871e35a784180c`, whose approved scope explicitly left `make check` unchanged and treated `uv sync --frozen` as the lock-drift check. During implementation, the change added a new mandatory `make lock-check` gate check, made it part of `make check`, and revised the proposal, design, and failing-input plan around the newly discovered `--frozen` semantics. This is a scope and verification-architecture change in a high-tier CI/verifier change, not an artifact edit that merely describes the implementation. AGENTS.md therefore requires Gate 1 to be reopened; the prose saying the user approved the addition is neither a Gate 1 decision record nor a formal waiver. Obtain a Gate 1 approval/waiver for the revised scope before Gate 2 can pass. | open |
