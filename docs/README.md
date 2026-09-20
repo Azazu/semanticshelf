@@ -7,6 +7,10 @@ may also describe decided design, citing the ADR that decided it.
 
 ## Explanation (understanding-oriented)
 
+- [`explanation/requirements.md`](explanation/requirements.md) — the
+  technical specification: requirements (FR/NFR ids), data model, API,
+  stack, stages; normative for every change
+
 _(architecture and domain model pages arrive with the first
 implementing change)_
 

@@ -2,8 +2,9 @@
 
 Semantic search over images: CLIP text→image and DINOv2 image→image embeddings in PostgreSQL + pgvector, served by FastAPI.
 
-**Stage:** scaffold — agent workflow, documentation layout and CI are
-in place; application code arrives through reviewed OpenSpec changes
+**Stage:** specified — agent workflow, documentation layout, CI and the
+technical specification (`docs/explanation/requirements.md`) are in
+place; application code arrives through reviewed OpenSpec changes
 (see `openspec/ROADMAP.md`).
 
 ## Start reading here

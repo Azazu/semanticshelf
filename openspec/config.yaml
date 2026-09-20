@@ -2,8 +2,10 @@ schema: spec-driven
 
 context: |
   SemanticShelf — Semantic search over images: CLIP text→image and DINOv2 image→image embeddings in PostgreSQL + pgvector, served by FastAPI.
-  Stage: scaffold; application code arrives through OpenSpec changes
-  listed in openspec/ROADMAP.md.
+  Stage: specified; application code arrives through OpenSpec changes
+  listed in openspec/ROADMAP.md. The technical specification
+  (docs/explanation/requirements.md, FR-*/NFR-* ids) is normative for
+  every change; per-capability specs are derived from it.
 
   Target stack:
   - Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2 (async) + Alembic
@@ -13,8 +15,12 @@ context: |
     on CPU by default; model loading is lazy and never at import time
   - Tooling: uv (env + lock), pytest + httpx AsyncClient, ruff (lint +
     format), mypy (strict on app/), pre-commit optional
-  - Heavy compute (embedding extraction) runs in background tasks or a
-    worker, never inside a request handler
+  - Heavy compute (embedding extraction) never runs inside a request
+    handler: indexing_jobs rows in PostgreSQL, drained by FastAPI
+    BackgroundTasks in stage 1 and by a separate worker process with
+    FOR UPDATE SKIP LOCKED from stage 3; no Redis, no external queue
+  - Errors are RFC 9457 problem details; logs are structlog JSON with a
+    request id; the demo UI is Streamlit talking to the API over HTTP
   Domain: SemanticShelf — semantic search over images/assets: upload or
   index a folder → extract embeddings → store in pgvector; text→image and
   image→image search with filters (tags/categories), pagination and a
