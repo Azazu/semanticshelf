@@ -107,3 +107,17 @@
 | 2 | changes-requested — `MediaStorage.fill()` and `publish_files()` now clean staged and already-published paths on failures, and the original-write injection exercises that cleanup. The requested thumbnail-write injection is still absent: `test_a_thumbnail_that_cannot_be_made_leaves_nothing_behind` raises in `images.thumbnail()` before a thumbnail staging path is created, so it does not cover a partial/failed thumbnail `fill` or `publish`. Add the named thumbnail-write failure case and assert that neither a `.part` file, a final file, nor a row remains. |
 | 3 | confirmed — The endpoint now counts every `UploadFile` regardless of field name, requires the sole file part to be named `file`, and adds coverage for both a differently named second file and a lone misnamed file. |
 | 4 | confirmed — The proposal records the requirement amendment, FR-AST-6 and the delta now specify a maximum 256 px side without enlargement, and the new unit test covers an accepted 64×48 source retaining its dimensions in WebP. |
+
+## Confirmation 2 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** 158e8226257edcd17bc5fa8845a4bd814af9758b
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — The specification now distinguishes receipt outside the media root from publication under the shared claim, and the concurrency test exercises that protocol. The implementation does not guarantee its premise, however: `receive()` calls `tempfile.mkstemp()` without a directory or a containment check, so a valid deployment with `MEDIA_ROOT` equal to (or containing) the process temporary directory places the received file under the media root before the lock. A direct reproduction with the temporary directory also used as the configured media root yields `received.path.is_relative_to(media_root) == True`; prune can therefore see and remove that arbitrarily delayed upload, recreating the named race. Use a configured or validated receipt location outside `MEDIA_ROOT` (or cover the colliding case with the shared claim) and test that configuration. |
+| 2 | confirmed — `MediaStorage.fill()` now removes its target on iterator, write, flush, or fsync failure, while `publish_files()` tracks every staging path and removes staged and already-published files on failure. The added injections cover a partial thumbnail write, failed thumbnail publication, and a partial original write, and each asserts that no staging file, final file, or asset row remains. |
+| 3 | confirmed — The endpoint counts all `UploadFile` values regardless of field name, requires the sole file part to be named `file`, and covers both a differently named extra file and a lone misnamed file. |
+| 4 | confirmed — The proposal, FR-AST-6, and the delta consistently amend the contract to a longest side of at most 256 px without enlargement, and the added test verifies an accepted 64×48 source remains 64×48 in WebP. |
