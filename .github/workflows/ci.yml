@@ -59,6 +59,9 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
+          # The model runtime is a few hundred megabytes; without the cache
+          # every run downloads it again.
+          enable-cache: true
       - run: uv sync --frozen
       - run: make check
       - name: Integration tests
