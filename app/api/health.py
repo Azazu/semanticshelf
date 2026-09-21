@@ -53,11 +53,12 @@ async def health() -> HealthResponse:
     "/ready",
     summary="Readiness probe",
     description=(
-        "The service can serve: the database answers `SELECT 1` within the configured timeout "
-        "and its Alembic revision is the code's head (the second check runs under the same "
-        "budget and is skipped when the first fails). Otherwise 503 as problem details with "
-        "`type` `/errors/not-ready` and a `checks` member naming each check's outcome. "
-        "Models are never loaded by this probe."
+        "The service can serve: the database answers `SELECT 1` within the configured timeout, "
+        "its Alembic revision is the code's head, and its dimension constraint declares every "
+        "enabled model with the width the code declares (the later checks run under the same "
+        "budget and are skipped when the database check fails). Otherwise 503 as problem details "
+        "with `type` `/errors/not-ready` and a `checks` member naming each check's outcome. "
+        "Models are never loaded by this probe: it compares declarations, not weights."
     ),
     response_model=ReadyResponse,
     responses=problem_responses(HTTPStatus.SERVICE_UNAVAILABLE, model=NotReadyProblem),
@@ -65,7 +66,9 @@ async def health() -> HealthResponse:
 async def ready(request: Request) -> Response:
     engine: AsyncEngine = request.app.state.engine
     settings: Settings = request.app.state.settings
-    is_ready, checks = summarize(await run_checks(engine, settings.readiness_timeout_seconds))
+    is_ready, checks = summarize(
+        await run_checks(engine, settings.readiness_timeout_seconds, settings.enabled_models)
+    )
     if is_ready:
         return JSONResponse({"status": "ready", "checks": checks})
     status = HTTPStatus.SERVICE_UNAVAILABLE

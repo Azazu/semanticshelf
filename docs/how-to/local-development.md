@@ -15,7 +15,9 @@ make run                      # http://127.0.0.1:8000/api/docs
 
 The variables the application reads are listed in
 [`../reference/settings.md`](../reference/settings.md); `DATABASE_URL`
-is the only required one. `make run` starts uvicorn with
+is the only required one. No model weight is downloaded until something
+asks for a model — [`models.md`](models.md) covers the download, warm-up
+and offline runs. `make run` starts uvicorn with
 `--factory app.main:create_app`, so the settings are read when the app is
 built, not when the module is imported.
 
@@ -24,10 +26,11 @@ What to look at once it runs:
 - `http://127.0.0.1:8000/health` — liveness: `{"status":"ok","version":…}`,
   touches nothing.
 - `http://127.0.0.1:8000/ready` — readiness: 200 when the database
-  answers within `READINESS_TIMEOUT_SECONDS` and its Alembic revision is
-  the code's head, otherwise a 503 problem-details body whose `checks`
-  member names each check's outcome (exception class names only, never a
-  driver message). Docker healthchecks use this one.
+  answers within `READINESS_TIMEOUT_SECONDS`, its Alembic revision is the
+  code's head, and its dimension constraint declares every enabled model
+  with the width the code declares; otherwise a 503 problem-details body
+  whose `checks` member names each check's outcome (exception class names
+  only, never a driver message). Docker healthchecks use this one.
 - `http://127.0.0.1:8000/api/docs` — Swagger UI; the document itself is
   at `/api/openapi.json`.
 

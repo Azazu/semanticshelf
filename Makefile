@@ -5,7 +5,7 @@ RUN     ?= uv run
 MSG     ?= change
 
 .DEFAULT_GOAL := help
-.PHONY: help init up down ps logs run migrate revision test test-integration lock-check lint fmt fmt-check types check
+.PHONY: help init up down ps logs run migrate revision test test-models test-integration lock-check lint fmt fmt-check types check
 
 # Application targets are guarded until the scaffold exists: the change that
 # adds the FastAPI app brings alembic.ini together with app/main.py. A
@@ -58,8 +58,11 @@ else
 	$(RUN) alembic revision --autogenerate -m "$(MSG)"
 endif
 
-test: ## Unit tests (fake embedder, no database)
-	$(RUN) pytest -m "not integration"
+test: ## Unit and api tests (fake embedder, no database, no weights)
+	$(RUN) pytest -m "not integration and not models"
+
+test-models: ## Real-model smoke tests (downloads weights; on demand, never in CI)
+	$(RUN) pytest -m models
 
 test-integration: ## Integration tests (need the pgvector container)
 ifdef APP_MISSING

@@ -10,13 +10,21 @@ dependencies = [
     "alembic>=1.20.0",
     "asyncpg>=0.31.0",
     "fastapi>=0.141.1",
+    "numpy>=2.5.3",
     "pgvector>=0.5.0",
+    "pillow>=12.3.0",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "sqlalchemy[asyncio]>=2.0.54",
     "structlog>=26.1.0",
+    "torch>=2.14.0",
+    "transformers>=5.17.0",
+    "typer>=0.27.2",
     "uvicorn[standard]>=0.53.0",
 ]
+
+[project.scripts]
+semanticshelf = "app.cli:app"
 
 [dependency-groups]
 dev = [
@@ -62,6 +70,11 @@ strict = true
 python_version = "3.12"
 packages = ["app"]
 warn_unreachable = true
+# The model runtime ships type hints, but several of its entry points
+# (`from_pretrained`, `eval`) are themselves untyped. Strict mode rejects a call
+# into an untyped function; these two names are the boundary of our code, and
+# everything the adapter hands back is annotated on our side.
+untyped_calls_exclude = ["transformers", "torch"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -69,4 +82,5 @@ asyncio_mode = "auto"
 addopts = "--strict-markers"
 markers = [
     "integration: needs the pgvector container",
+    "models: loads real model weights; on demand only, never in CI",
 ]

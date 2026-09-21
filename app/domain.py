@@ -47,6 +47,22 @@ EMBEDDING_MODELS: Final[Mapping[str, int]] = {
 }
 
 
+#: The subset of `EMBEDDING_MODELS` this build has an adapter for. The schema
+#: knows every key the project will ever store, because a migration is written
+#: once; the code catches up one change at a time, and configuration may only
+#: enable what the code can actually run. `app/ml/registry.py` declares the same
+#: set as a table of factories, and a unit test holds the two together.
+IMPLEMENTED_MODELS: Final[frozenset[str]] = frozenset({CLIP_VIT_L14})
+
+
+class UnknownModelError(LookupError):
+    """A model key the application does not declare.
+
+    Raised wherever a key arrives from outside the code — configuration, a
+    request, a job row — so every layer reports the same failure for it.
+    """
+
+
 def vector_index_name(model: str) -> str:
     """The name of the vector index serving one model key."""
     return "ix_embeddings_" + model.replace("-", "_")
