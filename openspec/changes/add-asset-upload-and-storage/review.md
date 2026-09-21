@@ -121,3 +121,17 @@
 | 2 | confirmed — `MediaStorage.fill()` now removes its target on iterator, write, flush, or fsync failure, while `publish_files()` tracks every staging path and removes staged and already-published files on failure. The added injections cover a partial thumbnail write, failed thumbnail publication, and a partial original write, and each asserts that no staging file, final file, or asset row remains. |
 | 3 | confirmed — The endpoint counts all `UploadFile` values regardless of field name, requires the sole file part to be named `file`, and covers both a differently named extra file and a lone misnamed file. |
 | 4 | confirmed — The proposal, FR-AST-6, and the delta consistently amend the contract to a longest side of at most 256 px without enlargement, and the added test verifies an accepted 64×48 source remains 64×48 in WebP. |
+
+## Confirmation 3 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** 0719ae1214179571431d7a743e51e9567911391b
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — The runtime containment check and the readiness check now reject a temporary location inside `MEDIA_ROOT`, so the received file can no longer survive there and recreate the prune race. The new rejection path has a resource leak, however: after `tempfile.mkstemp()` returns, `receive()` unlinks the colliding path and raises `StagingLocationError` without closing the returned file descriptor. A direct reproduction with 32 refused receives increased `/proc/self/fd` by 32. Because the upload endpoint remains callable even when readiness is false, repeated requests in this configuration can exhaust the process's descriptors. Close the descriptor on every early exit after `mkstemp()` and add regression coverage for the refused path. |
+| 2 | confirmed — `MediaStorage.fill()` removes a partially written target, and `publish_files()` removes every staged or published path on failure. The failure injections now cover partial original and thumbnail writes plus failed thumbnail publication, and verify that no staging file, final file, or asset row remains. |
+| 3 | confirmed — The endpoint counts all `UploadFile` parts regardless of field name, requires the sole file part to be named `file`, and covers both an extra differently named file and a lone misnamed file. |
+| 4 | confirmed — FR-AST-6, the delta, and the proposal consistently define the thumbnail side as at most 256 px without enlargement, and the unit test verifies that an accepted 64×48 source remains 64×48 in WebP. |
