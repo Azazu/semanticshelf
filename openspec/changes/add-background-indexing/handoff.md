@@ -16,14 +16,11 @@
 
 ## Next step
 
-`/opsx:propose add-background-indexing`.
-
-Tier is high in the roadmap: this is the project's first concurrency — several
-runners claiming the same rows — and delivery is at-least-once, so every
-execution must be idempotent. Gate 1 reviews the artifacts before any code.
+`/gate-review add-background-indexing 1` — tier high, so Codex reviews the
+artifacts before any code. After an approving verdict:
+`/opsx:apply add-background-indexing`.
 
 ## Blockers
 
-The integration database was removed during cleanup; a throwaway pgvector
-container is created again when the first task needs it (the change's own
-tests, not the proposal).
+The integration database was removed during cleanup; the first task that needs
+it recreates a throwaway pgvector container and migrates it.
