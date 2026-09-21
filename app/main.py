@@ -13,6 +13,7 @@ from fastapi import FastAPI
 
 from app import __version__
 from app.api import health
+from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.errors import problem_responses, register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.openapi import install_problem_media_type
@@ -66,6 +67,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         responses=problem_responses(422, 500),
     )
     app.state.settings = settings
+    # `add_middleware` inserts at the front, so the last one added is the
+    # outermost. The request-id layer renders unhandled exceptions as 500 and
+    # must stay outermost; the body limit goes inside it, so its refusal is a
+    # 413 rather than a swallowed exception.
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_upload_bytes)
     app.add_middleware(RequestIdMiddleware)
     register_exception_handlers(app)
     app.include_router(health.router)
