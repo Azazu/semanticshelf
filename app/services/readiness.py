@@ -14,6 +14,7 @@ downloaded a weight.
 import asyncio
 import os
 import re
+import tempfile
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -163,6 +164,11 @@ def media_state(root: Path) -> str | None:
         return "the media root is not a directory"
     if not os.access(root, os.W_OK):
         return "the media root is not writable"
+    if Path(tempfile.gettempdir()).resolve().is_relative_to(root.resolve()):
+        # An upload is received into the temporary directory before it holds
+        # the claim that keeps `storage prune` away; inside the media root that
+        # file would be prunable, which is the race the protocol removes.
+        return "the temporary directory lies inside the media root"
     return None
 
 

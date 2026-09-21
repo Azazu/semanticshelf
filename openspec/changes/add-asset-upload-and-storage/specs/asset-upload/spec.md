@@ -247,7 +247,11 @@ together.
 An upload SHALL NOT place anything under the media root before it is certain
 to keep it: what it receives from the client, and whatever it must read to
 decide, SHALL live outside the root. The command therefore cannot see an
-upload that is still arriving, and MAY run freely beside one.
+upload that is still arriving, and MAY run freely beside one. The service
+SHALL verify that this holds in its own configuration rather than assume it: a
+deployment whose temporary location lies inside the media root SHALL be
+reported by the readiness probe and SHALL refuse the upload, rather than
+silently reintroducing the race.
 
 From the moment an upload does place a file under the root until its row is
 stored, it SHALL hold a shared claim; the command SHALL take that claim
@@ -283,6 +287,12 @@ store the uploading service does not use.
   received and inspected, however long that takes
 - **THEN** the command may proceed, finds nothing belonging to that upload
   under the media root, and the upload completes with both its files in place
+
+#### Scenario: A deployment whose temporary location is inside the media root
+- **WHEN** the service is configured so that what it receives would land
+  inside the media root
+- **THEN** readiness reports it and an upload is refused, because the
+  protection above no longer holds
 
 #### Scenario: No upload in flight
 - **WHEN** the command runs with no upload in flight

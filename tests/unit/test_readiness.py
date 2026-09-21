@@ -258,3 +258,22 @@ async def test_the_media_check_reports_a_missing_root(tmp_path: Path) -> None:
 
     assert result.ok is False
     assert result.reason is not None and "does not exist" in result.reason
+
+
+def test_a_temporary_directory_inside_the_media_root_is_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The premise of the upload protocol: what is received lands where prune
+    # cannot see it. With the media root above the temporary directory it does
+    # not, and readiness says so before any traffic arrives.
+    monkeypatch.setenv("TMPDIR", str(tmp_path / "tmp"))
+    (tmp_path / "tmp").mkdir()
+    import tempfile
+
+    tempfile.tempdir = None  # the module caches its answer
+
+    reason = media_state(tmp_path)
+
+    assert reason is not None and "temporary directory" in reason
+    assert str(tmp_path) not in reason
+    tempfile.tempdir = None

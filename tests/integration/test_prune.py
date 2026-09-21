@@ -241,8 +241,8 @@ async def test_prune_cannot_touch_an_upload_that_has_not_published_yet(
     release = threading.Event()
     receive = assets_service.receive
 
-    def hold_after_receiving(source: object) -> object:
-        result = receive(source)  # type: ignore[arg-type]
+    def hold_after_receiving(storage_arg: object, source: object) -> object:
+        result = receive(storage_arg, source)  # type: ignore[arg-type]
         received.set()
         assert release.wait(timeout=60), "the test never released the upload"
         return result

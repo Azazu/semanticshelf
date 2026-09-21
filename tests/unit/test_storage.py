@@ -102,3 +102,26 @@ def test_a_stored_name_reveals_its_asset(storage: MediaStorage) -> None:
     assert asset_id_of(storage.thumbnail(ASSET)) == ASSET
     assert asset_id_of(storage.stage(ASSET)) is None
     assert asset_id_of(Path("/tmp/not-an-asset.jpg")) is None
+
+
+def test_receiving_into_the_media_root_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A deployment whose temporary directory is inside the media root would
+    make a received file prunable before the upload holds the claim."""
+    import io
+    import tempfile
+
+    from app.services.assets import StagingLocationError, receive
+
+    inside = tmp_path / "tmp"
+    inside.mkdir()
+    monkeypatch.setenv("TMPDIR", str(inside))
+    tempfile.tempdir = None
+    try:
+        with pytest.raises(StagingLocationError, match="temporary directory"):
+            receive(MediaStorage.at(tmp_path), io.BytesIO(b"a picture"))
+    finally:
+        tempfile.tempdir = None
+
+    assert list(tmp_path.rglob("*upload*")) == [], "the refused file did not survive"

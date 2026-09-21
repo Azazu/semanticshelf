@@ -67,17 +67,36 @@ def _hashing_chunks(source: BinaryIO, digest: "hashlib._Hash") -> Iterator[bytes
         yield chunk
 
 
-def receive(source: BinaryIO) -> Received:
+class StagingLocationError(RuntimeError):
+    """The temporary directory lies inside the media root.
+
+    Then a received file would be visible to `storage prune` before the upload
+    holds the shared claim, which is exactly the race the protocol removes. It
+    is a deployment mistake — `MEDIA_ROOT` set to the temporary directory, or
+    above it — and it is refused rather than worked around.
+    """
+
+
+def receive(storage: MediaStorage, source: BinaryIO) -> Received:
     """Copy the upload to a temporary file outside the media root, hashing it in
     the same pass. Blocking; called in a worker thread.
 
     Outside the root on purpose: nothing `storage prune` walks may contain a
-    file this upload has not yet earned the right to keep.
+    file this upload has not yet earned the right to keep. The location comes
+    from the platform (`TMPDIR` and its kin), so this checks rather than
+    assumes — the readiness probe reports the same misconfiguration before any
+    traffic arrives.
     """
     digest = hashlib.sha256()
     source.seek(0)
     handle, name = tempfile.mkstemp(prefix="semanticshelf-upload-")
     temporary = Path(name)
+    if temporary.resolve().is_relative_to(storage.root):
+        temporary.unlink(missing_ok=True)
+        raise StagingLocationError(
+            "the temporary directory lies inside the media root; "
+            "set TMPDIR outside it, or move MEDIA_ROOT"
+        )
     size = 0
     try:
         with open(handle, "wb") as sink:
@@ -134,7 +153,7 @@ async def create_asset(
     """An asset from an upload, or nothing at all."""
     asset_id = uuid.uuid4()
     repository = AssetRepository(session)
-    received = await run_in_threadpool(receive, source)
+    received = await run_in_threadpool(receive, storage, source)
     try:
         facts = await run_in_threadpool(images.inspect, received.path, settings)
         try:
