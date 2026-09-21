@@ -65,11 +65,13 @@ SHALL NOT be able to block the run. Each of these SHALL be reported as skipped
 with its reason rather than passed over in silence.
 
 The directory named for the run SHALL be resolved once before the walk starts,
-and the walk SHALL proceed from the resolved directory; a run named with a
-symbolic link to a directory therefore behaves as if it had been named with
-that directory. Without the recursive option the import SHALL consider only the
-files directly in that directory; with it, the files of every directory beneath
-it.
+and every step of the run — counting, walking, importing — SHALL work in the
+directory that was resolved then, not in whatever the name refers to later. A
+run named with a symbolic link to a directory therefore behaves as if it had
+been named with that directory, and replacing that name, or any part of it,
+once the run has begun SHALL NOT be able to send the run into another tree.
+Without the recursive option the import SHALL consider only the files directly
+in that directory; with it, the files of every directory beneath it.
 
 #### Scenario: An entry replaced between being listed and being read
 - **WHEN** a file the walk has listed as a candidate is replaced, before it is
@@ -96,6 +98,12 @@ it.
 - **WHEN** a run names a symbolic link that points at a directory of pictures
 - **THEN** the pictures are imported as if the directory had been named
   directly
+
+#### Scenario: The folder's name is taken over after the run begins
+- **WHEN** the name a run was given is replaced, after the run has begun, by a
+  link to a different directory
+- **THEN** the run reads the directory it began in, reports that directory, and
+  reads nothing from the other one
 
 #### Scenario: A folder inside the folder
 - **WHEN** a directory holding pictures in subdirectories is imported without
@@ -143,11 +151,22 @@ It SHALL still read and inspect the files, so that the refusals it reports are
 the refusals a real run would give, and it SHALL still say which files are
 already stored.
 
+A dry run SHALL account for what the run itself would store, not only for what
+is stored already: within one run, the first file of a given content is
+reported as it would be created and every later file of that same content as
+already stored, exactly as a real run reports them.
+
 #### Scenario: A dry run over a folder with new, refused and stored pictures
 - **WHEN** such a folder is imported with the dry-run option
 - **THEN** the summary names what would be created, what would be refused and
   what is already stored, and afterwards the store and the media root are
   byte-for-byte what they were before
+
+#### Scenario: The same bytes twice in one folder, rehearsed
+- **WHEN** a folder holding the same bytes under two names is imported with the
+  dry-run option
+- **THEN** the first is reported as it would be created and the second as
+  already stored, which is what a real run over that folder then does
 
 ### Requirement: A run says what happened to every file it considered
 

@@ -84,11 +84,19 @@ settings: the run is described entirely by its arguments.
    draft allowed it, which contradicted the rule that only a regular file is
    opened, and the reviewer was right that both could not hold. One rule:
    **regular files only, symlinks are skipped and reported.**
-   The named directory itself is resolved exactly once, before the walk, and
-   the walk starts from the resolved path: a run may be pointed at a symlink to
-   a directory and behaves as if it had been pointed at the directory. If the
-   resolved path is not a directory, the run is refused before anything is
-   read.
+   The named directory itself is resolved exactly once, before the walk, **and
+   then held open**: `open_root` resolves the name, opens that directory with
+   `O_DIRECTORY`, and every step afterwards — the count, the walk, the report's
+   own `directory` — works from that descriptor. A run may be pointed at a
+   symlink to a directory and behaves as if it had been pointed at the
+   directory; if the resolved path is not a directory, the run is refused
+   before anything is read.
+   Resolving is not enough on its own, and the first implementation proved it:
+   it resolved in three places — once for the report, once inside the walk,
+   once for the progress bar's count — so the name could be replaced between
+   them and the run could end up in a tree the report did not name. One
+   resolution, one descriptor, and the same rule as for a file: what is worked
+   on is the object that was opened, not the name it had.
 
 4. **Candidates are chosen by extension, accepted by bytes.** The walk
    considers a file whose suffix is one the service stores (`FILE_EXTENSIONS`,
@@ -114,6 +122,12 @@ settings: the run is described entirely by its arguments.
    walk the same way, open the same way, hash the same way, inspect through the
    same `images.inspect`, and look the hash up the same way; they differ only in
    what happens next — `create_asset`, or nothing.
+   One thing the rehearsal has to do for itself: remember the hashes it has
+   already called new. The store cannot tell it, because a dry run writes
+   nothing to the store, so without that memory two files of identical bytes in
+   one folder are both reported as new while a real run stores the first and
+   counts the second as already there. The rehearsal therefore carries the set
+   of hashes it has seen, and consults it as well as the store.
    What this does NOT guarantee: a dry run is not a lock. A file it reports as
    new can be stored by an upload a second later.
 

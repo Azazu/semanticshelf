@@ -678,3 +678,28 @@ async def test_the_three_states_of_the_work_are_reported_apart(
     assert work.failed == [(doomed, "RuntimeError")]
     assert work.queued == [(held, folder.QUEUED_HELD)]
     assert good not in [asset for asset, _ in work.queued + work.failed]
+
+
+async def test_a_rehearsal_counts_the_second_copy_of_the_same_bytes_as_stored(
+    incoming: Path,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+) -> None:
+    """Two files of identical bytes are one asset, and a dry run has to say the
+    same thing a real run does — the database cannot tell it, because a dry run
+    writes nothing to ask about."""
+    data = picture_bytes()
+    (incoming / "first.png").write_bytes(data)
+    (incoming / "second.png").write_bytes(data)
+
+    rehearsal = await folder.import_folder(
+        incoming, session=session, storage=storage, settings=settings, dry_run=True
+    )
+    real = await folder.import_folder(incoming, session=session, storage=storage, settings=settings)
+
+    def verdicts(report: folder.ImportReport) -> dict[str, str]:
+        return {str(one.path): one.state for one in report.files}
+
+    assert verdicts(rehearsal) == {"first.png": CREATED, "second.png": ALREADY_STORED}
+    assert verdicts(rehearsal) == verdicts(real)

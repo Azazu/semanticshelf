@@ -22,6 +22,7 @@ import os
 import stat
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, BinaryIO
@@ -63,6 +64,20 @@ class DirectoryUnusableError(Exception):
 
 
 @dataclass(frozen=True, slots=True)
+class Root:
+    """The directory a run works in: resolved once, and then held open.
+
+    `path` is what the report names; `fd` is what everything else is relative
+    to. The name may be replaced a moment later — by a link to another tree, by
+    a file, by nothing — and the run still reads the directory it opened. A
+    root that is resolved twice is a root that can change between the two.
+    """
+
+    path: Path
+    fd: int
+
+
+@dataclass(frozen=True, slots=True)
 class Skipped:
     """An entry the walk did not read, and why."""
 
@@ -78,22 +93,34 @@ class Candidate:
     handle: BinaryIO
 
 
-def resolve_directory(directory: Path) -> Path:
-    """The directory to walk, resolved once, or a refusal naming what is wrong.
+def open_root(directory: Path) -> Root:
+    """Resolve the named directory once and open it, or refuse naming what is
+    wrong with it.
 
-    Resolved once and up front: a run may be pointed at a symbolic link to a
-    directory, and everything after this point is about the directory it named.
+    A run may be pointed at a symbolic link to a directory: the link is
+    resolved here, once, and the descriptor that comes back is the directory it
+    pointed at. After this call the name is not consulted again.
     """
-    root = directory.expanduser().resolve()
-    if not root.exists():
-        raise DirectoryUnusableError(f"no such directory: {directory}")
-    if not root.is_dir():
-        raise DirectoryUnusableError(f"not a directory: {directory}")
+    resolved = directory.expanduser().resolve()
     try:
-        os.scandir(root).close()
+        descriptor = os.open(resolved, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    except NotADirectoryError as error:
+        raise DirectoryUnusableError(f"not a directory: {directory}") from error
+    except FileNotFoundError as error:
+        raise DirectoryUnusableError(f"no such directory: {directory}") from error
     except OSError as error:
         raise DirectoryUnusableError(f"{directory} could not be read: {error.strerror}") from error
-    return root
+    return Root(resolved, descriptor)
+
+
+@contextmanager
+def opened_root(directory: Path) -> Iterator[Root]:
+    """`open_root`, closed again whatever happens."""
+    root = open_root(directory)
+    try:
+        yield root
+    finally:
+        os.close(root.fd)
 
 
 def _open_candidate(name: str, dir_fd: int) -> int:
@@ -110,16 +137,17 @@ def _refusal(error: OSError) -> str:
     return SKIP_UNREADABLE
 
 
-def count_entries(directory: Path, *, recursive: bool = False) -> int:
-    """How many entries a walk of this directory would yield.
+def count_entries(root: Root, *, recursive: bool = False) -> int:
+    """How many entries a walk of this root would yield.
 
     Names only: nothing is opened, nothing is read. It exists so a terminal can
     draw a bar with a total, and it is a total, not a promise — a tree that
-    changes between this and the walk changes the answer.
+    changes between this and the walk changes the answer. It counts from the
+    same descriptor the walk uses, so the two cannot be looking at different
+    directories.
     """
-    root = resolve_directory(directory)
     entries = 0
-    for _, directories, files, dir_fd in os.fwalk(root, follow_symlinks=False):
+    for _, directories, files, dir_fd in os.fwalk(".", dir_fd=root.fd, follow_symlinks=False):
         entries += len(files)
         if recursive:
             entries += sum(
@@ -130,15 +158,18 @@ def count_entries(directory: Path, *, recursive: bool = False) -> int:
     return entries
 
 
-def walk(directory: Path, *, recursive: bool = False) -> Iterator[Candidate | Skipped]:
-    """Every entry of the directory, in order: opened, or skipped with a reason.
+def walk(root: Root, *, recursive: bool = False) -> Iterator[Candidate | Skipped]:
+    """Every entry of the root, in order: opened, or skipped with a reason.
+
+    It takes a `Root` rather than a path because the root is resolved once, by
+    whoever opened it, and walked by descriptor from there: nothing here
+    consults the name again.
 
     A candidate's handle is valid until the next entry is requested — the walk
     owns it and closes it, so an abandoned iteration leaks nothing.
     """
-    root = resolve_directory(directory)
-    for base, directories, files, dir_fd in os.fwalk(root, follow_symlinks=False):
-        here = Path(base).relative_to(root)
+    for base, directories, files, dir_fd in os.fwalk(".", dir_fd=root.fd, follow_symlinks=False):
+        here = Path(base)
         directories.sort()
         if recursive:
             for name in directories:
@@ -294,6 +325,7 @@ async def examine_one(
     storage: MediaStorage,
     settings: Settings,
     meta: Mapping[str, Any],
+    rehearsed: set[str] | None = None,
 ) -> FileOutcome:
     """What `import_one` would do, without doing it.
 
@@ -305,6 +337,10 @@ async def examine_one(
     The lookup opens and closes a transaction of its own, so the session is as
     clean afterwards as `create_asset` leaves it. A read that left one open
     would make the next file — dry run or not — fail to begin its own.
+
+    `rehearsed` carries the hashes this run has already called new, because the
+    database cannot: two files of identical bytes in one folder are one asset,
+    and a rehearsal that only ever asked the store would call both of them new.
     """
     try:
         metadata_for(candidate.path, meta)  # for its refusal; a dry run stores nothing
@@ -321,11 +357,18 @@ async def examine_one(
         # transaction the next file's `create_asset` cannot begin inside.
         async with session.begin():
             existing = await AssetRepository(session).get_by_sha256(received.sha256)
+        already_rehearsed = rehearsed is not None and received.sha256 in rehearsed
+        if rehearsed is not None:
+            rehearsed.add(received.sha256)
     finally:
         await run_in_threadpool(_discard, received.path)
 
     if existing is not None:
         return FileOutcome(candidate.path, ALREADY_STORED, asset_id=existing.id)
+    if already_rehearsed:
+        # A real run would have stored the first of these and found the second
+        # already there; the rehearsal says the same.
+        return FileOutcome(candidate.path, ALREADY_STORED)
     return FileOutcome(candidate.path, CREATED)
 
 
@@ -338,7 +381,7 @@ def _discard(path: Path) -> None:
 
 
 async def import_folder(
-    directory: Path,
+    directory: Path | Root,
     *,
     session: AsyncSession,
     storage: MediaStorage,
@@ -351,14 +394,60 @@ async def import_folder(
 ) -> ImportReport:
     """Import a directory, and account for every file it held.
 
+    Given a path, the root is opened here and closed again at the end; given a
+    `Root`, the caller's own — which is how the command counts the entries and
+    imports them through one descriptor rather than resolving the name twice.
+
     The run's tags and metadata are checked once, before anything is read, so
     a folder cannot be half imported under a tag the service then rejects.
     """
+    if isinstance(directory, Root):
+        return await _import(
+            directory,
+            session=session,
+            storage=storage,
+            settings=settings,
+            recursive=recursive,
+            tags=tags,
+            meta=meta,
+            dry_run=dry_run,
+            on_file=on_file,
+        )
+    with opened_root(directory) as root:
+        return await _import(
+            root,
+            session=session,
+            storage=storage,
+            settings=settings,
+            recursive=recursive,
+            tags=tags,
+            meta=meta,
+            dry_run=dry_run,
+            on_file=on_file,
+        )
+
+
+async def _import(
+    root: Root,
+    *,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+    recursive: bool,
+    tags: Sequence[str],
+    meta: Mapping[str, Any] | None,
+    dry_run: bool,
+    on_file: Callable[[FileOutcome], None] | None,
+) -> ImportReport:
     normalised = normalise_tags(tags)
     given = check_metadata(dict(meta or {}))
-    report = ImportReport(directory=resolve_directory(directory), dry_run=dry_run)
+    report = ImportReport(directory=root.path, dry_run=dry_run)
+    #: Hashes this rehearsal has already called new. Without them two files of
+    #: identical bytes in one folder would both be reported as created, while a
+    #: real run stores the first and counts the second as already stored.
+    rehearsed: set[str] = set()
 
-    for entry in walk(directory, recursive=recursive):
+    for entry in walk(root, recursive=recursive):
         if isinstance(entry, Skipped):
             skipped = FileOutcome(entry.path, SKIPPED, reason=entry.reason)
             report.files.append(skipped)
@@ -367,7 +456,12 @@ async def import_folder(
             continue
         if dry_run:
             outcome = await examine_one(
-                entry, session=session, storage=storage, settings=settings, meta=given
+                entry,
+                session=session,
+                storage=storage,
+                settings=settings,
+                meta=given,
+                rehearsed=rehearsed,
             )
         else:
             outcome = await import_one(

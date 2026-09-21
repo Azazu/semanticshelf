@@ -119,24 +119,29 @@ async def _run_import(
     try:
         factory = create_session_factory(engine)
         storage = MediaStorage.at(settings.media_root)
-        # A names-only pass first, so the bar has a total. It opens nothing and
-        # reads nothing; a tree that changes in between changes the total, not
-        # the outcome.
+        # The directory is resolved and opened once, here, and everything after
+        # this — the count and the import — works from that descriptor. A
+        # second resolution would be a second chance for the name to mean
+        # something else.
         progress: Any
-        total = folder.count_entries(directory, recursive=recursive)
-        with typer.progressbar(label="import", length=total) as progress:
-            async with factory() as session:
-                report = await folder.import_folder(
-                    directory,
-                    session=session,
-                    storage=storage,
-                    settings=settings,
-                    recursive=recursive,
-                    tags=tags,
-                    meta=meta,
-                    dry_run=dry_run,
-                    on_file=lambda _: progress.update(1),
-                )
+        with folder.opened_root(directory) as root:
+            # A names-only pass first, so the bar has a total. It opens nothing
+            # and reads nothing; a tree that changes in between changes the
+            # total, not the outcome.
+            total = folder.count_entries(root, recursive=recursive)
+            with typer.progressbar(label="import", length=total) as progress:
+                async with factory() as session:
+                    report = await folder.import_folder(
+                        root,
+                        session=session,
+                        storage=storage,
+                        settings=settings,
+                        recursive=recursive,
+                        tags=tags,
+                        meta=meta,
+                        dry_run=dry_run,
+                        on_file=lambda _: progress.update(1),
+                    )
         if index and not dry_run:
             with typer.progressbar(label="index ", length=len(report.created_assets)) as indexing:
                 done = 0

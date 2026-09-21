@@ -37,6 +37,17 @@ def tree(root: Path) -> Path:
     return inside
 
 
+def walked(directory: Path, *, recursive: bool = False) -> Iterator[Candidate | Skipped]:
+    """The walk of a directory named by path, root opened and closed for it.
+
+    A generator, not a list: the walk closes each handle when it moves on, so
+    the entries have to be consumed as they come — which is what every caller
+    of the walk does.
+    """
+    with folder.opened_root(directory) as root:
+        yield from folder.walk(root, recursive=recursive)
+
+
 def outcomes(entries: Iterator[Candidate | Skipped]) -> dict[str, str]:
     """Each entry by its path, as either its first bytes or its skip reason."""
     seen: dict[str, str] = {}
@@ -52,7 +63,7 @@ def outcomes(entries: Iterator[Candidate | Skipped]) -> dict[str, str]:
 def test_the_walk_answers_for_every_entry_of_the_top_level(tmp_path: Path) -> None:
     inside = tree(tmp_path)
 
-    seen = outcomes(folder.walk(inside))
+    seen = outcomes(walked(inside))
 
     assert seen == {
         "picture.png": "\x89PNG",
@@ -67,7 +78,7 @@ def test_the_walk_answers_for_every_entry_of_the_top_level(tmp_path: Path) -> No
 def test_the_recursive_walk_reaches_the_subdirectories(tmp_path: Path) -> None:
     inside = tree(tmp_path)
 
-    seen = outcomes(folder.walk(inside, recursive=True))
+    seen = outcomes(walked(inside, recursive=True))
 
     assert seen["sub/deep.jpeg"] == "\x89PNG", "`.jpeg` is worth opening too"
     assert seen["loop"] == folder.SKIP_SYMLINK, "the link to its own parent is reported"
@@ -77,7 +88,7 @@ def test_the_recursive_walk_reaches_the_subdirectories(tmp_path: Path) -> None:
 def test_a_link_to_its_own_parent_does_not_make_the_walk_endless(tmp_path: Path) -> None:
     inside = tree(tmp_path)
 
-    entries = list(folder.walk(inside, recursive=True))
+    entries = list(walked(inside, recursive=True))
 
     paths = [str(entry.path) for entry in entries]
     assert len(paths) == len(set(paths)), "each real file is read at most once"
@@ -90,7 +101,7 @@ def test_the_walk_is_sorted(tmp_path: Path) -> None:
     for name in ("c.png", "a.png", "b.png"):
         (inside / name).write_bytes(PICTURE)
 
-    assert [str(entry.path) for entry in folder.walk(inside)] == ["a.png", "b.png", "c.png"]
+    assert [str(entry.path) for entry in walked(inside)] == ["a.png", "b.png", "c.png"]
 
 
 # --- what is validated is the descriptor -------------------------------------
@@ -112,7 +123,7 @@ def test_an_entry_swapped_for_a_link_between_listing_and_opening_is_refused(
 
     monkeypatch.setattr(folder, "_open_candidate", swap_then_open)
 
-    seen = outcomes(folder.walk(inside))
+    seen = outcomes(walked(inside))
 
     assert seen["picture.png"] == folder.SKIP_SYMLINK
     assert "not ours" not in seen.values(), "nothing from outside the folder was read"
@@ -132,7 +143,7 @@ def test_an_entry_swapped_for_a_fifo_between_listing_and_opening_does_not_block(
 
     monkeypatch.setattr(folder, "_open_candidate", swap_then_open)
 
-    seen = outcomes(folder.walk(inside))
+    seen = outcomes(walked(inside))
 
     assert seen["picture.png"] == folder.SKIP_NOT_REGULAR
 
@@ -150,7 +161,7 @@ def test_an_entry_that_vanishes_between_listing_and_opening_is_reported(
 
     monkeypatch.setattr(folder, "_open_candidate", remove_then_open)
 
-    assert outcomes(folder.walk(inside))["picture.png"] == folder.SKIP_VANISHED
+    assert outcomes(walked(inside))["picture.png"] == folder.SKIP_VANISHED
 
 
 def test_a_file_that_cannot_be_opened_is_reported(tmp_path: Path) -> None:
@@ -160,7 +171,7 @@ def test_a_file_that_cannot_be_opened_is_reported(tmp_path: Path) -> None:
     forbidden.write_bytes(PICTURE)
     forbidden.chmod(0o000)
     try:
-        seen = outcomes(folder.walk(inside))
+        seen = outcomes(walked(inside))
     finally:
         forbidden.chmod(0o600)
 
@@ -172,7 +183,7 @@ def test_a_file_that_cannot_be_opened_is_reported(tmp_path: Path) -> None:
 
 def test_a_directory_that_is_not_there_is_refused(tmp_path: Path) -> None:
     with pytest.raises(DirectoryUnusableError, match="no such directory"):
-        list(folder.walk(tmp_path / "nowhere"))
+        list(walked(tmp_path / "nowhere"))
 
 
 def test_a_path_that_is_not_a_directory_is_refused(tmp_path: Path) -> None:
@@ -180,7 +191,7 @@ def test_a_path_that_is_not_a_directory_is_refused(tmp_path: Path) -> None:
     picture.write_bytes(PICTURE)
 
     with pytest.raises(DirectoryUnusableError, match="not a directory"):
-        list(folder.walk(picture))
+        list(walked(picture))
 
 
 def test_a_directory_that_cannot_be_read_is_refused(tmp_path: Path) -> None:
@@ -189,7 +200,7 @@ def test_a_directory_that_cannot_be_read_is_refused(tmp_path: Path) -> None:
     closed.chmod(0o000)
     try:
         with pytest.raises(DirectoryUnusableError, match="could not be read"):
-            list(folder.walk(closed))
+            list(walked(closed))
     finally:
         closed.chmod(0o700)
 
@@ -201,7 +212,7 @@ def test_a_link_to_a_directory_is_walked_as_that_directory(tmp_path: Path) -> No
     named = tmp_path / "by-link"
     named.symlink_to(inside, target_is_directory=True)
 
-    assert outcomes(folder.walk(named)) == {"picture.png": "\x89PNG"}
+    assert outcomes(walked(named)) == {"picture.png": "\x89PNG"}
 
 
 def test_a_link_to_something_that_is_not_a_directory_is_refused(tmp_path: Path) -> None:
@@ -211,14 +222,14 @@ def test_a_link_to_something_that_is_not_a_directory_is_refused(tmp_path: Path) 
     named.symlink_to(picture)
 
     with pytest.raises(DirectoryUnusableError, match="not a directory"):
-        list(folder.walk(named))
+        list(walked(named))
 
 
 def test_an_empty_directory_is_not_an_error(tmp_path: Path) -> None:
     empty = tmp_path / "empty"
     empty.mkdir()
 
-    assert list(folder.walk(empty, recursive=True)) == []
+    assert list(walked(empty, recursive=True)) == []
 
 
 def test_a_directory_of_nothing_worth_reading_says_so(tmp_path: Path) -> None:
@@ -227,7 +238,7 @@ def test_a_directory_of_nothing_worth_reading_says_so(tmp_path: Path) -> None:
     (inside / "notes.txt").write_bytes(b"a document")
     (inside / "report.pdf").write_bytes(b"another one")
 
-    seen = outcomes(folder.walk(inside))
+    seen = outcomes(walked(inside))
 
     assert seen == {
         "notes.txt": folder.SKIP_NO_PICTURE_SUFFIX,
@@ -242,10 +253,11 @@ def test_the_handle_of_an_abandoned_walk_is_closed(tmp_path: Path) -> None:
     (inside / "a.png").write_bytes(PICTURE)
     (inside / "b.png").write_bytes(PICTURE)
 
-    entries = folder.walk(inside)
-    first = next(entries)
-    assert isinstance(first, Candidate)
-    entries.close()
+    with folder.opened_root(inside) as root:
+        entries = folder.walk(root)
+        first = next(entries)
+        assert isinstance(first, Candidate)
+        entries.close()
 
     assert first.handle.closed
 
@@ -276,6 +288,38 @@ def test_a_parent_directory_swapped_for_a_link_does_not_redirect_the_open(
 
     monkeypatch.setattr(folder, "_open_candidate", swap_the_parent_then_open)
 
-    seen = outcomes(folder.walk(inside, recursive=True))
+    seen = outcomes(walked(inside, recursive=True))
 
     assert seen["sub/a.png"] == "\x89PNG", "read from the directory the walk entered"
+
+
+def test_a_root_replaced_after_it_was_opened_does_not_redirect_the_run(tmp_path: Path) -> None:
+    """The root is resolved once and held open. Replacing the name afterwards —
+    with a link to another tree, which is the whole of the attack — changes
+    nothing about what the run reads."""
+    inside = tmp_path / "photos"
+    inside.mkdir()
+    (inside / "ours.png").write_bytes(PICTURE)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "stranger.png").write_bytes(b"not ours")
+
+    with folder.opened_root(inside) as root:
+        inside.rename(tmp_path / "photos-moved")
+        (tmp_path / "photos").symlink_to(elsewhere, target_is_directory=True)
+
+        seen = outcomes(folder.walk(root))
+        counted = folder.count_entries(root)
+
+    assert seen == {"ours.png": "\x89PNG"}, "the directory that was opened, not the name"
+    assert counted == 1
+
+
+def test_the_root_is_reported_as_the_directory_that_was_opened(tmp_path: Path) -> None:
+    inside = tmp_path / "photos"
+    inside.mkdir()
+    named = tmp_path / "by-link"
+    named.symlink_to(inside, target_is_directory=True)
+
+    with folder.opened_root(named) as root:
+        assert root.path == inside.resolve(), "resolved once, and that is what is reported"

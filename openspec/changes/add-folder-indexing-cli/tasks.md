@@ -2,10 +2,10 @@
 
 - [x] 1.1 Write `app/services/folder.py` with the walk: `os.fwalk` from the resolved directory, each candidate opened relative to that directory's descriptor with `O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC`, and what the file is decided by `os.fstat` on the descriptor — never by `is_file()` or by a prior `lstat` on the path (design decisions 2 and 3). Every entry it does not read is yielded as skipped with its reason: a symbolic link, something that is not a regular file, a file with no picture extension, a file that vanished, a file that cannot be read. Verify: `tests/unit/test_folder_walk.py` builds a fixture tree with a picture, a text file, a file with a lying extension, a symlink inside the tree, a symlink out of it, a symlink to a parent directory, a fifo and a subdirectory, and asserts the exact classification of each, with and without the recursive flag.
 - [x] 1.2 The walk is sorted and terminates on a tree containing a link to its own parent (design decisions 10 and 3). Verify: the same unit test asserts the order of what it yields and that each real file is read exactly once.
-- [x] 1.3 A directory that does not exist, is not a directory once resolved, or cannot be read is refused before anything is walked, naming it. Verify: unit tests for all three, including a directory whose permissions deny reading.
+- [x] 1.3 A directory that does not exist, is not a directory once resolved, or cannot be read is refused when the root is opened, naming it. Verify: unit tests for all three, including a directory whose permissions deny reading.
 - [x] 1.4 The classification survives a tree that changes under it: the file a candidate names may be replaced between being listed and being opened, and the open is what decides (design decision 2). Verify: `tests/unit/test_folder_walk.py` forces exactly that interleaving through a seam the walk calls before each open — the test replaces the entry with a symlink pointing outside the tree in one case and with a fifo in another — and asserts that nothing outside the tree is read, that the run does not block, and that both are reported as skipped.
 - [x] 1.5 A directory with no entries, and a directory whose entries are all skipped, both complete with a summary of zeros rather than an error. Verify: unit tests for both.
-- [x] 1.6 A run named with a symbolic link to a directory is resolved once and walked as that directory; a link to something that is not a directory is refused by task 1.3's rule. Verify: unit tests for both.
+- [x] 1.6 A run named with a symbolic link to a directory is resolved once, opened, and walked as that directory — and a name replaced after the root was opened cannot redirect the run; a link to something that is not a directory is refused by task 1.3's rule. Verify: unit tests for both.
 
 ## 2. Importing a file through the pipeline
 
@@ -50,7 +50,7 @@ code.
 | What is validated is the descriptor (`fstat`), not the path | 6.3 |
 | The walk does not enter a symlinked directory | 6.4 |
 | The walk is relative to the directory's descriptor | 6.5 |
-| The named directory is resolved once, before the walk | 6.6 |
+| The run reports the directory it opened, not the name it was given | 6.6 |
 | Candidates are chosen by extension | 6.7 |
 | Tags and metadata are validated before the walk | 6.9 |
 | The recorded origin is not overwritten by the run's metadata | 6.10 |
@@ -62,13 +62,15 @@ code.
 | The import waits for its own work, not for any work | 6.16 |
 | The import's wait is bounded | 6.17 |
 | Still queued and failed are not conflated | 6.18 |
+| The run works from the root it opened (gate 2, finding 1) | 6.19 |
+| A rehearsal remembers what it already called new (gate 2, finding 2) | 6.20 |
 
 - [x] 6.1 Open without `O_NOFOLLOW`: the outside-symlink test fails, showing a file from beyond the tree stored.
 - [x] 6.2 Open without `O_NONBLOCK`: the fifo test fails by hanging until its timeout.
 - [x] 6.3 Decide from an `lstat` on the path instead of `fstat` on the descriptor: the mutation-race test of task 1.4 fails.
 - [x] 6.4 Pass `followlinks=True` to the walk: the parent-link test fails or does not terminate within its timeout.
 - [x] 6.5 Open by full path instead of relative to the directory descriptor: the mutation-race test that swaps a parent directory for a link fails.
-- [x] 6.6 Walk the named path without resolving it: the symlinked-root test fails.
+- [x] 6.6 Open the named path without resolving it: the test that the root reports the directory it opened fails. (The walk itself no longer depends on the resolution — it works from the descriptor — so what the resolution still buys is the directory the report names; probe 6.19 covers the rest.)
 - [x] 6.7 Accept every regular file as a candidate: the test that a document is skipped rather than refused fails.
 - [x] 6.8 **No probe, and why.** The rule it named — the bytes decide what a file is — is enforced by the inspection inside the pipeline this change only feeds, and change 5 demonstrates it with its own probe (`ea0c781`). Removing it is not an edit inside this change's diff, so a probe here would be theatre. The behaviour is still asserted: `tests/integration/test_folder_import.py` stores nothing for `lying.png`, a text file named like a picture, and `tests/unit/test_folder_walk.py` shows the walk opening it regardless of its name.
 - [x] 6.9 Validate the tags after the walk instead of before: the test that a bad tag leaves the store untouched fails.
@@ -81,6 +83,8 @@ code.
 - [x] 6.16 Decide the import is finished by the number of batches rather than by the state of its own assets: the test of task 4.3 fails, showing a run that returned with its own work pending.
 - [x] 6.17 Remove the "a pass that claimed nothing ends it" rule: the test that an import whose work is held by another runner still returns fails by hanging until its timeout.
 - [x] 6.18 Report every unfinished job as failed: the test of task 4.4 fails, showing a retriable job counted as a terminal failure.
+- [x] 6.19 Walk by the root's path instead of the descriptor it was opened with: the test that a root replaced after the run began does not redirect it fails.
+- [x] 6.20 Drop the hashes a rehearsal has already called new: the test that a dry run counts the second copy of the same bytes as already stored fails.
 
 ## 7. Documentation and the requirement amendments
 
