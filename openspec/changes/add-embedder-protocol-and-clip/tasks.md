@@ -1,7 +1,7 @@
 ## 1. Dependencies and settings
 
 - [x] 1.1 Add the runtime dependencies with `uv add transformers torch numpy pillow typer` and commit the lock; confirm the CPU build was chosen. Verify: `make lock-check` exits 0 and `uv run python -c 'import torch; print(torch.__version__, torch.cuda.is_available())'` prints a `+cpu` build and `False`.
-- [x] 1.2 Extend `app/core/settings.py` with the seven settings of the proposal's table and exactly those defaults: `enabled_models` = every key the build implements (`clip-vit-l14`), `model_warmup` = empty, `model_cache` = `.data/models`, `clip_model_name` = `openai/clip-vit-large-patch14`, `torch_num_threads` = 0 (torch's own choice), `embed_batch_size` = 8, `inference_workers` = 2; plus a validator that rejects an enabled or warm-up key the service does not implement. There is no `device` setting. Verify: `tests/unit/test_settings_models.py` asserts each default by value, that the default configuration starts, that an unknown key is rejected naming the offender, and that a warm-up key outside the enabled set is rejected.
+- [x] 1.2 Extend `app/core/settings.py` with the seven settings of the proposal's table and exactly those defaults: `enabled_models` = every key the build implements (`clip-vit-l14`), `model_warmup` = empty, `model_cache` = `.data/models`, `clip_model_name` = the CLIP large checkpoint name (openai/clip-vit-large-patch14), `torch_num_threads` = 0 (torch's own choice), `embed_batch_size` = 8, `inference_workers` = 2; plus a validator that rejects an enabled or warm-up key the service does not implement. There is no `device` setting. Verify: `tests/unit/test_settings_models.py` asserts each default by value, that the default configuration starts, that an unknown key is rejected naming the offender, and that a warm-up key outside the enabled set is rejected.
 - [x] 1.3 Register the `models` pytest marker and keep it out of the gate floor: `make test` deselects both `integration` and `models`. Verify: `make test` collects neither marked suite, and `uv run pytest -m models --collect-only` lists the real-model tests.
 
 ## 2. The protocol, normalisation and the deterministic embedder
@@ -31,7 +31,7 @@
 
 - [x] 6.1 Write `app/cli.py`: a `typer` application with `models warm`, loading each enabled model and printing its key, width and load time; register the console script in `pyproject.toml`. Verify: `uv run semanticshelf models warm --help` prints the command's help without loading anything, recorded in the commit body.
 - [x] 6.2 Add the `test-models` target to the `Makefile`. Verify: `make help` lists it and `make test-models` runs only the marked suite.
-- [x] 6.3 Write `docs/how-to/models.md` (what is downloaded, where it goes, how much it weighs, how to warm it up, how to run offline) and extend `docs/reference/settings.md` with the seven settings, `docs/reference/commands.md` with the new target and command, and the `AGENTS.md` layout with `ml/` and `cli.py`. Verify: re-read all four whole; every command in them was run in its exact form.
+- [x] 6.3 Write `docs/how-to/models.md` (what is downloaded, where it goes, how much it weighs, how to warm it up, how to run offline) and extend `docs/reference/settings.md` with the seven settings, `docs/reference/commands.md` with the new target and command, and the `AGENTS.md` layout with `ml/` and `app/cli.py`. Verify: re-read all four whole; every command in them was run in its exact form.
 
 ## 7. Failing inputs (high tier: one per new or changed check)
 
@@ -50,7 +50,7 @@
 
 ## 9. CI
 
-- [x] 9.1 Add `enable-cache: true` to the `astral-sh/setup-uv` step in `.github/workflows/ci.yml`. Verify: the pinned actionlint image exits 0 over the workflow, and the user's run on the branch is green.
+- [x] 9.1 Add `enable-cache: true` to the setup-uv step in `.github/workflows/ci.yml`. Verify: the pinned actionlint image exits 0 over the workflow, and the user's run on the branch is green.
 
 ## 10. Wrap-up
 
