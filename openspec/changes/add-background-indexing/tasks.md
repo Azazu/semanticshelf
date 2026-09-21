@@ -14,7 +14,7 @@
 - [ ] 3.1 Write `app/services/indexing.py`: `claim` in its own transaction (rows to `running`, attempt counted, lease set, the claim's token returned), `execute` outside any transaction (inspect the stored original again, then embed through the inference pool), `finish` in one transaction that writes the vector and the job's new state together (design decisions 3 and 9). Verify: unit tests with the fake embedder cover the happy path and each failure branch; the integration tests of section 5 cover the transactions.
 - [ ] 3.2 Every finishing statement — done, returned to the queue, exhausted — carries the claim's token and takes effect only while it is still current (design decision 9). When it matches nothing the transaction rolls back, the runner discards its result and records the fact, without retrying and without a server error. Verify: unit tests for the "matched nothing" branch and the integration tests of tasks 5.5-5.7.
 - [ ] 3.3 The stored original is inspected again before it is decoded (design decision 10): format from the bytes, pixel cap, minimum side, and conversion to three channels before the model sees it. Verify: integration tests replace a stored file with one that would be refused at upload, with one beyond the pixel cap, and with a greyscale picture that must succeed.
-- [ ] 3.4 Failure handling: a failing job returns to the queue with the computed backoff while attempts remain, and is marked failed once they are spent. The reason is the exception's class and message, bounded to two kilobytes with the truncation visible, carrying no stack trace and no bytes read from a file (design decision 11). Verify: unit tests for both outcomes, for the exact byte bound, for a message holding file bytes and for a traceback.
+- [ ] 3.4 Failure handling: a failing job returns to the queue with the computed backoff while attempts remain, and is marked failed once they are spent. The reason names the failure's class, and carries its message only for the failures the indexing code raises itself — for anything else the class alone, because no rule can tell which parts of a library's message came from the picture it was reading (design decision 11). Both forms are bounded to two kilobytes with the truncation visible, and never carry a stack trace. Verify: unit tests for both outcomes, for the byte bound at its boundary, for a foreign exception whose message holds file bytes (class only), for one of the service's own (class and message), and for a traceback.
 - [ ] 3.5 Work whose asset was deleted mid-flight: the finish matches nothing because the row went with the asset, the runner discards its result and continues with the rest of its batch. Verify: an integration test deletes the asset while a job is in flight and asserts no vector, no job, and a runner that carried on.
 - [ ] 3.6 A job naming a model this build does not have enabled ends as failed with a reason rather than waiting forever. Verify: a unit test.
 
@@ -32,7 +32,9 @@
 - [ ] 5.4 A duplicate delivery leaves exactly one vector: execute the same job twice and assert one row for that asset and model, with the second write replacing the first. Verify: an integration test.
 - [ ] 5.5 A crash between the vector and the finish leaves neither: fail inside the finishing transaction and assert no vector and an unfinished job. Verify: an integration test.
 - [ ] 5.6 A late success after a reclaim changes nothing: A claims, its lease expires, B reclaims, then A finishes. B's state stands and no vector from A is written. Verify: an integration test.
-- [ ] 5.7 A late failure after a reclaim changes nothing, and a late finish after a reset changes nothing: the reset's clean state stands. Verify: two integration tests.
+- [ ] 5.7 A late retry after a reclaim changes nothing: A reports a failure with attempts remaining while B holds the job. B's attempts, state and due time stand. Verify: an integration test.
+- [ ] 5.8 A late exhaustion after a reclaim changes nothing: A reports its last failure while B holds the job; the job does not become failed on A's word. Verify: an integration test.
+- [ ] 5.9 A late finish after a reset changes nothing: the reset's clean state stands. Verify: an integration test.
 
 ## 6. What the API shows
 
@@ -57,7 +59,9 @@ code.
 | The expired-lease branch of the claim | 7.6 |
 | A valid lease is not reclaimable | 7.7 |
 | Vector and finish in one transaction | 7.8 |
-| The claim token on a finish (a late success cannot land) | 7.9 |
+| The claim token on the done transition | 7.9 |
+| The claim token on the retry transition | 7.9a |
+| The claim token on the exhausted transition | 7.9b |
 | The reset clearing the token (a late finish after a reset cannot land) | 7.10 |
 | The upsert that makes a repeat harmless | 7.11 |
 | Backoff on a retry | 7.12 |
@@ -67,7 +71,8 @@ code.
 | The batch bound of the drain | 7.16 |
 | The reason carrying no stack trace | 7.17 |
 | The reason's two-kilobyte bound | 7.18 |
-| The reason carrying no file bytes | 7.19 |
+| A foreign failure's message is dropped, leaving the class | 7.19 |
+| The service's own failure keeps its message | 7.19a |
 | Re-inspection of the stored file (format and caps) | 7.20 |
 | Conversion to three channels before inference | 7.21 |
 | The listing filter refusing an unknown model or state | 7.22 |
@@ -80,7 +85,9 @@ code.
 - [ ] 7.6 Remove the expired-lease branch from the claim: the reclaim test fails.
 - [ ] 7.7 Widen the lease comparison to include valid leases: the test that a fresh claim is not reclaimable fails.
 - [ ] 7.8 Finish the job in a transaction separate from the vector: the crash test fails, showing a vector whose work is unfinished.
-- [ ] 7.9 Remove the token from the finishing statement: the late-success test fails, showing A's result over B's state.
+- [ ] 7.9 Remove the token from the `done` statement alone: the late-success test fails, showing A's result over B's state.
+- [ ] 7.9a Remove the token from the retry statement alone: the late-retry test fails, showing A's backoff over B's attempt.
+- [ ] 7.9b Remove the token from the exhausted statement alone: the late-exhaustion test fails, showing a job failed on A's word while B held it.
 - [ ] 7.10 Leave the token alone on reset: the late-finish-after-reset test fails.
 - [ ] 7.11 Turn the upsert into an insert: the duplicate-delivery test fails.
 - [ ] 7.12 Remove the backoff: the retry test fails, showing a job due immediately.
@@ -90,7 +97,8 @@ code.
 - [ ] 7.16 Remove the batch bound: the drain test fails, showing more work taken than allowed.
 - [ ] 7.17 Put the exception's traceback in the reason: that test fails.
 - [ ] 7.18 Remove the two-kilobyte truncation: the boundary test fails.
-- [ ] 7.19 Build the reason from the raw message without scrubbing: the file-bytes test fails.
+- [ ] 7.19 Record the message of every failure, whatever raised it: the foreign-exception test fails, showing the picture's bytes in the record.
+- [ ] 7.19a Record only the class for every failure: the test that the service's own message survives fails, which is what keeps the rule from degenerating into "say nothing".
 - [ ] 7.20 Skip the re-inspection and decode the stored file directly: the replaced-file tests fail.
 - [ ] 7.21 Remove the conversion to three channels: the greyscale test fails.
 - [ ] 7.22 Accept any model or state in the filter: that test fails.

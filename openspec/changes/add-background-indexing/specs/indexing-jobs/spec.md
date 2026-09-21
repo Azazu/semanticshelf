@@ -119,10 +119,15 @@ discard its result rather than recreate anything.
 
 Work that fails SHALL return to the queue with a delay that grows with each
 attempt, until the configured number of attempts is spent; then it SHALL be
-marked failed and SHALL carry a reason. The reason SHALL be built from the
-failure's class and its message, SHALL be bounded to at most two kilobytes
-however long that message is, and SHALL contain no stack trace and no bytes
-read from a stored file. Failed work SHALL NOT be attempted again on its own.
+marked failed and SHALL carry a reason.
+
+The reason SHALL name the failure's class. It SHALL include the failure's
+message only when the service itself raised that failure, and therefore wrote
+that message; for any other failure the class alone SHALL be recorded, because
+no rule can tell which parts of a message a library built out of the bytes it
+was reading. The reason SHALL be bounded to at most two kilobytes, with any
+truncation visible, and SHALL never contain a stack trace. Failed work SHALL
+NOT be attempted again on its own.
 
 #### Scenario: A transient failure
 - **WHEN** work fails and attempts remain
@@ -138,9 +143,16 @@ read from a stored file. Failed work SHALL NOT be attempted again on its own.
 - **THEN** the recorded reason names the failure's class and message, and
   contains no stack trace
 
-#### Scenario: A failure that carries a picture in its message
-- **WHEN** work fails with a message holding bytes read from the stored file
-- **THEN** those bytes are not in the recorded reason
+#### Scenario: A failure the service did not raise
+- **WHEN** work fails with an exception from a library whose message holds
+  bytes read from the stored file
+- **THEN** the recorded reason is that exception's class name alone, and none
+  of those bytes appear in it
+
+#### Scenario: A failure the service raised itself
+- **WHEN** work fails because the model it names is not enabled
+- **THEN** the recorded reason carries both the class and the message the
+  service wrote, because that message is one it controls
 
 #### Scenario: A failure with an enormous message
 - **WHEN** work fails with a message longer than the recorded reason may be

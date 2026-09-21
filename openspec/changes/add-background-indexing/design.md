@@ -117,12 +117,26 @@ scheduling beyond "first due, first served".
    underneath the service must not reach the decoder on the strength of a
    check made about different bytes.
 
-11. **A failure's reason is built, not copied.** It is the exception's class
-   and its message, truncated to the two kilobytes the column allows, with the
-   truncation visible. Nothing read from a file goes into it: the message is
-   taken from the exception, and the code that raises with file bytes in a
-   message is the code that would leak them, so the bound and the scrub are
-   both applied where the reason is built rather than trusted upstream.
+11. **A failure's reason carries a message only when the service wrote that
+   message.** "Strip file bytes out of an arbitrary exception message" is not
+   a mechanism — there is no way to recognise, in a string a third-party
+   library produced, which parts came from a picture. So the rule is by origin
+   rather than by inspection: this change defines a small set of failures the
+   indexing code raises itself, whose messages it therefore controls (the
+   model is not enabled, the stored file no longer passes inspection, the file
+   is missing, the model failed to load). For those, the reason is the class
+   and the message. For anything else — a library's exception, a driver's, an
+   unexpected one — the reason is the class name alone, and the message is
+   dropped rather than trusted.
+
+   Both forms are then truncated to the two kilobytes the column allows, with
+   the truncation visible. What is lost is diagnostic detail for unexpected
+   failures; what is gained is a rule that can actually be enforced, and a
+   test that can actually prove it: an exception whose message is a picture's
+   bytes leaves nothing but its class name in the record.
+   Rejected: scrubbing by pattern (unbounded and unprovable — any escape makes
+   the security claim false); recording no message at all (loses the detail
+   for exactly the failures the service is best placed to explain).
 
 ## Risks / Trade-offs
 
