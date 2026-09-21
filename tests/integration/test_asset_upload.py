@@ -229,6 +229,44 @@ async def test_a_thumbnail_that_cannot_be_made_leaves_nothing_behind(
     assert (await client.get(ASSETS)).json()["items"] == []
 
 
+async def test_a_failed_write_of_the_thumbnail_leaves_nothing_behind(
+    client: httpx.AsyncClient, media_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The thumbnail is written first, so its failure is the earliest moment a
+    file of this upload exists under the media root."""
+    from app.storage import MediaStorage
+
+    def fail_after_writing_part_of_it(staged: Path, chunks: object) -> int:
+        staged.write_bytes(b"half a thumbnail")
+        raise OSError("the disk gave up")
+
+    monkeypatch.setattr(MediaStorage, "fill", staticmethod(fail_after_writing_part_of_it))
+
+    response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+
+    assert response.status_code == 500
+    assert files_under(media_root) == [], "no staging file, no final file"
+    assert (await client.get(ASSETS)).json()["items"] == []
+
+
+async def test_a_failed_publication_of_the_thumbnail_leaves_nothing_behind(
+    client: httpx.AsyncClient, media_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """And the moment after: written, flushed, and then the rename fails."""
+    from app.storage import MediaStorage
+
+    def refuse(staged: Path, final: Path) -> None:
+        raise OSError("the rename gave up")
+
+    monkeypatch.setattr(MediaStorage, "publish", staticmethod(refuse))
+
+    response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+
+    assert response.status_code == 500
+    assert files_under(media_root) == [], "the staged thumbnail did not survive"
+    assert (await client.get(ASSETS)).json()["items"] == []
+
+
 async def test_a_failed_write_of_the_original_leaves_nothing_behind(
     client: httpx.AsyncClient, media_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

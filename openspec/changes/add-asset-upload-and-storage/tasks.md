@@ -104,7 +104,7 @@ even though the other still refuses.
 - [x] 8.17 Build the stored path from the uploaded filename instead of the identifier: the containment test of task 1.3 fails.
 - [x] 8.18 Insert the row before the files: the write-order test fails, showing a row whose file is absent.
 - [x] 8.19 Remove the cleanup after a failed row: the race test fails, showing the loser's files left beside the winner's.
-- [x] 8.19a Remove the staging cleanup in publication: the failure-injection test fails, showing a `.part` file left behind.
+- [x] 8.19a Remove the staging cleanup in publication: the failure-injection tests fail, showing a `.part` file left behind. Three moments are covered: the thumbnail's write, the thumbnail's rename, and the original's write.
 - [x] 8.20 Copy the original into the thumbnail instead of re-encoding: the metadata test fails, showing the original's blocks in the thumbnail.
 - [x] 8.21 Remove the duplicate pre-check, leaving the unique constraint: the test that a duplicate writes nothing fails, showing files written before the refusal.
 - [x] 8.22 Remove the translation of the unique violation to 409: the duplicate test fails with a server error instead.

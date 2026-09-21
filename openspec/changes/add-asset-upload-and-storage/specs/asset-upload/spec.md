@@ -239,15 +239,24 @@ change nothing unless explicitly asked to act; when asked, it SHALL remove the
 orphan files and mark the indexing work of an asset whose files are gone as
 failed, with a reason naming the missing file.
 
-A file written by an upload that has not yet stored its row is
+A file an upload has placed under the media root but not yet recorded is
 indistinguishable from an orphan, and an upload may be delayed without bound,
-so the command SHALL NOT act while any upload is in flight: it SHALL take an
-exclusive claim that every upload holds in shared form for the whole of its
-write, and SHALL report and change nothing when it cannot take it. The
-protection SHALL NOT depend on how long an upload takes. In addition, the
-command SHALL ignore files younger than a configured grace period and report
-how many it ignored, as a margin for a run pointed at a store the uploading
-service does not use.
+so the protection SHALL NOT depend on how long one takes. Two rules provide it
+together.
+
+An upload SHALL NOT place anything under the media root before it is certain
+to keep it: what it receives from the client, and whatever it must read to
+decide, SHALL live outside the root. The command therefore cannot see an
+upload that is still arriving, and MAY run freely beside one.
+
+From the moment an upload does place a file under the root until its row is
+stored, it SHALL hold a shared claim; the command SHALL take that claim
+exclusively before it changes anything, and SHALL report and change nothing
+when it cannot.
+
+In addition, the command SHALL ignore files younger than a configured grace
+period and report how many it ignored, as a margin for a run pointed at a
+store the uploading service does not use.
 
 #### Scenario: Files left by a crash
 - **WHEN** the command runs with files under the media root that no asset row
@@ -263,11 +272,17 @@ service does not use.
 - **WHEN** the command runs without being asked to act
 - **THEN** no file is removed and no row is changed
 
-#### Scenario: An upload in flight while the command runs
-- **WHEN** the command runs and is asked to act while an upload has written
-  its files but not yet stored its row, however long that upload takes
+#### Scenario: An upload that has placed its files but not its row
+- **WHEN** the command runs and is asked to act while an upload holds the
+  claim, however long that upload takes
 - **THEN** the command changes nothing and says an upload is in flight, and
   the upload completes with both its files in place
+
+#### Scenario: An upload that is still arriving
+- **WHEN** the command runs and is asked to act while an upload is still being
+  received and inspected, however long that takes
+- **THEN** the command may proceed, finds nothing belonging to that upload
+  under the media root, and the upload completes with both its files in place
 
 #### Scenario: No upload in flight
 - **WHEN** the command runs with no upload in flight
