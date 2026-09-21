@@ -1,7 +1,7 @@
 # Handoff — add-asset-upload-and-storage
 
 **Updated:** 2026-09-21 · claude
-**State:** awaiting-gate-2
+**State:** fixing-g2
 **Branch:** change/add-asset-upload-and-storage
 
 ## Done this session
@@ -29,9 +29,14 @@ Evidence: `env -u DATABASE_URL make check` 207 passed; `make test-integration`
 
 ## Next step
 
-Gate 2 round 1 returned `changes-requested` with one blocker and three majors;
-all four are fixed and the confirmation of round 1 is requested next.
+Gate 2, round 1: findings 2, 3 and 4 are confirmed. Finding 1 has come back
+twice, so the workflow's rule applies — after two failed confirmations on the
+same finding, stop and ask the user rather than loop. Each round was a
+different, real defect (the prune race, then a specification stricter than the
+code, now an unverified premise), and the latest commit closes the last one in
+both the code and the probe. Waiting on the user: run the third confirmation,
+reduce the change, or waive.
 
 ## Blockers
 
-None.
+None technical; the decision is the user's.
