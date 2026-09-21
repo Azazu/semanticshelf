@@ -47,3 +47,19 @@
 | 4 | confirmed — Decision 13 and tasks 2.2, 4.4, and 8.9 assign implementation, API verification, and failing-input evidence for separators, parent segments, controls, the stored bound, empty results, and preserved non-Latin text. |
 | 5 | confirmed — Decision 14 and tasks 2.1, 3.2, 4.3, and 4.4 cover exactly one required file, both tag forms, bounded JSON-object metadata, parser limits, and malformed, duplicate, and absent input cases. |
 | 6 | changes-requested — The mapping now names the omitted validation families, but it still does not provide one independently demonstrated failing input per new check. Probes 8.2a, 8.7, and 8.8 each remove multiple distinct guards despite the section's rule that each probe removes exactly one; the same issue appears in 8.13. In addition, removing only the parser's metadata `max_part_size` cannot make the stated oversized-metadata refusal test fail, because task 2.1 independently rejects the same raw value at the metadata-size bound before JSON parsing. Split the grouped guards into independently removed probes and make 8.2 observe the parser-stage bound specifically (for example, by proving the downstream metadata parser is not reached). |
+
+## Confirmation 3 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** 14c0d54985c195a151795666526ab95ba796aaa5
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The transaction-scoped shared/exclusive advisory lock remains the invariant-preserving mechanism, and tasks 7.5–7.6 verify its lifetime and the upload/prune race without relying on an upload-duration bound. |
+| 2 | confirmed — The ASGI middleware is the sole file and whole-body byte bound, while the endpoint uses only the multipart limits Starlette actually enforces; tasks 3.1–3.2 cover oversized files, aggregate extra-part overhead, absent or understated length, parser part counts, and parser-stage metadata refusal. |
+| 3 | confirmed — The explicit header-dimension check rejects cap-plus-one before decoding, with exact-cap boundary coverage and a failing-input probe that removes only that check while leaving Pillow's weaker guard in place. |
+| 4 | confirmed — Filename normalisation has explicit implementation, API, and independently split failing-input coverage for path segments and separators, controls, and the stored length bound, including an unusable result and preserved non-Latin text. |
+| 5 | confirmed — The endpoint and parser tasks implement and verify exactly one required file, both tag encodings, bounded JSON-object metadata, and the malformed, duplicate, absent, and excessive-part cases. |
+| 6 | changes-requested — The grouped probes identified in Confirmation 2 are now split, and probe 8.2 distinguishes the parser-stage metadata refusal from the application guard. However, probe 8.12 still violates the section's explicit one-guard rule: it removes the application metadata-size bound **and** raises the parser bound. Give the application metadata-size guard a test below the parser limit or exercise it directly at the normalisation boundary, so its probe changes only that guard. |
