@@ -18,15 +18,25 @@ them leaves the store and the media root exactly as it found them.
 """
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+)
 from fastapi.responses import FileResponse, JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
@@ -50,6 +60,7 @@ from app.services.assets import (
     list_assets,
     update_asset,
 )
+from app.services.indexing import drain
 from app.services.tagging import (
     METADATA_MAX_BYTES,
     MetadataError,
@@ -106,7 +117,19 @@ def get_settings(request: Request) -> Settings:
     return settings
 
 
+def get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
+    factory: async_sessionmaker[AsyncSession] = request.app.state.session_factory
+    return factory
+
+
+def get_pool(request: Request) -> ThreadPoolExecutor:
+    pool: ThreadPoolExecutor = request.app.state.inference_pool
+    return pool
+
+
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
+PoolDep = Annotated[ThreadPoolExecutor, Depends(get_pool)]
 StorageDep = Annotated[MediaStorage, Depends(get_storage)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
@@ -133,9 +156,12 @@ def _refuse(status: HTTPStatus, type_: str, detail: str) -> JSONResponse:
 async def upload_asset(
     request: Request,
     response: Response,
+    background: BackgroundTasks,
     session: SessionDep,
     storage: StorageDep,
     settings: SettingsDep,
+    session_factory: SessionFactoryDep,
+    pool: PoolDep,
 ) -> Any:
     try:
         async with request.form(
@@ -206,6 +232,12 @@ async def upload_asset(
         return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, TOO_SMALL_TYPE, str(exc))
 
     response.headers["Location"] = f"{PREFIX}/{asset.id}"
+    # After the response, not before it: the caller waits for the asset, never
+    # for its vectors. The task takes a session of its own, because this
+    # request's is closed by then.
+    background.add_task(
+        drain, session_factory=session_factory, storage=storage, settings=settings, pool=pool
+    )
     return AssetRead.of(asset, prefix=PREFIX)
 
 

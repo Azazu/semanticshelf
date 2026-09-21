@@ -184,14 +184,11 @@ async def test_deleting_an_asset_removes_its_embeddings(
     client: httpx.AsyncClient, engine: AsyncEngine
 ) -> None:
     created = await upload(client)
-    async with engine.begin() as connection:
-        await connection.execute(
-            sa.text(
-                "INSERT INTO embeddings (asset_id, model, vector) "
-                "VALUES (:asset_id, 'clip-vit-l14', :vector)"
-            ),
-            {"asset_id": created["id"], "vector": "[" + ",".join(["0.1"] * 768) + "]"},
-        )
+    # Nothing is inserted by hand any more: the upload's own drain indexes the
+    # picture, so the asset really has the vector this test then deletes.
+    async with engine.connect() as connection:
+        stored = (await connection.execute(sa.text("SELECT count(*) FROM embeddings"))).scalar_one()
+    assert stored == 1, "the background runner wrote the vector"
 
     assert (await client.delete(f"{ASSETS}/{created['id']}")).status_code == 204
 

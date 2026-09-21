@@ -5,7 +5,7 @@ CI does that before running the marked suite. Each test starts from an empty
 store: truncating `assets` cascades to embeddings and jobs.
 """
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 import pytest
@@ -17,8 +17,33 @@ from sqlalchemy.sql.expression import ClauseElement, Executable
 
 from app.core.settings import Settings
 from app.db.engine import create_engine, create_session_factory
+from app.domain import CLIP_VIT_L14, dimension_of
+from app.ml import registry
+from app.ml.fake import FakeEmbedder
 
 TABLES = "assets, embeddings, indexing_jobs"
+
+
+@pytest.fixture(autouse=True)
+def fake_model() -> Iterator[None]:
+    """No integration test loads real weights — not even by accident.
+
+    An upload now drains the queue in the background, so any test that posts a
+    picture would reach the model registry and pull down a checkpoint. The
+    factory is replaced rather than the registry's contents, so the lazy load
+    inside the application still runs its normal path; only what it builds is
+    fake. The real adapter has its own suite (`-m models`), which does not run
+    here.
+    """
+    registry.clear()
+    original = dict(registry.FACTORIES)
+    registry.FACTORIES[CLIP_VIT_L14] = lambda settings: FakeEmbedder(
+        CLIP_VIT_L14, dimension_of(CLIP_VIT_L14)
+    )
+    yield
+    registry.FACTORIES.clear()
+    registry.FACTORIES.update(original)
+    registry.clear()
 
 
 @pytest.fixture(scope="session")

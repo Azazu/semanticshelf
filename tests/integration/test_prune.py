@@ -143,8 +143,17 @@ async def test_an_asset_whose_file_is_gone_is_reported_and_its_work_failed(
 ) -> None:
     created = await upload(client)
     asset_id = str(created["id"])
-    # The upload queued the work itself now (change 6); this test needs one
-    # job for the asset, and that is exactly what it has.
+    # The upload queues the work and drains it (change 6), so by now the job is
+    # done. What prune closes is *unfinished* work, so the job goes back in the
+    # queue first: an asset whose file vanished while its work was still
+    # waiting is precisely the state prune exists to end.
+    async with engine.begin() as connection:
+        await connection.execute(
+            sa.text(
+                "UPDATE indexing_jobs SET status = 'pending', attempts = 0, "
+                "finished_at = NULL, lease_expires_at = NULL"
+            )
+        )
     (storage.root / asset_id[:2] / f"{asset_id}.png").unlink()
 
     dry = await prune(prune_session, storage, min_age_seconds=0, apply=False)
