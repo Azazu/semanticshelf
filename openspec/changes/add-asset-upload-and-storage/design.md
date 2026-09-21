@@ -32,7 +32,7 @@ future), and no background work of any kind.
 | Question | Applies | How it is handled |
 |---|---|---|
 | Crash before/after an external effect | yes | The external effects are two file writes and one row. Order: both files renamed into place, then the row; a failed insert unlinks both. A crash between them leaves orphan files — the one residue the design permits — which `storage prune` finds. The reverse order (row first) is rejected: it would let a row point at a file that never arrived. |
-| Concurrent writers | yes | Two races, not one. **Upload against upload:** two identical uploads race on the unique content hash; both may pass the pre-check and write files under their own identifiers, and the insert that loses raises a unique violation, is translated to 409 and unlinks its own files — neither can touch the other's, because every path derives from its own identifier. **Prune against upload:** between the renames and the commit, an upload's files look exactly like orphans. Prune therefore only considers files older than a grace period (decision 12), and an integration test holds an upload at that exact point while prune runs. |
+| Concurrent writers | yes | Two races, not one. **Upload against upload:** two identical uploads race on the unique content hash; both may pass the pre-check and write files under their own identifiers, and the insert that loses raises a unique violation, is translated to 409 and unlinks its own files — neither can touch the other's, because every path derives from its own identifier. **Prune against upload:** between the renames and the commit an upload's files look exactly like orphans, and the delay can be arbitrary, so they are serialised by an advisory lock (decision 12) rather than by a timeout. An integration test holds an upload at exactly that point, with no time bound, while prune runs. |
 | Money rounding | n/a | No money anywhere in the project. |
 | Empty/zero/null inputs | yes | An empty file part decodes as nothing → 415. Zero tags and absent metadata are normal. `meta: null` in a patch means "clear", an omitted field means "leave alone", distinguished through the fields actually present in the request rather than through the value. A zero-byte upload never reaches decoding, because the byte limit check reads and hashes what arrived. |
 | Authorization boundary | yes | There is none by design (single-tenant, unauthenticated), so the boundary that matters is the path: nothing a client sends may reach the filesystem. One module builds paths, from an identifier the service generated and a format it detected; the original filename is stored as text and never used to open anything. |
@@ -49,34 +49,37 @@ future), and no background work of any kind.
    Rejected: building paths inside the service layer, which is where this kind
    of defect usually hides — a filename that reaches `Path()` once is enough.
 
-2. **Two bounds, both enforced by something that sees the stream.** Verified
-   against the installed stack rather than assumed: FastAPI 0.141 parses the
-   whole multipart body before the endpoint runs (`await request.form()` in
-   its routing layer), so counting chunks inside the endpoint cannot bound
-   anything — by then the body has already been read and spooled. Worse, that
-   call uses Starlette's defaults, and `max_part_size` defaults to 1 MiB, so a
-   plain `UploadFile` parameter would reject an ordinary 5 MiB photograph with
-   a parser error.
+2. **The body is bounded by a middleware; the parser bounds what it can.**
+   Read from the installed stack, and the first round of this design got it
+   wrong, so here is what `starlette` 1.6.0 actually does:
+   `MultiPartParser.on_part_data` applies `max_part_size` **only when the part
+   is not a file** (`if self._current_part.file is None`); a file part's data
+   is appended with no size check at all. `max_files` and `max_fields` are
+   enforced and raise `MultiPartException` during the parse. FastAPI 0.141
+   calls `await request.form()` with the defaults from its routing layer, so
+   by the time an endpoint runs the body has been parsed and spooled.
 
-   Therefore:
-   - **The whole body** is bounded by a small ASGI middleware that counts the
-     bytes of the request stream as they arrive and refuses at the configured
-     limit with 413 problem details. It works on a chunked request with no
-     `Content-Length`, because it counts what actually arrives rather than
-     trusting a header, and it covers every part and all multipart overhead,
-     which is what NFR-SEC-5 requires.
-   - **The file part** is bounded by the parser itself: the endpoint calls
-     `request.form(max_part_size=<the upload limit>, max_files=…,
-     max_fields=…)` explicitly instead of taking an `UploadFile` parameter,
-     and a `MultiPartException` becomes 413 problem details rather than the
-     parser's own 400.
+   What follows from that:
+   - **The whole body, and therefore the uploaded file, is bounded by an ASGI
+     middleware** that counts the bytes of the request stream as they arrive
+     and refuses at the configured limit with 413 problem details. It is the
+     only bound on file bytes. It counts what arrives rather than trusting a
+     declared length, so a chunked request with no length, or one that
+     understates it, is covered — which is what NFR-SEC-5 asks for.
+   - **The parser bounds the small parts and the part counts**: the endpoint
+     parses the form itself with `max_part_size` set to the metadata bound, so
+     an oversized `meta` string is refused before it is parsed at all, and
+     with `max_files` and `max_fields` set low, so a request cannot arrive
+     with a thousand parts. A `MultiPartException` becomes 422 problem details
+     naming what was wrong rather than the parser's own 400.
 
-   The content hash is then computed by reading the part in chunks, which is
-   about not holding the file in memory, not about the limit.
-   Rejected: trusting `Content-Length` (absent or false on a chunked request);
-   relying on a reverse proxy (there is none in development, and the service
-   must be safe on its own); and leaving the parser at its defaults, which
-   would silently cap uploads at 1 MiB.
+   The earlier claim that the 1 MiB default would reject an ordinary
+   photograph was wrong for the same reason: that default never applies to a
+   file part. The correction matters because it moves the guarantee — the file
+   size is guarded by the middleware, and by nothing else.
+   Rejected: trusting `Content-Length`; relying on a reverse proxy the
+   development setup does not have; and counting bytes inside the endpoint,
+   which runs after the body has already been read.
 
 3. **The pixel cap is our own check on the header, with the library's guard
    behind it.** Read from the installed Pillow 12.3 rather than assumed: its
@@ -141,21 +144,31 @@ future), and no background work of any kind.
     write — that failure surfaces at the first upload, loudly, and the check's
     description says so rather than claiming more.
 
-12. **Prune ignores files younger than a grace period.** Between its renames
-    and its commit, an upload's two files are indistinguishable from orphans:
-    final names, no row. A prune running at that moment would delete them and
-    leave the invariant this design promises — no row without its files —
-    broken by the very command meant to repair it. Prune therefore only
-    considers a file whose last modification is older than
-    `PRUNE_MIN_AGE_SECONDS` (default one hour, far beyond any upload), and the
-    report says how many files it skipped as too young, so nothing disappears
-    silently from its view.
-    Rejected: a lock shared by every upload and the prune run (a global
-    serialisation point for an operation that should never touch a live
-    upload); writing files under a temporary prefix and renaming them only
-    after the commit (it moves the window rather than closing it, and it means
-    a row can exist before its files, which is the state the whole design
-    forbids).
+12. **Prune and upload are serialised by an advisory lock in the database.**
+    Between its renames and its commit, an upload's files are
+    indistinguishable from orphans, and no timeout makes that safe: an upload
+    can be delayed arbitrarily — a slow disk, a stopped process, a paused
+    container — so a grace period alone only shrinks the window rather than
+    closing it.
+
+    The upload therefore opens its database transaction **before** it writes,
+    takes a shared transaction-scoped advisory lock, writes both files,
+    inserts the row and commits; the lock is released by the commit or the
+    rollback, and by the connection dying, so nothing can leak it. Prune takes
+    the exclusive lock of the same key without waiting: if any upload is in
+    flight it does not run, says so, and changes nothing. Uploads never block
+    each other, because their lock is shared.
+
+    A grace period (`PRUNE_MIN_AGE_SECONDS`) stays as a second line for the
+    one case the lock cannot cover: a prune run configured against a different
+    database than the service writing those files, where the lock is taken in
+    a database nobody is watching. It is a margin, not the guarantee, and the
+    design says which is which.
+    Rejected: a grace period alone (finding 1 of the first round — unsafe for
+    an arbitrarily delayed upload); a table of pending uploads (a migration
+    for bookkeeping the database can already do); writing under a temporary
+    prefix until after the commit (it would mean a row can exist before its
+    files, the one state this design forbids).
 
 13. **The original filename is metadata and is normalised as text.** It is
     never a path component (decision 1), but it is still attacker-controlled
@@ -189,9 +202,13 @@ future), and no background work of any kind.
 - [Orphan files after a crash] → the only residue the design permits, found
   and removed by `storage prune`; the alternative (a row before its files)
   trades a removable file for a broken asset.
-- [Prune deleting the files of an upload in flight] → the grace period of
+- [Prune deleting the files of an upload in flight] → the advisory lock of
   decision 12, with an integration test that holds an upload between its
-  renames and its commit while prune runs with the apply flag.
+  renames and its commit, indefinitely, while prune runs with the apply flag.
+- [An upload holds a database transaction open while it writes two files] →
+  the transaction does no work until the insert, and an upload is short; the
+  alternative, a session-scoped lock, can be leaked by a connection returned
+  to the pool without releasing it.
 - [The body-size middleware sees every request, not just uploads] → it counts
   bytes and compares an integer; the cost is a few instructions per chunk, and
   applying it to everything means no future endpoint can forget it.

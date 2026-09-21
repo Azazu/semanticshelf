@@ -13,8 +13,8 @@
 
 ## 3. Bounding the request itself
 
-- [ ] 3.1 Write the body-size middleware (design decision 2): it counts the bytes of the request stream as they arrive and answers 413 problem details when the configured limit is passed, without trusting any declared length. Verify: `tests/api/test_body_limit.py` sends an oversized body with a correct length, one with no declared length (chunked), and one whose declared length understates it; each answers 413 as problem details, and a body under the limit is untouched.
-- [ ] 3.2 The upload endpoint parses the multipart body itself with explicit bounds — the part size set from the upload limit, the number of parts and fields bounded — instead of taking an injected file parameter, and a parser refusal becomes 413 problem details rather than the parser's own 400. Verify: an api test uploads a picture larger than Starlette's 1 MiB default part size and it succeeds, and a part over the configured limit answers 413.
+- [ ] 3.1 Write the body-size middleware (design decision 2): it counts the bytes of the request stream as they arrive and answers 413 problem details when the configured limit is passed, without trusting any declared length. It is the only bound on the uploaded file's size, because the installed parser does not bound a file part. Verify: `tests/api/test_body_limit.py` sends an oversized single file, a body made oversized by several parts each under the limit, one with no declared length (chunked), and one whose declared length understates it; each answers 413 as problem details, and a body under the limit is untouched.
+- [ ] 3.2 The upload endpoint parses the multipart body itself instead of taking an injected file parameter, with the bounds the parser does enforce: `max_part_size` set to the metadata bound, so an oversized metadata string is refused before it is parsed, and `max_files` and `max_fields` set low, so a request cannot arrive with a thousand parts. A parser refusal becomes 422 problem details naming what was wrong, not the parser's own 400. Verify: api tests for an oversized metadata field, for more file parts than allowed and for more fields than allowed, each asserting the status and the message; and one that a picture well over the parser's 1 MiB default part size uploads normally, which is the evidence that the file part is not bounded there.
 
 ## 4. Upload
 
@@ -39,9 +39,10 @@
 
 - [ ] 7.1 Add the `media` check to `app/services/readiness.py`: the root exists, is a directory and is writable, asked of the operating system in a thread, run beside the database check rather than after it, and reported without quoting the path. Verify: unit tests with a temporary directory for ok, missing, not-a-directory and not-writable, and a timing test that the probe still answers within about twice the budget.
 - [ ] 7.2 Update every test that asserts the exact `checks` body so it expects four entries, and the probe's description in the router. Verify: `make check` and `make test-integration` green.
-- [ ] 7.3 Add `storage prune` to `app/cli.py`: report files with no asset row and assets whose files are missing, ignoring files younger than the grace period and saying how many were ignored for that reason (design decision 12); with the apply flag remove the orphan files and mark the indexing work of an asset whose file is gone as failed with a reason naming the missing file. Verify: `uv run semanticshelf storage prune --help` recorded in the commit body.
+- [ ] 7.3 Add `storage prune` to `app/cli.py`: take the exclusive advisory lock uploads hold in shared form and stop without changing anything when it cannot be taken (design decision 12); otherwise report files with no asset row and assets whose files are missing, ignoring files younger than the grace period and saying how many were ignored for that reason; with the apply flag remove the orphan files and mark the indexing work of an asset whose file is gone as failed with a reason naming the missing file. Verify: `uv run semanticshelf storage prune --help` recorded in the commit body.
 - [ ] 7.4 Write the integration tests for prune: an orphan file and an asset with a removed file are both reported; a dry run changes nothing; the apply run removes the file and marks the job. Verify: `make test-integration` green.
-- [ ] 7.5 Write the integration test the grace period exists for: an upload held between its renames and its row (a hook the test can block on) while prune runs with the apply flag; the upload's files survive, prune reports them as ignored, and the upload completes with both files in place. Verify: `make test-integration` green, and the failing input of task 8.14.
+- [ ] 7.5 Take the shared advisory lock in the upload flow: the transaction opens before the first file is written and commits after the row, so the lock covers the whole write and is released by the commit, the rollback or a dropped connection. Verify: an integration test asserts the lock is held while the files are being written and gone afterwards.
+- [ ] 7.6 Write the integration test the lock exists for: an upload held between its renames and its row on a hook the test releases only after prune has finished — no time bound anywhere in the test — while prune runs with the apply flag. Prune must change nothing and say an upload is in flight; the upload must complete with both files in place. Verify: `make test-integration` green, and the failing input of task 8.14.
 
 ## 8. Failing inputs (high tier: one per new check)
 
@@ -51,8 +52,9 @@ named test, records the output in the commit body, and restores the code.
 
 | New check | Probe |
 |---|---|
-| Whole-body byte bound | 8.1 |
-| Part-size bound at the parser | 8.2 |
+| Whole-body byte bound, including the uploaded file | 8.1 |
+| Metadata field bounded by the parser before parsing | 8.2 |
+| Part and field counts bounded by the parser | 8.2a |
 | Exactly one file part | 8.3 |
 | Format allowlist (415) | 8.4 |
 | Pixel cap at the number it names | 8.5 |
@@ -64,13 +66,15 @@ named test, records the output in the commit body, and restores the code.
 | Files before row, cleanup on failure | 8.11 |
 | Thumbnail re-encoded, not copied | 8.12 |
 | Duplicate refused | 8.13 |
-| Prune's grace period | 8.14 |
+| Prune's lock against an upload in flight | 8.14 |
+| Prune's grace period | 8.14a |
 | Media check leaking the path | 8.15 |
 | `has_more` from an extra row | 8.16 |
 | Missing file answering 404, not 500 | 8.17 |
 
 - [ ] 8.1 The body-size middleware removed: the oversized-body tests fail.
-- [ ] 8.2 The explicit part-size bound removed (back to the parser's default): the test that uploads a picture over 1 MiB fails.
+- [ ] 8.2 The metadata part bound removed from the parser call: the oversized-metadata test fails, showing the value parsed instead of refused.
+- [ ] 8.2a The part and field count bounds removed: the too-many-parts tests fail.
 - [ ] 8.3 The file-part count check removed: the no-file and two-file tests fail.
 - [ ] 8.4 The format allowlist removed: the refused-format test fails.
 - [ ] 8.5 The header pixel check removed (leaving only Pillow's guard): the cap-plus-one test fails, which is the evidence that the library's guard alone does not enforce the cap.
@@ -82,7 +86,8 @@ named test, records the output in the commit body, and restores the code.
 - [ ] 8.11 The row inserted before the files: the write-order test fails, showing a row whose file is absent.
 - [ ] 8.12 The thumbnail copied from the original instead of re-encoded: the metadata test fails, showing the original's blocks in the thumbnail.
 - [ ] 8.13 The duplicate pre-check and the unique-violation translation removed: the duplicate test fails.
-- [ ] 8.14 The grace period removed from prune: the concurrent test of task 7.5 fails, showing an upload that lost its files.
+- [ ] 8.14 The advisory lock removed from prune: the concurrent test of task 7.6 fails, showing an upload that lost its files to a prune beside it.
+- [ ] 8.14a The grace period removed from prune: a file younger than the grace with no row is deleted, which the margin test catches.
 - [ ] 8.15 The media check reporting the path in its reason: the test that the body carries no path fails.
 - [ ] 8.16 The extra row of the listing removed: the `has_more` test fails on the last page.
 - [ ] 8.17 The existence check before the file response removed: the missing-file test fails with a server error instead of 404.

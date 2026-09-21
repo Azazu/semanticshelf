@@ -44,14 +44,16 @@ upload, path handling and deletion.
 - Tag and metadata rules (FR-TAG-1, FR-TAG-2) as one normalisation used by
   both upload and patch.
 - `semanticshelf storage prune [--apply]`: orphan files and assets whose files
-  are gone; it changes nothing without `--apply`, and it ignores files younger
-  than a grace period, because an upload between its writes and its row looks
-  exactly like an orphan.
+  are gone; it changes nothing without `--apply`, and it does not run at all
+  while an upload is in flight — an upload between its writes and its row
+  looks exactly like an orphan, and it may be delayed without bound, so the
+  two are serialised by an advisory lock rather than by a timeout.
 - Readiness gains its fourth check: the media root exists and is writable.
-- A middleware that bounds the whole request body, because the framework
-  parses a multipart request before the endpoint sees it: the limit has to be
-  enforced by something that watches the stream, not by code that runs after
-  the body has already been read.
+- A middleware that bounds the whole request body — the only bound on the
+  uploaded file's bytes, because the framework parses a multipart request
+  before the endpoint sees it and its parser does not bound a file part at
+  all. The parser's own bounds still guard the small parts and the part
+  counts.
 - New settings: `MEDIA_ROOT`, `MAX_UPLOAD_BYTES`, `MAX_IMAGE_PIXELS`,
   `MIN_IMAGE_SIDE`, `PRUNE_MIN_AGE_SECONDS`.
 

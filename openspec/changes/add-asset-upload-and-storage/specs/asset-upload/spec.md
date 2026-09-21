@@ -49,6 +49,10 @@ SHALL leave nothing on disk and no row in the store.
 - **THEN** the answer is 413 problem details, and the service never decoded
   the content
 
+#### Scenario: A request with an unreasonable number of parts
+- **WHEN** a request arrives with far more parts than an upload can have
+- **THEN** it is refused as problem details before those parts are processed
+
 #### Scenario: A body over the limit in several parts
 - **WHEN** a request whose parts are each under the limit but whose whole body
   exceeds it arrives
@@ -227,10 +231,14 @@ orphan files and mark the indexing work of an asset whose files are gone as
 failed, with a reason naming the missing file.
 
 A file written by an upload that has not yet stored its row is
-indistinguishable from an orphan, so the command SHALL ignore files younger
-than a configured grace period and SHALL report how many it ignored for that
-reason. An upload in flight SHALL therefore never lose its files to a prune
-running beside it.
+indistinguishable from an orphan, and an upload may be delayed without bound,
+so the command SHALL NOT act while any upload is in flight: it SHALL take an
+exclusive claim that every upload holds in shared form for the whole of its
+write, and SHALL report and change nothing when it cannot take it. The
+protection SHALL NOT depend on how long an upload takes. In addition, the
+command SHALL ignore files younger than a configured grace period and report
+how many it ignored, as a margin for a run pointed at a store the uploading
+service does not use.
 
 #### Scenario: Files left by a crash
 - **WHEN** the command runs with files under the media root that no asset row
@@ -248,7 +256,11 @@ running beside it.
 
 #### Scenario: An upload in flight while the command runs
 - **WHEN** the command runs and is asked to act while an upload has written
-  its files but not yet stored its row
-- **THEN** those files are untouched, the command reports that it ignored
-  files younger than the grace period, and the upload completes with both its
-  files in place
+  its files but not yet stored its row, however long that upload takes
+- **THEN** the command changes nothing and says an upload is in flight, and
+  the upload completes with both its files in place
+
+#### Scenario: No upload in flight
+- **WHEN** the command runs with no upload in flight
+- **THEN** it proceeds, and files older than the grace period with no asset
+  row are reported and, when it is asked to act, removed
