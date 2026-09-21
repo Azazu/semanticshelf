@@ -1,7 +1,7 @@
 # Handoff — add-background-indexing
 
 **Updated:** 2026-09-21 · claude
-**State:** ready-to-merge
+**State:** archived
 **Branch:** change/add-background-indexing
 
 ## Done this session
@@ -54,8 +54,10 @@ Local evidence: `env -u DATABASE_URL make check` green (252 tests);
 `make test-integration` green (116 tests); all 28 probes of group 7 caught
 their removal on a full re-run.
 
-Next: push the branch so CI runs on the head that Gate 2 confirmed, then
-`/git:merge add-background-indexing`, then `/opsx:archive`.
+Merged into `main` as `3da0cc7` (`--no-ff`, gate 2 approved) and pushed. The
+delta specs are synced into `openspec/specs/` — `indexing-jobs` is a new
+capability, `asset-api` and `asset-upload` gained the requirements above — and
+this change is archived.
 
 ## Blockers
 

@@ -16,7 +16,6 @@ carries the full scope, exit criteria and the declared tier.
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 6 | `add-background-indexing` | transactional job enqueue, `BackgroundTasks` runner over the shared claim/execute/finish functions, `index_status`, `/jobs`, `/reindex`, leases, retries, ADR-003 | high |
 | 7 | `add-folder-indexing-cli` | `typer` CLI, `index-folder` through the upload pipeline, summary, dry run | medium |
 
 ## Stage 2 — text→image search, demo data, demo UI
