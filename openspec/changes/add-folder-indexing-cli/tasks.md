@@ -51,6 +51,7 @@ code.
 | The walk does not enter a symlinked directory | 6.4 |
 | The walk is relative to the directory's descriptor | 6.5 |
 | One open decides both the descriptor and the reported path (gate 2, confirmation 1) | 6.6 |
+| The path a run cannot prove it holds is not reported (gate 2, confirmation 2) | 6.6b |
 | Candidates are chosen by extension | 6.7 |
 | Tags and metadata are validated before the walk | 6.9 |
 | The recorded origin is not overwritten by the run's metadata | 6.10 |
@@ -70,6 +71,7 @@ code.
 - [x] 6.3 Decide from an `lstat` on the path instead of `fstat` on the descriptor: the mutation-race test of task 1.4 fails.
 - [x] 6.4 Pass `followlinks=True` to the walk: the parent-link test fails or does not terminate within its timeout.
 - [x] 6.5 Open by full path instead of relative to the directory descriptor: the mutation-race test that swaps a parent directory for a link fails.
+- [x] 6.6b Drop the device-and-inode check from the fallback: the test that a name taken over after the open refuses the run fails, showing a run that reports a directory it is not holding.
 - [x] 6.6 Restore the shape that let the two disagree — resolve the name, open the resolved path, report the name — and the test that a run reads and reports the same directory fails. The guard is the pair: restoring either half alone leaves them agreeing, which the probe's own comment records.
 - [x] 6.7 Accept every regular file as a candidate: the test that a document is skipped rather than refused fails.
 - [x] 6.8 **No probe, and why.** The rule it named — the bytes decide what a file is — is enforced by the inspection inside the pipeline this change only feeds, and change 5 demonstrates it with its own probe (`ea0c781`). Removing it is not an edit inside this change's diff, so a probe here would be theatre. The behaviour is still asserted: `tests/integration/test_folder_import.py` stores nothing for `lying.png`, a text file named like a picture, and `tests/unit/test_folder_walk.py` shows the walk opening it regardless of its name.

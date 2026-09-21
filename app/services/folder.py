@@ -101,19 +101,35 @@ def _open_directory(directory: Path) -> int:
 
 
 def _path_of(descriptor: int, *, named: Path) -> Path:
-    """What that descriptor actually refers to, asked of the kernel.
+    """What that descriptor actually refers to.
 
     Not resolved from the name: resolving a path and then opening it are two
     steps, and between them the name can come to mean another directory — which
-    would leave a run reading one tree and reporting another. One open decides
-    both. `/proc` is how Linux answers this; anywhere it is missing the run
-    falls back to resolving the name, which is a worse answer only for what is
-    printed, never for what is read.
+    would leave a run reading one tree and reporting another.
+
+    `/proc` answers this directly on Linux. Where it is missing, the name is
+    resolved and then **proved** to be this very directory: the descriptor's
+    device and inode against the resolved path's. A name that no longer leads
+    to the directory being held is not a worse label for it, it is a different
+    directory, and the run refuses rather than report it.
     """
     try:
         return Path(os.readlink(f"/proc/self/fd/{descriptor}"))
-    except OSError:  # pragma: no cover - /proc is there on every platform we run on
-        return named.expanduser().resolve()
+    except OSError:
+        pass
+    resolved = named.expanduser().resolve()
+    held = os.fstat(descriptor)
+    try:
+        candidate = os.stat(resolved)
+    except OSError as error:
+        raise DirectoryUnusableError(
+            f"{named} could not be identified after it was opened: {error.strerror}"
+        ) from error
+    if (candidate.st_dev, candidate.st_ino) != (held.st_dev, held.st_ino):
+        raise DirectoryUnusableError(
+            f"{named} stopped being the directory that was opened; nothing was read"
+        )
+    return resolved
 
 
 def open_root(directory: Path) -> Root:
@@ -132,7 +148,11 @@ def open_root(directory: Path) -> Root:
         raise DirectoryUnusableError(f"no such directory: {directory}") from error
     except OSError as error:
         raise DirectoryUnusableError(f"{directory} could not be read: {error.strerror}") from error
-    return Root(_path_of(descriptor, named=directory), descriptor)
+    try:
+        return Root(_path_of(descriptor, named=directory), descriptor)
+    except BaseException:
+        os.close(descriptor)  # a refusal leaves no descriptor behind
+        raise
 
 
 @contextmanager

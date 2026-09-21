@@ -33,20 +33,24 @@ complete, 47 of 51 tasks checked.
 
 ## Next step
 
-Confirmation 1 confirmed finding 2 and refused finding 1: `open_root` still
-resolved the name and then opened the resolved path, and the window between
-those two steps is the finding. Fixed on `9f8ad9e` — one open, and the reported
-path read back from the descriptor, so the directory a run reads and the
-directory it names cannot be different ones.
+Confirmation 2 refused finding 1 again — the second failed confirmation on one
+finding, so the protocol's stop applied and the user arbitrated: fix it and go
+for a third confirmation.
 
-Second confirmation of round 1: `/gate-review add-folder-indexing-cli 2
-confirm 1`. If it refuses finding 1 again, that is the second failed
-confirmation on one finding and the protocol says stop and ask the user to
-arbitrate rather than loop.
+What was left: `_path_of` fell back to resolving the name when `/proc` was
+unavailable, and that fallback could name a directory the run was not holding —
+against a requirement written without a condition. The fallback now proves the
+name: the descriptor's device and inode against the resolved path's, and a name
+that no longer leads to the directory being held ends the run instead of being
+reported (`9f8ad9e` then this commit). The stale sentence in design decision 3
+went with it.
 
-Local evidence: `env -u DATABASE_URL make check` green (272 tests);
-`make test-integration` green (149 tests); all 20 probes of group 6 caught
-their removal, nothing left running.
+Third confirmation of round 1: `/gate-review add-folder-indexing-cli 2
+confirm 1`.
+
+Local evidence: `env -u DATABASE_URL make check` green (275 tests);
+`make test-integration` green (149 tests); all 20 probes caught their removal,
+nothing left running.
 
 ## Blockers
 

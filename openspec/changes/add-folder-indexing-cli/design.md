@@ -84,13 +84,11 @@ settings: the run is described entirely by its arguments.
    draft allowed it, which contradicted the rule that only a regular file is
    opened, and the reviewer was right that both could not hold. One rule:
    **regular files only, symlinks are skipped and reported.**
-   The named directory itself is resolved exactly once, before the walk, **and
-   then held open**: `open_root` resolves the name, opens that directory with
-   `O_DIRECTORY`, and every step afterwards — the count, the walk, the report's
-   own `directory` — works from that descriptor. A run may be pointed at a
-   symlink to a directory and behaves as if it had been pointed at the
-   directory; if the resolved path is not a directory, the run is refused
-   before anything is read.
+   The named directory is **opened** exactly once, before the walk, and every
+   step afterwards — the count, the walk, the report's own `directory` — works
+   from that descriptor. A run may be pointed at a symlink to a directory and
+   behaves as if it had been pointed at the directory; if what the name leads
+   to is not a directory, the run is refused before anything is read.
    Resolving is not enough on its own, and two rounds of review proved it. The
    first implementation resolved in three places — once for the report, once
    inside the walk, once for the progress bar's count — so the name could be
@@ -104,9 +102,14 @@ settings: the run is described entirely by its arguments.
    then asks the kernel what that descriptor refers to (`/proc/self/fd/<n>`),
    which is what the report names. One syscall decides both, so the two cannot
    disagree, and the same rule as for a file holds for the root: what is worked
-   on is the object that was opened, not the name it had. On a platform without
-   `/proc` the reported path falls back to resolving the name — a worse answer
-   for what is printed, never for what is read.
+   on is the object that was opened, not the name it had.
+   Where `/proc` is missing the name is resolved and then *proved* to be this
+   directory — the descriptor's device and inode against the resolved path's —
+   and a name that no longer leads to the directory being held ends the run
+   instead of being reported as its label. The requirement is unconditional, so
+   the fallback has to be too: a name that cannot be proved is not printed.
+   That is the third shape this decision has had; the two before it are written
+   above because each was refused for a reason worth keeping.
 
 4. **Candidates are chosen by extension, accepted by bytes.** The walk
    considers a file whose suffix is one the service stores (`FILE_EXTENSIONS`,

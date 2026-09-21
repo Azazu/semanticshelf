@@ -6,9 +6,11 @@ out of it, a link to its own parent, a fifo, a document, a file whose name
 lies, and a picture two directories down.
 """
 
+import errno
 import os
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -352,3 +354,74 @@ def test_the_root_a_run_reports_is_the_root_it_reads(
 
     assert seen == {"stranger.png": "not "}, "it read the directory the open landed on"
     assert root.path == elsewhere.resolve(), "and it reports that same directory"
+
+
+def without_proc(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A platform whose kernel cannot say what a descriptor holds."""
+    real_readlink = os.readlink
+
+    def refuse_proc(path: Any, **kwargs: Any) -> str:
+        if str(path).startswith("/proc/self/fd/"):
+            raise OSError(errno.ENOENT, "no /proc here")
+        return real_readlink(path, **kwargs)
+
+    monkeypatch.setattr(os, "readlink", refuse_proc)
+
+
+def test_without_proc_the_name_is_proved_to_be_the_directory_that_was_opened(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inside = tmp_path / "photos"
+    inside.mkdir()
+    (inside / "ours.png").write_bytes(PICTURE)
+    without_proc(monkeypatch)
+
+    with folder.opened_root(inside) as root:
+        assert root.path == inside.resolve()
+        assert outcomes(folder.walk(root)) == {"ours.png": "\x89PNG"}
+
+
+def test_without_proc_a_name_taken_over_after_the_open_refuses_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fallback may not report a directory it cannot prove it is holding:
+    without `/proc` the name is checked by device and inode against the
+    descriptor, and a name that now leads somewhere else ends the run."""
+    inside = tmp_path / "photos"
+    inside.mkdir()
+    (inside / "ours.png").write_bytes(PICTURE)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "stranger.png").write_bytes(b"not ours")
+    without_proc(monkeypatch)
+    original = folder._open_directory
+
+    def open_then_swap(directory: Path) -> int:
+        descriptor = original(directory)
+        inside.rename(tmp_path / "photos-moved")
+        (tmp_path / "photos").symlink_to(elsewhere, target_is_directory=True)
+        return descriptor
+
+    monkeypatch.setattr(folder, "_open_directory", open_then_swap)
+
+    with pytest.raises(DirectoryUnusableError, match="stopped being the directory"):
+        folder.open_root(inside)
+
+
+def test_without_proc_a_name_that_vanishes_after_the_open_refuses_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inside = tmp_path / "photos"
+    inside.mkdir()
+    without_proc(monkeypatch)
+    original = folder._open_directory
+
+    def open_then_remove(directory: Path) -> int:
+        descriptor = original(directory)
+        inside.rmdir()
+        return descriptor
+
+    monkeypatch.setattr(folder, "_open_directory", open_then_remove)
+
+    with pytest.raises(DirectoryUnusableError, match="could not be identified"):
+        folder.open_root(inside)
