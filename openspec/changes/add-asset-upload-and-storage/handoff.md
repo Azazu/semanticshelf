@@ -1,7 +1,7 @@
 # Handoff — add-asset-upload-and-storage
 
 **Updated:** 2026-09-21 · claude
-**State:** awaiting-gate-1
+**State:** fixing-g1
 **Branch:** change/add-asset-upload-and-storage
 
 ## Done this session
@@ -15,11 +15,13 @@
 
 ## Next step
 
-Gate 1 round 1 returned `changes-requested` with three blockers and three
-majors; all six are fixed in the artifacts and the confirmation of round 1 is
-requested next. After an approving verdict:
-`/opsx:apply add-asset-upload-and-storage`.
+Gate 1, round 1: five findings confirmed. Finding 6 (one failing input per
+guard) has now come back twice, so the workflow's own rule applies — after two
+failed confirmations on the same finding, stop and ask the user to arbitrate
+rather than loop. The latest commit splits the grouped probes into
+twenty-seven, one per guard, and repairs the probe that could not have failed.
+Waiting on the user: run the third confirmation, reduce the change, or waive.
 
 ## Blockers
 
-None.
+None technical; the decision is the user's.
