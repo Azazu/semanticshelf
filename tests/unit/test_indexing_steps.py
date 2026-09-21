@@ -9,7 +9,7 @@ the database and belongs to `tests/integration/test_indexing.py`.
 """
 
 import io
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -231,7 +231,21 @@ async def test_a_stored_picture_becomes_a_vector(
 async def test_a_greyscale_original_is_converted_before_the_model_sees_it(
     storage: MediaStorage, settings: Settings, pool: ThreadPoolExecutor
 ) -> None:
+    """What the model is handed, not merely that the work succeeded: every
+    model here expects three channels, and a fake that accepts anything would
+    hide a runner that stopped converting."""
     asset = stored(storage, mode="L")
+    seen: list[str] = []
+    embedder = FakeEmbedder(CLIP_VIT_L14, CLIP_WIDTH)
+    real_embed = embedder.embed_images
+
+    def note(images: Sequence[Any]) -> Any:
+        seen.extend(image.mode for image in images)
+        return real_embed(images)
+
+    embedder.embed_images = note  # type: ignore[method-assign]
+    registry.FACTORIES[CLIP_VIT_L14] = lambda settings: embedder
+    registry.clear()
 
     executed = await indexing.execute(
         claimed_job(asset_id=asset.id),
@@ -241,6 +255,7 @@ async def test_a_greyscale_original_is_converted_before_the_model_sees_it(
         pool=pool,
     )
 
+    assert seen == ["RGB"], "the picture was converted before inference"
     assert len(executed.vector) == CLIP_WIDTH
 
 

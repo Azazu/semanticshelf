@@ -77,31 +77,31 @@ code.
 | Conversion to three channels before inference | 7.21 |
 | The listing filter refusing an unknown model or state | 7.22 |
 
-- [ ] 7.1 Remove the positive bound on the lease setting: its test fails.
-- [ ] 7.2 Remove the positive bound on the attempts setting: its test fails.
-- [ ] 7.3 Remove the positive bound on the batch setting: its test fails.
-- [ ] 7.4 Enqueue outside the asset's transaction: the test that a failed store leaves no jobs fails.
-- [ ] 7.5 Remove `SKIP LOCKED`: the pass-over test of task 5.1 fails, because the second claimer waits for the held row instead of taking the free one.
-- [ ] 7.6 Remove the expired-lease branch from the claim: the reclaim test fails.
-- [ ] 7.7 Widen the lease comparison to include valid leases: the test that a fresh claim is not reclaimable fails.
-- [ ] 7.8 Finish the job in a transaction separate from the vector: the crash test fails, showing a vector whose work is unfinished.
-- [ ] 7.9 Remove the token from the `done` statement alone: the late-success test fails, showing A's result over B's state.
-- [ ] 7.9a Remove the token from the retry statement alone: the late-retry test fails, showing A's backoff over B's attempt.
-- [ ] 7.9b Remove the token from the exhausted statement alone: the late-exhaustion test fails, showing a job failed on A's word while B held it.
-- [ ] 7.10 Leave the token alone on reset: the late-finish-after-reset test fails.
-- [ ] 7.11 Turn the upsert into an insert: the duplicate-delivery test fails.
-- [ ] 7.12 Remove the backoff: the retry test fails, showing a job due immediately.
-- [ ] 7.13 Remove the attempt bound: the exhaustion test fails, showing a job that never reaches failed.
-- [ ] 7.14 Treat a finish that matched nothing as an error: the deleted-asset test fails with a server error instead of a quiet end.
-- [ ] 7.15 Remove the enabled-model check from execution: the disabled-model test fails.
-- [ ] 7.16 Remove the batch bound: the drain test fails, showing more work taken than allowed.
-- [ ] 7.17 Put the exception's traceback in the reason: that test fails.
-- [ ] 7.18 Remove the two-kilobyte truncation: the boundary test fails.
-- [ ] 7.19 Record the message of every failure, whatever raised it: the foreign-exception test fails, showing the picture's bytes in the record.
-- [ ] 7.19a Record only the class for every failure: the test that the service's own message survives fails, which is what keeps the rule from degenerating into "say nothing".
-- [ ] 7.20 Skip the re-inspection and decode the stored file directly: the replaced-file tests fail.
-- [ ] 7.21 Remove the conversion to three channels: the greyscale test fails.
-- [ ] 7.22 Accept any model or state in the filter: that test fails.
+- [x] 7.1 Remove the positive bound on the lease setting: its test fails.
+- [x] 7.2 Remove the positive bound on the attempts setting: its test fails.
+- [x] 7.3 Remove the positive bound on the batch setting: its test fails.
+- [x] 7.4 Enqueue outside the asset's transaction: the test that a failed store leaves no jobs fails.
+- [x] 7.5 Remove `SKIP LOCKED`: the pass-over test of task 5.1 fails, because the second claimer waits for the held row instead of taking the free one.
+- [x] 7.6 Remove the expired-lease branch from the claim: the reclaim test fails.
+- [x] 7.7 Widen the lease comparison to include valid leases: the test that a fresh claim is not reclaimable fails.
+- [x] 7.8 Finish the job in a transaction separate from the vector: the crash test fails, showing a vector whose work is unfinished.
+- [x] 7.9 Remove the token from the `done` statement alone: the late-success test fails, showing A's result over B's state.
+- [x] 7.9a Remove the token from the retry statement alone: the late-retry test fails, showing A's backoff over B's attempt.
+- [x] 7.9b Remove the token from the exhausted statement alone: the late-exhaustion test fails, showing a job failed on A's word while B held it.
+- [x] 7.10 Leave the token alone on reset: the late-finish-after-reset test fails.
+- [x] 7.11 Turn the upsert into an insert: the duplicate-delivery test fails.
+- [x] 7.12 Remove the backoff: the retry test fails, showing a job due immediately.
+- [x] 7.13 Remove the attempt bound: the exhaustion test fails, showing a job that never reaches failed.
+- [x] 7.14 Treat a finish that matched nothing as an error: the deleted-asset test fails with a server error instead of a quiet end.
+- [x] 7.15 Remove the enabled-model check from execution: the disabled-model test fails.
+- [x] 7.16 Remove the batch bound: the drain test fails, showing more work taken than allowed.
+- [x] 7.17 Put the exception's traceback in the reason: that test fails.
+- [x] 7.18 Remove the two-kilobyte truncation: the boundary test fails.
+- [x] 7.19 Record the message of every failure, whatever raised it: the foreign-exception test fails, showing the picture's bytes in the record.
+- [x] 7.19a Record only the class for every failure: the test that the service's own message survives fails, which is what keeps the rule from degenerating into "say nothing".
+- [x] 7.20 Skip the re-inspection and decode the stored file directly: the replaced-file tests fail.
+- [x] 7.21 Remove the conversion to three channels: the greyscale test fails.
+- [x] 7.22 Accept any model or state in the filter: that test fails.
 
 ## 8. Decision record and documentation
 
