@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain import Asset
 from app.models import Asset as AssetRow
+from app.repositories.jobs import IndexingJobRepository
 
 DEFAULT_LIMIT = 50
 
@@ -125,6 +126,7 @@ class AssetRepository:
         tags_all: Sequence[str] = (),
         tags_any: Sequence[str] = (),
         source: str | None = None,
+        index_status: tuple[str, str] | None = None,
         limit: int = DEFAULT_LIMIT,
         offset: int = 0,
     ) -> sa.Select[Any]:
@@ -137,6 +139,13 @@ class AssetRepository:
             statement = statement.where(AssetRow.tags.overlap(list(tags_any)))
         if source is not None:
             statement = statement.where(AssetRow.source == source)
+        if index_status is not None:
+            model, state = index_status
+            # An asset with no work for that model at all does not match: the
+            # subquery is null, and null is not equal to anything.
+            statement = statement.where(
+                IndexingJobRepository.newest_status_of(AssetRow.id, model) == state
+            )
         return (
             statement.order_by(AssetRow.created_at.desc(), AssetRow.id.desc())
             .offset(offset)
@@ -149,6 +158,7 @@ class AssetRepository:
         tags_all: Sequence[str] = (),
         tags_any: Sequence[str] = (),
         source: str | None = None,
+        index_status: tuple[str, str] | None = None,
         limit: int = DEFAULT_LIMIT,
         offset: int = 0,
     ) -> tuple[list[Asset], bool]:
@@ -160,6 +170,7 @@ class AssetRepository:
                         tags_all=tags_all,
                         tags_any=tags_any,
                         source=source,
+                        index_status=index_status,
                         limit=limit,
                         offset=offset,
                     )

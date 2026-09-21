@@ -43,7 +43,7 @@ from starlette.datastructures import UploadFile
 from app.core.errors import instance_for_current_request, problem, problem_response
 from app.core.settings import Settings
 from app.db.engine import get_session
-from app.domain import ASSET_SOURCES, Asset
+from app.domain import ASSET_SOURCES, JOB_STATUSES, Asset, UnknownModelError
 from app.schemas.assets import (
     DUPLICATE_TYPE,
     AssetPage,
@@ -51,6 +51,7 @@ from app.schemas.assets import (
     AssetRead,
     DuplicateAssetProblem,
 )
+from app.schemas.jobs import IndexingJobList, IndexingJobRead, ReindexRequest, ReindexResult
 from app.services import images
 from app.services.assets import (
     DuplicateAssetError,
@@ -60,7 +61,7 @@ from app.services.assets import (
     list_assets,
     update_asset,
 )
-from app.services.indexing import drain
+from app.services.indexing import drain, jobs_of, known_models, reset_work, status_of
 from app.services.tagging import (
     METADATA_MAX_BYTES,
     MetadataError,
@@ -95,6 +96,8 @@ INVALID_META_TYPE = "/errors/invalid-meta"
 UNSUPPORTED_TYPE = "/errors/unsupported-media-type"
 TOO_LARGE_TYPE = "/errors/image-too-large"
 TOO_SMALL_TYPE = "/errors/image-too-small"
+INVALID_FILTER_TYPE = "/errors/invalid-filter"
+UNKNOWN_MODEL_TYPE = "/errors/unknown-model"
 
 #: The listing's bounds, fixed by the requirements.
 DEFAULT_LIMIT = 20
@@ -238,7 +241,12 @@ async def upload_asset(
     background.add_task(
         drain, session_factory=session_factory, storage=storage, settings=settings, pool=pool
     )
-    return AssetRead.of(asset, prefix=PREFIX)
+    # The work was queued in the same transaction as the asset, so this says
+    # `pending` for every enabled model — the state of the asset as the caller
+    # is being told about it, before the runner above has touched anything.
+    return AssetRead.of(
+        asset, prefix=PREFIX, index_status=(await status_of(session, [asset.id])).get(asset.id)
+    )
 
 
 async def _asset_or_404(session: AsyncSession, asset_id: UUID) -> Asset:
@@ -273,14 +281,31 @@ async def _serve(path: Path, *, asset: Asset, media_type: str, filename: str) ->
     )
 
 
+def _parse_index_status(value: str) -> tuple[str, str]:
+    """`<model>:<state>`, or a refusal naming what was wrong with it.
+
+    Both halves are checked against what the service knows rather than against
+    what it currently runs: work queued for a model that has since been
+    switched off is still work, and a filter must be able to find it.
+    """
+    model, separator, state = value.partition(":")
+    if not separator or not model or not state:
+        raise ValueError(f"expected <model>:<state>, got {value!r}")
+    known_models([model])
+    if state not in JOB_STATUSES:
+        raise ValueError(f"unknown state: {state!r}; expected one of {', '.join(JOB_STATUSES)}")
+    return model, state
+
+
 @router.get(
     "",
     summary="List assets",
     description=(
         "Newest first, with the identifier as tie-break. `limit` defaults to 20 and is at "
         "most 100, `offset` at most 10 000. Filter by `tags_all`, `tags_any` (comma-separated, "
-        "normalised like any tag) and `source`. The page says whether more items exist; there "
-        "is no total, which would be stale the moment it was read."
+        "normalised like any tag), `source`, and `index_status` as `<model>:<state>` — the "
+        "state of that model's newest indexing job. The page says whether more items exist; "
+        "there is no total, which would be stale the moment it was read."
     ),
     response_model=AssetPage,
 )
@@ -291,23 +316,35 @@ async def list_asset_page(
     tags_all: str | None = None,
     tags_any: str | None = None,
     source: Literal[ASSET_SOURCES] | None = None,  # type: ignore[valid-type]
+    index_status: Annotated[
+        str | None, Query(description="`<model>:<state>`, for example `clip-vit-l14:done`.")
+    ] = None,
 ) -> Any:
     try:
         required = split_tag_fields([tags_all]) if tags_all else ()
         any_of = split_tag_fields([tags_any]) if tags_any else ()
     except TagError as exc:
         return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, INVALID_TAGS_TYPE, str(exc))
+    try:
+        work = _parse_index_status(index_status) if index_status else None
+    except (ValueError, UnknownModelError) as exc:
+        return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, INVALID_FILTER_TYPE, str(exc))
 
     assets, has_more = await list_assets(
         session,
         tags_all=required,
         tags_any=any_of,
         source=source,
+        index_status=work,
         limit=limit,
         offset=offset,
     )
+    statuses = await status_of(session, [asset.id for asset in assets])
     return AssetPage(
-        items=[AssetRead.of(asset, prefix=PREFIX) for asset in assets],
+        items=[
+            AssetRead.of(asset, prefix=PREFIX, index_status=statuses.get(asset.id))
+            for asset in assets
+        ],
         limit=limit,
         offset=offset,
         has_more=has_more,
@@ -321,7 +358,10 @@ async def list_asset_page(
     response_model=AssetRead,
 )
 async def read_asset(asset_id: UUID, session: SessionDep) -> Any:
-    return AssetRead.of(await _asset_or_404(session, asset_id), prefix=PREFIX)
+    asset = await _asset_or_404(session, asset_id)
+    return AssetRead.of(
+        asset, prefix=PREFIX, index_status=(await status_of(session, [asset.id])).get(asset.id)
+    )
 
 
 @router.get(
@@ -385,7 +425,11 @@ async def patch_asset(asset_id: UUID, patch: AssetPatch, session: SessionDep) ->
     updated = await update_asset(session, asset_id, tags=tags, meta=meta)
     if updated is None:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="no such asset")
-    return AssetRead.of(updated, prefix=PREFIX)
+    return AssetRead.of(
+        updated,
+        prefix=PREFIX,
+        index_status=(await status_of(session, [updated.id])).get(updated.id),
+    )
 
 
 @router.delete(
@@ -402,6 +446,62 @@ async def delete_one_asset(asset_id: UUID, session: SessionDep, storage: Storage
     if not await delete_asset(session, storage, asset_id):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="no such asset")
     return Response(status_code=HTTPStatus.NO_CONTENT)
+
+
+@router.get(
+    "/{asset_id}/jobs",
+    summary="The indexing work of an asset",
+    description=(
+        "Every unit of work for the asset with its attempts, its timestamps and the reason "
+        "its last attempt failed, newest first per model. 404 when no asset carries that "
+        "identifier."
+    ),
+    response_model=IndexingJobList,
+)
+async def read_asset_jobs(asset_id: UUID, session: SessionDep) -> Any:
+    await _asset_or_404(session, asset_id)
+    return IndexingJobList(
+        items=[IndexingJobRead.of(job) for job in await jobs_of(session, asset_id)]
+    )
+
+
+@router.post(
+    "/{asset_id}/reindex",
+    status_code=HTTPStatus.ACCEPTED,
+    summary="Run an asset's indexing work again",
+    description=(
+        "Puts the asset's work back in the queue with its attempts and its last reason "
+        "cleared — the only way failed work runs again. `models` selects which work to "
+        "reset; omitted, it resets all of it. The answer says what was actually reset, "
+        "which is not what was asked for when the asset never had work for a model. 404 "
+        "when no asset carries that identifier, 422 when a model is one the service does "
+        "not know."
+    ),
+    response_model=ReindexResult,
+)
+async def reindex_asset(
+    asset_id: UUID,
+    session: SessionDep,
+    background: BackgroundTasks,
+    storage: StorageDep,
+    settings: SettingsDep,
+    session_factory: SessionFactoryDep,
+    pool: PoolDep,
+    request: ReindexRequest | None = None,
+) -> Any:
+    await _asset_or_404(session, asset_id)
+    asked = (request.models if request is not None else None) or None
+    try:
+        models = known_models(asked) if asked is not None else None
+    except UnknownModelError as exc:
+        return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, UNKNOWN_MODEL_TYPE, str(exc))
+
+    reset = await reset_work(session, asset_id, models=models)
+    # The same runner an upload schedules: work put back is work to do.
+    background.add_task(
+        drain, session_factory=session_factory, storage=storage, settings=settings, pool=pool
+    )
+    return ReindexResult(asset_id=asset_id, models=sorted(set(reset)), jobs=len(reset))
 
 
 def install(app: FastAPI) -> None:

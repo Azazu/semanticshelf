@@ -38,10 +38,10 @@
 
 ## 6. What the API shows
 
-- [ ] 6.1 `index_status` in the asset representation: the newest job per model, derived rather than stored. Verify: an integration test covering an asset with work done, one with work waiting and one whose work failed.
-- [ ] 6.2 The listing filter on the state of the work, with 422 for an unknown model or state. Verify: api and integration tests for each case.
-- [ ] 6.3 The jobs of an asset: attempts, timestamps and last reason; 404 for an identifier that is not stored. Verify: integration tests.
-- [ ] 6.4 The reset: chosen models or all of them, attempts cleared, reason cleared, state back to pending, 404 for an unknown asset, and the answer says what was reset. Verify: integration tests including a reset of failed work that then succeeds.
+- [x] 6.1 `index_status` in the asset representation: the newest job per model, derived rather than stored. Verify: an integration test covering an asset with work done, one with work waiting and one whose work failed.
+- [x] 6.2 The listing filter on the state of the work, with 422 for an unknown model or state. Verify: api and integration tests for each case.
+- [x] 6.3 The jobs of an asset: attempts, timestamps and last reason; 404 for an identifier that is not stored. Verify: integration tests.
+- [x] 6.4 The reset: chosen models or all of them, attempts cleared, reason cleared, state back to pending, 404 for an unknown asset, and the answer says what was reset. Verify: integration tests including a reset of failed work that then succeeds.
 
 ## 7. Failing inputs (high tier: one per new check)
 

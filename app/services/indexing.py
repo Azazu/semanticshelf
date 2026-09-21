@@ -13,13 +13,16 @@ ownership the claim handed out — if the job has since been reclaimed, reset, o
 deleted with its asset, nothing lands at all.
 """
 
+from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from uuid import UUID
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.settings import Settings
+from app.domain import EMBEDDING_MODELS, IndexingJob, UnknownModelError
 from app.ml.pool import acquire, run_in_pool
 from app.repositories.assets import AssetRepository
 from app.repositories.embeddings import EmbeddingRepository
@@ -245,3 +248,50 @@ async def drain(
             log.info("indexing batch finished", jobs=taken)
     except Exception:
         log.exception("indexing batch failed")
+
+
+# --- what the API shows -------------------------------------------------------
+#
+# These take the request's own session: they are reads and one small write on
+# behalf of a caller who is waiting, not steps of a runner.
+
+
+def known_models(models: Sequence[str]) -> tuple[str, ...]:
+    """The named models, or a refusal naming the first the service has never
+    heard of. Enabled is not required: work queued for a model that was later
+    switched off is still work an operator may want to reset."""
+    for model in models:
+        if model not in EMBEDDING_MODELS:
+            raise UnknownModelError(f"unknown model: {model!r}")
+    return tuple(models)
+
+
+async def status_of(
+    session: AsyncSession, asset_ids: Sequence[UUID]
+) -> Mapping[UUID, Mapping[str, str]]:
+    """`index_status` for a page of assets: the newest job per model, derived."""
+    return await IndexingJobRepository(session).latest_status_for(asset_ids)
+
+
+async def jobs_of(session: AsyncSession, asset_id: UUID) -> list[IndexingJob]:
+    """An asset's work with its attempts, timestamps and last reason."""
+    return await IndexingJobRepository(session).list_for_asset(asset_id)
+
+
+async def reset_work(
+    session: AsyncSession, asset_id: UUID, *, models: Sequence[str] | None = None
+) -> list[str]:
+    """Put an asset's work — all of it, or the models named — back in the queue.
+
+    The only way failed work runs again. Returns the model of every job it
+    reset, which is what the answer reports: asking for a model whose work this
+    asset never had resets nothing and says so.
+
+    The transaction is committed rather than opened: the endpoint has already
+    read the asset to answer 404 for one that is not stored, so this session is
+    inside a transaction by the time it gets here, and `session.begin()` would
+    refuse to open a second one.
+    """
+    reset = await IndexingJobRepository(session).reset(asset_id, models)
+    await session.commit()
+    return reset

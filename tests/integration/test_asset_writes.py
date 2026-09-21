@@ -100,7 +100,9 @@ async def test_an_empty_patch_changes_nothing(client: httpx.AsyncClient) -> None
     response = await client.patch(f"{ASSETS}/{created['id']}", json={})
 
     assert response.status_code == 200
-    assert response.json() == created
+    # The state of the work is not part of what a patch may change; it moved on
+    # its own, because the runner the upload scheduled finished meanwhile.
+    assert response.json() == created | {"index_status": {"clip-vit-l14": "done"}}
 
 
 async def test_the_picture_itself_cannot_be_changed(client: httpx.AsyncClient) -> None:

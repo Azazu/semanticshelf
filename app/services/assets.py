@@ -228,12 +228,18 @@ async def list_assets(
     tags_all: Sequence[str] = (),
     tags_any: Sequence[str] = (),
     source: str | None = None,
+    index_status: tuple[str, str] | None = None,
     limit: int,
     offset: int,
 ) -> tuple[list[Asset], bool]:
     """A page of assets, newest first, and whether more exist after it."""
     return await AssetRepository(session).page(
-        tags_all=tags_all, tags_any=tags_any, source=source, limit=limit, offset=offset
+        tags_all=tags_all,
+        tags_any=tags_any,
+        source=source,
+        index_status=index_status,
+        limit=limit,
+        offset=offset,
     )
 
 

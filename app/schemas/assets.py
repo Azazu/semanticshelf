@@ -5,6 +5,7 @@ clients and changes only additively, while the table is free to change with the
 schema. Nothing here reaches into a session.
 """
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Self
 from uuid import UUID
@@ -38,10 +39,20 @@ class AssetRead(BaseModel):
     source: str
     tags: list[str]
     meta: dict[str, Any]
+    index_status: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Model key to the state of that model's newest indexing job: pending, running, "
+            "done or failed. Derived from the queue, never stored; empty while an asset has "
+            "no work at all."
+        ),
+    )
     links: AssetLinks
 
     @classmethod
-    def of(cls, asset: Asset, *, prefix: str) -> Self:
+    def of(
+        cls, asset: Asset, *, prefix: str, index_status: Mapping[str, str] | None = None
+    ) -> Self:
         return cls(
             id=asset.id,
             created_at=asset.created_at,
@@ -54,6 +65,7 @@ class AssetRead(BaseModel):
             source=asset.source,
             tags=list(asset.tags),
             meta=dict(asset.meta),
+            index_status=dict(index_status or {}),
             links=AssetLinks(
                 file=f"{prefix}/{asset.id}/file",
                 thumbnail=f"{prefix}/{asset.id}/thumbnail",

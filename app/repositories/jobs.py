@@ -204,12 +204,14 @@ class IndexingJobRepository:
             lease_expires_at=None,
         )
 
-    async def reset(self, asset_id: UUID, models: Sequence[str] | None = None) -> int:
+    async def reset(self, asset_id: UUID, models: Sequence[str] | None = None) -> list[str]:
         """Put an asset's work back in the queue with a clean slate.
 
-        Clearing the lease is not housekeeping: it invalidates any claim still
-        outstanding, so a runner that comes back late cannot write over the
-        state this reset just created.
+        Returns the model of every row it reset, so the caller can say what
+        actually happened rather than what was asked for. Clearing the lease is
+        not housekeeping: it invalidates any claim still outstanding, so a
+        runner that comes back late cannot write over the state this reset just
+        created.
         """
         statement = (
             sa.update(IndexingJobRow)
@@ -223,21 +225,60 @@ class IndexingJobRepository:
                 started_at=None,
                 finished_at=None,
             )
+            .returning(IndexingJobRow.model)
         )
         if models:
             statement = statement.where(IndexingJobRow.model.in_(list(models)))
-        result = await self._session.execute(statement)
-        return int(result.rowcount)  # type: ignore[attr-defined]  # an UPDATE result has one
+        return list((await self._session.execute(statement)).scalars().all())
 
     # --- what the API shows ---------------------------------------------------
 
     async def latest_status(self, asset_id: UUID) -> Mapping[str, str]:
         """The state of the newest job per model: `index_status`, derived."""
+        return (await self.latest_status_for([asset_id])).get(asset_id, {})
+
+    async def latest_status_for(
+        self, asset_ids: Sequence[UUID]
+    ) -> Mapping[UUID, Mapping[str, str]]:
+        """The same, for a whole page of assets in one query.
+
+        A listing of a hundred assets must not become a hundred queries, and
+        `ix_jobs_asset` — `(asset_id, model, created_at desc)` — is exactly the
+        order this reads in, so `DISTINCT ON` takes the newest per pair without
+        sorting anything twice. Assets with no work at all are absent from the
+        result rather than present with an empty map: the caller knows which
+        identifiers it asked about.
+        """
+        if not asset_ids:
+            return {}
         newest = (
-            sa.select(IndexingJobRow.model, IndexingJobRow.status)
-            .distinct(IndexingJobRow.model)
-            .where(IndexingJobRow.asset_id == asset_id)
-            .order_by(IndexingJobRow.model, IndexingJobRow.created_at.desc())
+            sa.select(IndexingJobRow.asset_id, IndexingJobRow.model, IndexingJobRow.status)
+            .distinct(IndexingJobRow.asset_id, IndexingJobRow.model)
+            .where(IndexingJobRow.asset_id.in_(list(asset_ids)))
+            .order_by(
+                IndexingJobRow.asset_id,
+                IndexingJobRow.model,
+                IndexingJobRow.created_at.desc(),
+            )
         )
-        rows = await self._session.execute(newest)
-        return {model: status for model, status in rows}
+        statuses: dict[UUID, dict[str, str]] = {}
+        for asset_id, model, status in await self._session.execute(newest):
+            statuses.setdefault(asset_id, {})[model] = status
+        return statuses
+
+    @staticmethod
+    def newest_status_of(
+        asset_id: sa.ColumnElement[UUID] | sa.orm.InstrumentedAttribute[UUID], model: str
+    ) -> sa.ScalarSelect[str]:
+        """The state of one model's newest job for an asset, as a subquery.
+
+        Given so the listing can filter on it without the assets repository
+        having to know how the newest job is found.
+        """
+        return (
+            sa.select(IndexingJobRow.status)
+            .where(IndexingJobRow.asset_id == asset_id, IndexingJobRow.model == model)
+            .order_by(IndexingJobRow.created_at.desc(), IndexingJobRow.id.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
