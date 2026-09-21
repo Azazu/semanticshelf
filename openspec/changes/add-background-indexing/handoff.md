@@ -1,7 +1,7 @@
 # Handoff — add-background-indexing
 
 **Updated:** 2026-09-21 · claude
-**State:** awaiting-gate-1
+**State:** implementing
 **Branch:** change/add-background-indexing
 
 ## Done this session
@@ -16,10 +16,11 @@
 
 ## Next step
 
-Gate 1 round 1 returned `changes-requested` with three blockers and four
-lesser findings; all seven are fixed in the artifacts and the confirmation of
-round 1 is requested next.
+Gate 1 passed: Confirmation 3 on `aff810b` reads `confirmed`, all six findings
+resolved. Implementation may start — `/opsx:apply add-background-indexing` —
+beginning with task group 1 (settings, the claim query, its plan).
 
 ## Blockers
 
-None.
+The integration database was removed during cleanup; the first task that needs
+it recreates a throwaway pgvector container and migrates it.
