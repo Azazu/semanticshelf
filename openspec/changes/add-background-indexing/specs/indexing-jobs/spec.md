@@ -29,9 +29,12 @@ request that created the asset SHALL NOT wait for that work.
 ### Requirement: Work is claimed by exactly one runner at a time
 
 A runner SHALL take work by claiming it, and a claim SHALL make that work
-invisible to every other runner. Two runners claiming at the same moment SHALL
-NOT take the same unit. A claim SHALL record that an attempt has begun and
-SHALL set a lease that says how long the claim is good for.
+invisible to every other runner — a claimer SHALL NOT wait for another
+claimer's rows, it SHALL pass over them and take what is free. Two runners
+claiming at the same moment SHALL NOT take the same unit. A claim SHALL record
+that an attempt has begun, SHALL set a lease that says how long the claim is
+good for, and SHALL give the claimer a token identifying that particular
+claim.
 
 #### Scenario: Two runners claim at once
 - **WHEN** two runners claim from a queue holding one unit of work
@@ -41,6 +44,12 @@ SHALL set a lease that says how long the claim is good for.
 #### Scenario: A claim is bounded
 - **WHEN** a runner claims with a batch bound
 - **THEN** it takes at most that many units, leaving the rest for others
+
+#### Scenario: A claimer passes over work another claimer holds
+- **WHEN** one claimer holds a due unit inside an unfinished transaction and a
+  second claimer claims while it is held
+- **THEN** the second claimer promptly takes a different due unit rather than
+  waiting for the first to finish
 
 ### Requirement: A runner that dies releases its work by itself
 
@@ -66,6 +75,13 @@ delivery is at-least-once, executing the same work twice SHALL leave exactly
 one vector for that asset and model, with the second write replacing the
 first.
 
+A runner SHALL only be able to finish work it still owns. Finishing SHALL
+carry the token from the claim, and SHALL take effect only while that token is
+still the current one; if the work has since been reclaimed by another runner,
+reset by an operator, or removed with its asset, the finish SHALL take effect
+nowhere — neither the vector nor the state change — and the runner SHALL
+discard its result rather than recreate anything.
+
 #### Scenario: Work succeeds
 - **WHEN** a unit of work is executed successfully
 - **THEN** the asset has a vector for that model and the work is marked done
@@ -81,13 +97,32 @@ first.
 - **THEN** neither the vector nor the completion is recorded, and the work is
   attempted again after its lease expires
 
+#### Scenario: A late finish after the work was reclaimed
+- **WHEN** a runner whose lease expired finishes work that another runner has
+  since claimed
+- **THEN** nothing it wrote takes effect, the work stays as the second runner
+  left it, and the late runner does not retry
+
+#### Scenario: A late failure after the work was reclaimed
+- **WHEN** a runner whose lease expired reports a failure for work another
+  runner has since claimed
+- **THEN** the work's attempts, its state and its reason are the second
+  runner's, untouched by the first
+
+#### Scenario: A late finish after the work was reset
+- **WHEN** an operator resets work while a runner still holds an expired claim
+  on it, and that runner then finishes
+- **THEN** the reset stands: the work is still waiting, with no attempts
+  against it
+
 ### Requirement: Failure is retried a bounded number of times, then reported
 
 Work that fails SHALL return to the queue with a delay that grows with each
 attempt, until the configured number of attempts is spent; then it SHALL be
-marked failed and SHALL carry a short reason. The reason SHALL name what went
-wrong without a stack trace and without the contents of any file. Failed work
-SHALL NOT be attempted again on its own.
+marked failed and SHALL carry a reason. The reason SHALL be built from the
+failure's class and its message, SHALL be bounded to at most two kilobytes
+however long that message is, and SHALL contain no stack trace and no bytes
+read from a stored file. Failed work SHALL NOT be attempted again on its own.
 
 #### Scenario: A transient failure
 - **WHEN** work fails and attempts remain
@@ -100,19 +135,34 @@ SHALL NOT be attempted again on its own.
 
 #### Scenario: A reason says what happened, not how
 - **WHEN** work fails with an exception
-- **THEN** the recorded reason is short and names the failure, and contains no
-  stack trace and no file content
+- **THEN** the recorded reason names the failure's class and message, and
+  contains no stack trace
 
-### Requirement: Work for an asset that is gone ends without retrying
+#### Scenario: A failure that carries a picture in its message
+- **WHEN** work fails with a message holding bytes read from the stored file
+- **THEN** those bytes are not in the recorded reason
 
-Work whose asset no longer exists SHALL be finished as failed with a reason
-naming that cause, on the first attempt, without a retry: the asset will not
-come back, and repeating the work cannot succeed.
+#### Scenario: A failure with an enormous message
+- **WHEN** work fails with a message longer than the recorded reason may be
+- **THEN** the reason is stored at the bound and remains readable
+
+### Requirement: Work for an asset that is gone disappears with it
+
+Deleting an asset removes everything derived from it, including its work, so
+there is no record left to carry a failure. A runner executing such work SHALL
+discover it when its finish takes effect nowhere; it SHALL discard its result,
+SHALL NOT recreate the work, SHALL NOT retry, and SHALL NOT answer with a
+server error. Nothing SHALL remain afterwards: no vector, no work, no file.
 
 #### Scenario: The asset was deleted mid-flight
 - **WHEN** an asset is deleted while work for it is being executed
-- **THEN** that work ends as failed, naming the deletion as the cause, and is
-  not retried
+- **THEN** the work is gone with the asset, the runner's result is discarded,
+  and no vector exists for that asset
+
+#### Scenario: The runner survives it
+- **WHEN** a runner's work vanishes under it in that way
+- **THEN** the runner records the fact and continues with the rest of its
+  batch
 
 ### Requirement: The state of an asset's work is visible
 
@@ -141,6 +191,29 @@ again.
 - **WHEN** the work of an identifier no asset carries is asked for, or a reset
   is asked for
 - **THEN** the answer is 404 problem details
+
+### Requirement: A stored file is inspected again before it is decoded
+
+Executing work SHALL read the stored original through the same inspection an
+upload goes through: the format detected from the bytes, the pixel cap and the
+minimum side applied again, and the pixels converted to three channels before
+the model sees them. A file that no longer satisfies those rules SHALL fail
+its work rather than be decoded, because the checks made at upload say nothing
+about a file that has changed on disk since.
+
+#### Scenario: A file replaced on disk with something unacceptable
+- **WHEN** the stored original of an asset is replaced with a file that would
+  not be accepted at upload
+- **THEN** the work fails with a reason, and no vector is written
+
+#### Scenario: A file replaced with a picture beyond the caps
+- **WHEN** the stored original is replaced with a picture larger than the
+  configured pixel cap
+- **THEN** the work fails before those pixels are decoded
+
+#### Scenario: A picture that is not three-channel
+- **WHEN** the stored original is greyscale or has an alpha channel
+- **THEN** it is converted before the model sees it, and the work succeeds
 
 ### Requirement: Indexing does not block the service
 

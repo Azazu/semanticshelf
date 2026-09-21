@@ -1,7 +1,7 @@
 # Handoff — add-background-indexing
 
 **Updated:** 2026-09-21 · claude
-**State:** proposing
+**State:** awaiting-gate-1
 **Branch:** change/add-background-indexing
 
 ## Done this session
@@ -16,11 +16,10 @@
 
 ## Next step
 
-`/gate-review add-background-indexing 1` — tier high, so Codex reviews the
-artifacts before any code. After an approving verdict:
-`/opsx:apply add-background-indexing`.
+Gate 1 round 1 returned `changes-requested` with three blockers and four
+lesser findings; all seven are fixed in the artifacts and the confirmation of
+round 1 is requested next.
 
 ## Blockers
 
-The integration database was removed during cleanup; the first task that needs
-it recreates a throwaway pgvector container and migrates it.
+None.

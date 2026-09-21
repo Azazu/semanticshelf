@@ -35,7 +35,7 @@ scheduling beyond "first due, first served".
 | Money rounding | n/a | No money anywhere in the project. |
 | Empty/zero/null inputs | yes | An asset uploaded while no model is enabled gets no work and reports an empty status map rather than a lie. A job naming a model that is no longer enabled fails with a reason instead of hanging in the queue forever. A reset with no models named resets all of the asset's work. |
 | Authorization boundary | yes | None exists (single-tenant, unauthenticated). What matters instead is that the reset endpoint cannot be used to make the service do unbounded work: it only clears attempts on work that already exists for an asset that exists. |
-| Deletion/expiry | yes | Two kinds. An asset deleted mid-flight takes its jobs with it (`ON DELETE CASCADE`), so the running job's write fails on the foreign key; that is caught and finished as `failed: asset-deleted` without a retry. A lease expiring is the other: it makes work claimable again, which is the mechanism for a dead runner. |
+| Deletion/expiry | yes | Two kinds. An asset deleted mid-flight takes its job row with it (`ON DELETE CASCADE`), so there is **nothing left to mark failed** — the conditional finish of decision 9 simply matches no row, the whole transaction rolls back, and the runner discards its result and moves on. (Gate 1 finding 1: the requirement and this table both claimed a `failed: asset-deleted` end state the schema cannot hold; FR-IDX-6 is corrected in this change.) A lease expiring is the other kind: it makes work claimable again, which is the mechanism for a dead runner, and decision 9 is what keeps the dead runner from overwriting its successor. |
 | Idempotency of retries | yes | Delivery is at-least-once by design. The embedding write is an upsert on `(asset_id, model)`, so a second execution replaces the first vector rather than adding one; the finish is part of the same transaction, so a repeat cannot double-count anything. |
 
 ## Decisions
@@ -61,7 +61,8 @@ scheduling beyond "first due, first served".
    work starts, so a crash cannot lose the fact that they were taken).
    `execute` runs outside a transaction: it reads a file and runs a model,
    which must not hold a database connection. `finish` opens a new transaction
-   and writes the vector **and** the job's new state together.
+   and writes the vector **and** the job's new state together — conditionally,
+   as decision 9 describes.
 
 4. **A lease, not a heartbeat.** A claim sets `lease_expires_at = now +
    JOB_LEASE_SECONDS`; nothing refreshes it. A runner that dies releases its
@@ -93,6 +94,36 @@ scheduling beyond "first due, first served".
    before. Deleting and inserting would lose that and would race with a runner
    holding the row.
 
+9. **A finish only lands while the claim still owns the work.** A lease alone
+   is not enough: once A's lease expires, B may reclaim, and A — still alive,
+   merely slow — would otherwise commit its result over B's. Every finishing
+   statement therefore carries the token its claim handed out and updates
+   `WHERE id = :id AND status = 'running' AND lease_expires_at = :token`. The
+   lease timestamp *is* the token: a reclaim can only happen after the previous
+   lease expired, so two claims of one row always carry different values, and a
+   reset clears it to null, which invalidates any outstanding claim. When the
+   update matches nothing — reclaimed, reset, or the asset and its row deleted
+   — the whole transaction rolls back, so the vector is not written either, and
+   the runner discards its result and logs the fact.
+   Rejected: `attempts` as the token (a reset clears it, so two different
+   claims can carry the same value); a new generation column (a migration this
+   change does not need, for a token the lease already provides).
+
+10. **A stored file is inspected again before it is decoded** (FR-IDX-7). The
+   runner passes the stored original through the same inspection an upload
+   uses — format from the bytes, pixel cap, minimum side — and converts to
+   three channels before the model sees it. The checks made at upload describe
+   the file that arrived, not the file that is on disk now; a file replaced
+   underneath the service must not reach the decoder on the strength of a
+   check made about different bytes.
+
+11. **A failure's reason is built, not copied.** It is the exception's class
+   and its message, truncated to the two kilobytes the column allows, with the
+   truncation visible. Nothing read from a file goes into it: the message is
+   taken from the exception, and the code that raises with file bytes in a
+   message is the code that would leak them, so the bound and the scrub are
+   both applied where the reason is built rather than trusted upstream.
+
 ## Risks / Trade-offs
 
 - [Work that outlives its lease is executed twice] → decision 4; the upsert
@@ -113,7 +144,9 @@ scheduling beyond "first due, first served".
 ## Migration Plan
 
 No schema change: change 3 created the table and both indexes. Deployment is
-the new code; existing assets (there are none in any environment yet) would
-have no work, and the reset endpoint is the way to create it for them if that
-ever matters. Rollback is the previous code — jobs already `pending` simply
-stay there until a runner exists again.
+the new code. Assets uploaded before it have no work and no way to acquire any
+— reset only clears the attempts of work that exists (decision 8), and
+creating work for old assets is not in this change; there are no such assets
+in any environment, and a change that needs it can add a command. Rollback is
+the previous code: jobs already `pending` simply stay there until a runner
+exists again.
