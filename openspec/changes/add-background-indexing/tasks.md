@@ -111,7 +111,7 @@ code.
 
 ## 9. Wrap-up
 
-- [ ] 9.1 Commits per logical block, no agent trailers, each body naming the evidence for the tasks its diff holds. Verify: `git log --format=%B main..HEAD | grep -c '^Co-Authored-By'` prints `0`.
-- [ ] 9.2 `env -u DATABASE_URL make check` green and `make test-integration` green against pgvector. Verify: both outputs recorded in a commit body.
+- [x] 9.1 Commits per logical block, no agent trailers, each body naming the evidence for the tasks its diff holds. Verify: `git log --format=%B main..HEAD | grep -c '^Co-Authored-By'` prints `0`.
+- [x] 9.2 `env -u DATABASE_URL make check` green and `make test-integration` green against pgvector. Verify: both outputs recorded in a commit body.
 - [ ] 9.3 Acceptance on GitHub (the user pushes the branch): both jobs green. Verify: the user reports the run.
 - [ ] 9.4 `openspec validate add-background-indexing --strict` and `scripts/pregate-verify.sh gate2 add-background-indexing` pass; request Gate 2 with `/gate-review add-background-indexing 2`.

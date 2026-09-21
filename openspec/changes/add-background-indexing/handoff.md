@@ -6,21 +6,46 @@
 
 ## Done this session
 
-- Branch and scaffold created. The work, from roadmap row 6 and
-  `docs/explanation/requirements.md` §2.4 (FR-IDX-1…8): an uploaded asset
-  finally gets its vectors. One job per enabled model enqueued in the same
-  transaction as the asset, a runner that claims, executes and finishes them
-  through functions the stage-3 worker will reuse, `index_status` in the asset
-  representation, the jobs and reindex endpoints, leases for a runner that
-  died, bounded retries with backoff, and ADR-003 for the queue's design.
+Task groups 1-8 complete; 55 of 59 tasks checked.
+
+- `app/services/indexing.py`: the queue's policy (backoff, what a reason may
+  say) and its three steps — claim, execute, finish — each in its own session,
+  plus `run_batch` and the `drain` an upload and a reset schedule.
+- `app/repositories/jobs.py`: the claim query with `SKIP LOCKED`, the lease,
+  the conditional finishes bound to it, the reset, and the newest status per
+  model for one asset or a whole page.
+- The API surface: `index_status` in every asset representation,
+  `index_status=<model>:<state>` on the listing, `GET /assets/{id}/jobs` and
+  `POST /assets/{id}/reindex`.
+- An absent stored file is no longer reported as "not a picture": the
+  inspection lets `FileNotFoundError` through, which is what made the
+  service's own missing-file branch reachable.
+- 25 failing-input probes (group 7), each removing one guard and watching its
+  own test fail; the log is in the commit `test(indexing): the greyscale check
+  sees what the model was handed`.
+- ADR-003 (queue in PostgreSQL, with its measurements),
+  `docs/how-to/indexing.md` run against a live service, the three settings in
+  the reference, and the corrected layout in AGENTS.md.
+- Security-sensitive surface in this change: none of authentication, money or
+  cryptography; it does touch input handling (a stored file is re-inspected
+  before it is decoded) and concurrency (the claim, the lease, the conditional
+  finishes), which is why the tier is `high`.
 
 ## Next step
 
-Gate 1 passed: Confirmation 3 on `aff810b` reads `confirmed`, all six findings
-resolved. Implementation may start — `/opsx:apply add-background-indexing` —
-beginning with task group 1 (settings, the claim query, its plan).
+Push the branch and report the CI run:
+
+```
+git push -u origin change/add-background-indexing
+```
+
+Then tasks 9.3 and 9.4 are checked and Gate 2 is requested with
+`/gate-review add-background-indexing 2`.
+
+Local evidence, both in their documented form:
+`env -u DATABASE_URL make check` green (252 tests);
+`make test-integration` green (113 tests) against pgvector.
 
 ## Blockers
 
-The integration database was removed during cleanup; the first task that needs
-it recreates a throwaway pgvector container and migrates it.
+None.
