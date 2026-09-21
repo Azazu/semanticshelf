@@ -32,3 +32,19 @@
 | 4 | changes-requested — the byte bound and its boundary probe are now explicit, but the scrub remains unspecified. Decision 11 only says that a scrub is applied where the reason is built; it does not say how file bytes embedded in an arbitrary exception message are identified or removed. Task 3.4 and probe 7.19 therefore do not define a feasible mechanism whose security claim can be enforced. |
 | 5 | changes-requested — the inventory adds the guards named in Round 1, but it is still not exhaustive after adding the ownership fix. The token condition is required separately on `done`, retry-to-`pending`, and exhausted-to-`failed` finishing statements; probe 7.9 removes it only from a finishing statement and observes only late success. No single-guard probe demonstrates that removing the token from either failure transition makes the stale-failure test fail. |
 | 6 | confirmed — task 5.1 now holds one due row in an open transaction, requires a second claimer to take another due row within an enforced deadline, and probe 7.5 removes only `SKIP LOCKED`, making blocking observable. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** d02aee61ab3d62e9eea55cc9c475e47b6d458e95
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — FR-AST-12, FR-IDX-6, the proposal, design, delta spec, and tasks now consistently say that deletion cascades the job away; a late finish matches nothing, rolls back its vector, and ends quietly without recreating or retrying work. |
+| 2 | confirmed — every success and failure finish is fenced by the claim's lease-timestamp token, reset invalidates the token, and the plan covers stale success, stale retry, stale exhaustion, and reset with real-PostgreSQL tests and separate single-guard probes. |
+| 3 | confirmed — the proposal, design, delta spec, implementation task, integration coverage, and probes require the stored original to pass format, size, and minimum-side inspection again before decoding and to be converted to RGB, including replaced-file cases. |
+| 4 | changes-requested — decision 11 now gives a feasible non-disclosure mechanism and tasks 3.4, 7.18, 7.19, and 7.19a cover its guards, but the resulting contract is internally inconsistent. Normative FR-IDX-3 still requires `last_error` to contain the exception class and message, and the delta spec's broad “A reason says what happened, not how” scenario likewise requires class and message whenever work fails with an exception; both contradict the new rule and adjacent foreign-failure scenario that record only the class for third-party exceptions. Amend the normative requirement and narrow the broad scenario so the origin-based mechanism is the single enforceable contract. |
+| 5 | confirmed — the inventory now assigns independent probes to the token on done, retry, and exhausted transitions, reset invalidation, disabled-model handling, the byte bound, foreign-message suppression, controlled-message preservation, renewed file inspection, and RGB conversion. |
+| 6 | confirmed — the real-PostgreSQL test holds one due row locked while a second claimant must take another within an enforced deadline, and its probe removes only `SKIP LOCKED`, making blocking observable. |
