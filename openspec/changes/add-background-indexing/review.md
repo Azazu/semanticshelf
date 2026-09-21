@@ -64,3 +64,15 @@
 | 4 | confirmed — FR-IDX-3 and the delta spec now use one origin-based disclosure rule: every reason carries the class, only service-raised failures carry a controlled message, and foreign messages are dropped. The design specifies the mechanism, while tasks and probes cover the two-kilobyte boundary, visible truncation, traceback exclusion, foreign file-content suppression, and controlled-message preservation. |
 | 5 | confirmed — the high-tier inventory assigns a feasible single-guard probe to each guard implicated by the round: all three positive settings, every fenced finish and reset invalidation, disabled-model handling, error disclosure and size guards, renewed stored-file inspection, and three-channel conversion. |
 | 6 | confirmed — the PostgreSQL test holds one due row locked while a second claimant must promptly take another due row under an enforced deadline, and its mutation probe removes only `SKIP LOCKED`, so blocking is observably detected. |
+
+## Round 1 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** 000157e54d110996324ebf74aceb7bea6a33ea44
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `app/api/assets.py:493`; `app/repositories/jobs.py:230`; `app/schemas/jobs.py:50`; `docs/how-to/indexing.md:191` | An explicitly empty model selection resets every job. The request schema documents only an omitted or null `models` value as “all,” while the how-to says a supplied list selects work, but the endpoint collapses `[]` to `None` with `... or None`, and the repository also treats any empty sequence as an absent filter. Consequently `POST .../reindex` with `{"models": []}` unexpectedly resets and schedules all of the asset's work instead of selecting none (or rejecting an empty selection). Preserve the distinction or validate it at the edge, cover the HTTP case, and add the high-tier failing-input demonstration for the chosen guard. | open |
+| 2 | major | `app/schemas/jobs.py:16-41`; `openspec/changes/add-background-indexing/specs/indexing-jobs/spec.md:179-186`; `docs/explanation/requirements.md` FR-IDX-4 | The jobs endpoint omits `lease_expires_at`. The contract requires an asset's jobs to expose their timestamps, and this timestamp is the one that tells an operator when a `running` claim becomes reclaimable; it is present in the domain object but dropped by `IndexingJobRead.of`. Add it to the wire schema and mapping, verify running and at-rest values, and reconcile the recorded how-to output that currently demonstrates a running job without its lease expiry. | open |
