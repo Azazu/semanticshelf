@@ -1,7 +1,7 @@
 # Handoff — add-embedder-protocol-and-clip
 
 **Updated:** 2026-09-21 · claude
-**State:** awaiting-gate-2
+**State:** ready-to-merge
 **Branch:** change/add-embedder-protocol-and-clip
 
 ## Done this session
@@ -37,18 +37,10 @@ two tasks that the push and the gate request themselves close.
 
 ## Next step
 
-Gate 2 round 1 came back `changes-requested` with three `major` findings;
-all three are fixed and the confirmation of round 1 is requested next.
-
-1. List settings were unreadable from the environment (a complex type is
-   JSON-decoded before validators run) — both fields are `NoDecode` now, and
-   the tests go through the environment and a dotenv file.
-2. Three sequential checks broke the probe's own "about twice the timeout"
-   bound — the two that need the database run concurrently, with a timing
-   test.
-3. The tracked configuration template still named the superseded settings —
-   the developer replaced the block (the security tooling blocks an agent
-   from writing that file); the application starts with exactly those values.
+Gate 2 passed: round 1 was `changes-requested` with three `major` findings,
+all three fixed, and Confirmation 1 on commit 6e6643f reads `confirmed`.
+The user merges with `/git:merge add-embedder-protocol-and-clip`, then
+`/opsx:archive add-embedder-protocol-and-clip`.
 
 ## Blockers
 
