@@ -149,3 +149,23 @@ def _clean_up(storage: MediaStorage, asset_id: UUID, staged: StagedUpload | None
     if staged is not None:
         storage.discard(staged.path)
     storage.remove_any(asset_id)
+
+
+async def get_asset(session: AsyncSession, asset_id: UUID) -> Asset | None:
+    """One asset, or nothing."""
+    return await AssetRepository(session).get(asset_id)
+
+
+async def list_assets(
+    session: AsyncSession,
+    *,
+    tags_all: Sequence[str] = (),
+    tags_any: Sequence[str] = (),
+    source: str | None = None,
+    limit: int,
+    offset: int,
+) -> tuple[list[Asset], bool]:
+    """A page of assets, newest first, and whether more exist after it."""
+    return await AssetRepository(session).page(
+        tags_all=tags_all, tags_any=tags_any, source=source, limit=limit, offset=offset
+    )

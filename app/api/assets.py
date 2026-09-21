@@ -17,20 +17,26 @@ Every refusal here is problem details with a stable type, and every one of
 them leaves the store and the media root exactly as it found them.
 """
 
+import os
 from http import HTTPStatus
-from typing import Annotated, Any
+from pathlib import Path
+from typing import Annotated, Any, Literal
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, FastAPI, Request, Response
-from fastapi.responses import JSONResponse
+import structlog
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from app.core.errors import instance_for_current_request, problem, problem_response
 from app.core.settings import Settings
 from app.db.engine import get_session
-from app.schemas.assets import DUPLICATE_TYPE, AssetRead, DuplicateAssetProblem
+from app.domain import ASSET_SOURCES, Asset
+from app.schemas.assets import DUPLICATE_TYPE, AssetPage, AssetRead, DuplicateAssetProblem
 from app.services import images
-from app.services.assets import DuplicateAssetError, create_asset
+from app.services.assets import DuplicateAssetError, create_asset, get_asset, list_assets
 from app.services.tagging import (
     METADATA_MAX_BYTES,
     MetadataError,
@@ -63,6 +69,16 @@ INVALID_META_TYPE = "/errors/invalid-meta"
 UNSUPPORTED_TYPE = "/errors/unsupported-media-type"
 TOO_LARGE_TYPE = "/errors/image-too-large"
 TOO_SMALL_TYPE = "/errors/image-too-small"
+
+#: The listing's bounds, fixed by the requirements.
+DEFAULT_LIMIT = 20
+MAX_LIMIT = 100
+MAX_OFFSET = 10_000
+#: A day, and private: an asset's bytes never change, but they are not public.
+CACHE_CONTROL = "private, max-age=86400"
+THUMBNAIL_MEDIA_TYPE = "image/webp"
+
+log = structlog.stdlib.get_logger(__name__)
 
 
 def get_storage(request: Request) -> MediaStorage:
@@ -168,6 +184,128 @@ async def upload_asset(
 
     response.headers["Location"] = f"{PREFIX}/{asset.id}"
     return AssetRead.of(asset, prefix=PREFIX)
+
+
+async def _asset_or_404(session: AsyncSession, asset_id: UUID) -> Asset:
+    asset = await get_asset(session, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="no such asset")
+    return asset
+
+
+async def _serve(path: Path, *, asset: Asset, media_type: str, filename: str) -> FileResponse:
+    """A stored file, streamed, with the validators a client can revalidate on.
+
+    The entity tag is the content hash the service already stores, so
+    revalidation costs no read. A file that is gone is a 404 with a warning:
+    the asset exists, its bytes do not, and that is an operational fact
+    (`storage prune` reconciles it), not a server error.
+    """
+    try:
+        stat_result = await run_in_threadpool(os.stat, path)
+    except OSError:
+        log.warning("stored file missing", asset_id=str(asset.id), file=path.name)
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail="the stored file is missing"
+        ) from None
+    return FileResponse(
+        path,
+        media_type=media_type,
+        stat_result=stat_result,
+        content_disposition_type="inline",
+        filename=filename,
+        headers={"cache-control": CACHE_CONTROL, "etag": f'"{asset.sha256}"'},
+    )
+
+
+@router.get(
+    "",
+    summary="List assets",
+    description=(
+        "Newest first, with the identifier as tie-break. `limit` defaults to 20 and is at "
+        "most 100, `offset` at most 10 000. Filter by `tags_all`, `tags_any` (comma-separated, "
+        "normalised like any tag) and `source`. The page says whether more items exist; there "
+        "is no total, which would be stale the moment it was read."
+    ),
+    response_model=AssetPage,
+)
+async def list_asset_page(
+    session: SessionDep,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    offset: Annotated[int, Query(ge=0, le=MAX_OFFSET)] = 0,
+    tags_all: str | None = None,
+    tags_any: str | None = None,
+    source: Literal[ASSET_SOURCES] | None = None,  # type: ignore[valid-type]
+) -> Any:
+    try:
+        required = split_tag_fields([tags_all]) if tags_all else ()
+        any_of = split_tag_fields([tags_any]) if tags_any else ()
+    except TagError as exc:
+        return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, INVALID_TAGS_TYPE, str(exc))
+
+    assets, has_more = await list_assets(
+        session,
+        tags_all=required,
+        tags_any=any_of,
+        source=source,
+        limit=limit,
+        offset=offset,
+    )
+    return AssetPage(
+        items=[AssetRead.of(asset, prefix=PREFIX) for asset in assets],
+        limit=limit,
+        offset=offset,
+        has_more=has_more,
+    )
+
+
+@router.get(
+    "/{asset_id}",
+    summary="Read an asset",
+    description="The asset's representation, or 404 when no asset carries that identifier.",
+    response_model=AssetRead,
+)
+async def read_asset(asset_id: UUID, session: SessionDep) -> Any:
+    return AssetRead.of(await _asset_or_404(session, asset_id), prefix=PREFIX)
+
+
+@router.get(
+    "/{asset_id}/file",
+    summary="The original bytes",
+    description=(
+        "The stored original, streamed, with the detected content type, a private cache "
+        "lifetime and the content hash as the entity tag. 404 when the asset is unknown or "
+        "its file is missing from storage."
+    ),
+    response_class=FileResponse,
+)
+async def read_file(asset_id: UUID, session: SessionDep, storage: StorageDep) -> FileResponse:
+    asset = await _asset_or_404(session, asset_id)
+    return await _serve(
+        storage.original(asset.id, asset.file_ext),
+        asset=asset,
+        media_type=asset.content_type,
+        filename=f"{asset.id}.{asset.file_ext}",
+    )
+
+
+@router.get(
+    "/{asset_id}/thumbnail",
+    summary="The thumbnail",
+    description=(
+        "The WebP thumbnail made at upload, with the same caching and validator rules as the "
+        "original. 404 when the asset is unknown or its thumbnail is missing from storage."
+    ),
+    response_class=FileResponse,
+)
+async def read_thumbnail(asset_id: UUID, session: SessionDep, storage: StorageDep) -> FileResponse:
+    asset = await _asset_or_404(session, asset_id)
+    return await _serve(
+        storage.thumbnail(asset.id),
+        asset=asset,
+        media_type=THUMBNAIL_MEDIA_TYPE,
+        filename=f"{asset.id}.thumb.webp",
+    )
 
 
 def install(app: FastAPI) -> None:

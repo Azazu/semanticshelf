@@ -26,9 +26,9 @@
 
 ## 5. Reading an asset
 
-- [ ] 5.1 Read one asset by identifier (200 and 404) and serve its bytes and its thumbnail: streamed from disk, detected content type, disposition naming the identifier, private cache lifetime, entity tag from the content hash. Verify: api tests assert the headers and that the body equals the stored bytes.
-- [ ] 5.2 A file missing from storage answers 404 with a warning in the log, never a server error. Verify: an api test removes the file behind an asset and asserts the status, the problem body and the logged warning.
-- [ ] 5.3 Listing: newest first with the identifier as tie-break, default and maximum page size, maximum offset, the tag filters and the source filter, `has_more` from one extra row, no total. Verify: an api test pages through more assets than one page holds and asserts each appears exactly once; a test asserts 422 for a page size over the maximum; the filter cases assert the exact set returned.
+- [x] 5.1 Read one asset by identifier (200 and 404) and serve its bytes and its thumbnail: streamed from disk, detected content type, disposition naming the identifier, private cache lifetime, entity tag from the content hash. Verify: api tests assert the headers and that the body equals the stored bytes.
+- [x] 5.2 A file missing from storage answers 404 with a warning in the log, never a server error. Verify: an api test removes the file behind an asset and asserts the status, the problem body and the logged warning.
+- [x] 5.3 Listing: newest first with the identifier as tie-break, default and maximum page size, maximum offset, the tag filters and the source filter, `has_more` from one extra row, no total. Verify: an api test pages through more assets than one page holds and asserts each appears exactly once; a test asserts 422 for a page size over the maximum; the filter cases assert the exact set returned.
 
 ## 6. Changing and removing an asset
 
