@@ -53,6 +53,21 @@ class IndexingJobRepository:
         keys = list(models) if models is not None else list(EMBEDDING_MODELS)
         return [await self.add(asset_id=asset_id, model=key) for key in keys]
 
+    async def fail_for_asset(self, asset_id: UUID, reason: str) -> int:
+        """Finish every unfinished job of one asset as failed, with a reason.
+
+        Used when an asset's file has gone missing: the work cannot be done and
+        will not become doable, so it is closed rather than retried.
+        """
+        statement = (
+            sa.update(IndexingJobRow)
+            .where(IndexingJobRow.asset_id == asset_id)
+            .where(IndexingJobRow.status.in_(("pending", "running")))
+            .values(status="failed", last_error=reason, finished_at=sa.func.now())
+        )
+        result = await self._session.execute(statement)
+        return int(result.rowcount)  # type: ignore[attr-defined]  # an UPDATE result has one
+
     async def list_for_asset(self, asset_id: UUID) -> list[IndexingJob]:
         """An asset's jobs, newest first per model."""
         statement = (

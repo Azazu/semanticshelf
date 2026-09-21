@@ -83,6 +83,18 @@ class AssetRepository:
         ).scalar_one_or_none()
         return to_domain(row) if row is not None else None
 
+    async def stored_files(self) -> list[tuple[UUID, str]]:
+        """Every asset with the format of its original: what should be on disk."""
+        rows = await self._session.execute(sa.select(AssetRow.id, AssetRow.file_ext))
+        return [(row.id, row.file_ext) for row in rows]
+
+    async def existing_ids(self, ids: Sequence[UUID]) -> set[UUID]:
+        """Which of these identifiers are stored. Empty input touches nothing."""
+        if not ids:
+            return set()
+        rows = await self._session.execute(sa.select(AssetRow.id).where(AssetRow.id.in_(list(ids))))
+        return {row.id for row in rows}
+
     async def delete(self, asset_id: UUID) -> bool:
         """Remove an asset with its embeddings and jobs. True when a row went."""
         statement = sa.delete(AssetRow).where(AssetRow.id == asset_id).returning(AssetRow.id)
