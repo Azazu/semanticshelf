@@ -6,10 +6,10 @@ can construct several configurations in one process.
 """
 
 from pathlib import Path
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from app.domain import CLIP_VIT_L14, IMPLEMENTED_MODELS
 
@@ -34,9 +34,12 @@ class Settings(BaseSettings):
     # --- embedding models ---------------------------------------------------
     # The default is what this build implements, not every key the schema
     # knows: a default configuration must be able to start.
-    enabled_models: tuple[str, ...] = tuple(sorted(IMPLEMENTED_MODELS))
+    #: `NoDecode` because a tuple is a complex type: without it the environment
+    #: source tries to read the value as JSON before any validator runs, and
+    #: `ENABLED_MODELS=clip-vit-l14` fails to parse instead of being split below.
+    enabled_models: Annotated[tuple[str, ...], NoDecode] = tuple(sorted(IMPLEMENTED_MODELS))
     #: Loaded by the lifespan at start; empty means nothing loads until asked.
-    model_warmup: tuple[str, ...] = ()
+    model_warmup: Annotated[tuple[str, ...], NoDecode] = ()
     #: Where model weights are cached. Gitignored, and never inside the package.
     model_cache: Path = DEFAULT_MODEL_CACHE
     #: The checkpoint behind the `clip-vit-l14` key. A compatible fine-tune or
@@ -63,9 +66,17 @@ class Settings(BaseSettings):
     @field_validator("enabled_models", "model_warmup", mode="before")
     @classmethod
     def _split_comma_separated(cls, value: object) -> object:
-        """`ENABLED_MODELS=clip-vit-l14,dinov2-large` rather than JSON."""
+        """`ENABLED_MODELS=clip-vit-l14,dinov2-large` rather than JSON.
+
+        Reached only because the fields are marked `NoDecode`; an empty
+        variable means an empty tuple, not a one-element tuple of nothing.
+        """
         if isinstance(value, str):
-            return tuple(item.strip() for item in value.split(",") if item.strip())
+            value = tuple(item.strip() for item in value.split(",") if item.strip())
+        if isinstance(value, tuple | list):
+            # A key named twice is one enabled model, not two: duplicates would
+            # become duplicate indexing jobs per asset.
+            return tuple(dict.fromkeys(value))
         return value
 
     @model_validator(mode="after")

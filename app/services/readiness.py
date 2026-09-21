@@ -152,11 +152,22 @@ async def run_checks(
     enabled_models: Sequence[str] = (),
     script_dir: Path = ALEMBIC_DIR,
 ) -> dict[str, CheckResult]:
-    """All readiness checks; the later ones are skipped when the database is not answering."""
+    """All readiness checks; the later ones are skipped when the database is not answering.
+
+    The two checks that need a working database run concurrently rather than one
+    after the other. Each carries the same budget, and the probe as a whole must
+    answer within about twice the timeout — a bound that adding a third
+    sequential check would have broken, and that adding a fourth would break
+    again.
+    """
     database = await check_database(engine, timeout)
-    skipped = CheckResult(False, SKIPPED_AFTER_DATABASE_FAILURE)
-    migrations = await check_migrations(engine, timeout, script_dir) if database.ok else skipped
-    models = await check_models(engine, timeout, enabled_models) if database.ok else skipped
+    if not database.ok:
+        skipped = CheckResult(False, SKIPPED_AFTER_DATABASE_FAILURE)
+        return {"database": database, "migrations": skipped, "models": skipped}
+    migrations, models = await asyncio.gather(
+        check_migrations(engine, timeout, script_dir),
+        check_models(engine, timeout, enabled_models),
+    )
     return {"database": database, "migrations": migrations, "models": models}
 
 

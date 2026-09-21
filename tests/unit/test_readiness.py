@@ -1,6 +1,10 @@
-"""Readiness aggregation, reason formatting and the skip rule, without a database."""
+"""Readiness aggregation, reason formatting, the skip rule and the time budget,
+without a database."""
 
+import asyncio
+import time
 from pathlib import Path
+from typing import Any
 
 from app.domain import CLIP_VIT_L14, DINOV2_LARGE
 from app.services.readiness import (
@@ -150,3 +154,42 @@ def test_every_disagreement_is_reported_not_only_the_first() -> None:
 
 def test_nothing_enabled_is_trivially_consistent() -> None:
     assert compare_declarations([], schema_dimensions([LIVE_CONSTRAINT])) == CheckResult(True)
+
+
+class _SlowConnection:
+    """Answers `SELECT 1` at once, then never answers anything again."""
+
+    async def __aenter__(self) -> "_SlowConnection":
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        return None
+
+    async def execute(self, statement: Any) -> list[tuple[Any, ...]]:
+        if "pg_constraint" in str(statement):
+            await asyncio.sleep(3600)
+        return [(1,)]
+
+    async def run_sync(self, function: Any) -> None:
+        await asyncio.sleep(3600)
+
+
+class _SlowEngine:
+    def connect(self) -> _SlowConnection:
+        return _SlowConnection()
+
+
+async def test_the_checks_that_need_the_database_share_one_budget() -> None:
+    # The probe must answer within about twice the timeout however many checks
+    # it grows; run one after the other, these two alone would cost two budgets
+    # on top of the database check.
+    timeout = 0.3
+    started = time.monotonic()
+    results = await run_checks(_SlowEngine(), timeout, (CLIP_VIT_L14,))  # type: ignore[arg-type]
+    elapsed = time.monotonic() - started
+
+    assert results["database"] == CheckResult(True)
+    expected = f"TimeoutError: no response within {timeout:g}s"
+    assert results["migrations"] == CheckResult(False, expected)
+    assert results["models"] == CheckResult(False, expected)
+    assert elapsed < timeout * 1.5, f"{elapsed:.2f}s for a {timeout:g}s budget"

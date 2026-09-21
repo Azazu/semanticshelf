@@ -11,7 +11,7 @@ file next to `pyproject.toml` (the environment wins). Source of truth:
 | `DATABASE_URL` | yes | — | API, Alembic, integration tests | SQLAlchemy URL with the `postgresql+asyncpg://` scheme. Locally it points at the published host port of the Compose database (`127.0.0.1:5433` by default), not at `5432`. |
 | `LOG_LEVEL` | no | `info` | API | `debug`, `info`, `warning` or `error`; applies to the application and to the uvicorn / SQLAlchemy loggers. |
 | `LOG_JSON` | no | `true` | API | `true`: one JSON object per log line on stdout. `false`: a coloured console renderer for local development. |
-| `READINESS_TIMEOUT_SECONDS` | no | `3` | API | Budget for the `SELECT 1` of `GET /ready`; a slower database reports `not-ready`. |
+| `READINESS_TIMEOUT_SECONDS` | no | `3` | API | Budget for each database check of `GET /ready`; a slower database reports `not-ready`. The `SELECT 1` runs first, then the revision and model checks together under the same budget, so the probe answers within about twice this value. |
 | `ENABLED_MODELS` | no | `clip-vit-l14` | API, CLI | Comma-separated model keys the service may use. Only keys this build has an adapter for are accepted; anything else refuses at start, naming the offender. |
 | `MODEL_WARMUP` | no | empty | API | Comma-separated keys loaded at start, on the inference pool. Must be a subset of `ENABLED_MODELS`. Empty means a model is loaded on its first use. |
 | `MODEL_CACHE` | no | `.data/models` | API, CLI | Directory the weights are cached in; about 1.6 GB for CLIP. Gitignored, and mountable into a container. |
