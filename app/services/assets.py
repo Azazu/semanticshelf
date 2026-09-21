@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, BinaryIO
 from uuid import UUID
 
+import structlog
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -32,6 +33,8 @@ from app.storage import MediaStorage
 
 #: Read in pieces so that neither the hash nor the copy holds the file in memory.
 CHUNK_BYTES = 1024 * 1024
+
+log = structlog.stdlib.get_logger(__name__)
 
 
 class DuplicateAssetError(Exception):
@@ -169,3 +172,46 @@ async def list_assets(
     return await AssetRepository(session).page(
         tags_all=tags_all, tags_any=tags_any, source=source, limit=limit, offset=offset
     )
+
+
+async def update_asset(
+    session: AsyncSession,
+    asset_id: UUID,
+    *,
+    tags: Sequence[str] | None = None,
+    meta: Mapping[str, Any] | None = None,
+) -> Asset | None:
+    """Replace what an edit may change. `None` means "leave this alone"."""
+    async with session.begin():
+        return await AssetRepository(session).set_tags_and_meta(asset_id, tags=tags, meta=meta)
+
+
+async def delete_asset(session: AsyncSession, storage: MediaStorage, asset_id: UUID) -> bool:
+    """Remove an asset, everything derived from it, and then its files.
+
+    The row goes first, in one transaction with its embeddings and jobs; the
+    files follow after the commit. A file that will not go is logged and left
+    to `storage prune`: the row is already gone, so failing the request would
+    only answer 404 on the retry.
+    """
+    async with session.begin():
+        repository = AssetRepository(session)
+        asset = await repository.get(asset_id)
+        if asset is None:
+            return False
+        await repository.delete(asset_id)
+
+    await run_in_threadpool(_remove_files, storage, asset)
+    return True
+
+
+def _remove_files(storage: MediaStorage, asset: Asset) -> None:
+    """Blocking; called in a worker thread. Never raises."""
+    try:
+        storage.remove(asset.id, asset.file_ext)
+    except OSError as exc:
+        log.warning(
+            "stored file could not be removed",
+            asset_id=str(asset.id),
+            error=type(exc).__name__,
+        )

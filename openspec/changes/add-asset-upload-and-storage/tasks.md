@@ -32,8 +32,8 @@
 
 ## 6. Changing and removing an asset
 
-- [ ] 6.1 Partial update of tags and metadata with the normalisation of task 2.1: an omitted field untouched, an explicit null clearing the metadata, and no path by which the picture's own fields can change. Verify: api tests for each case, including an invalid tag leaving the asset untouched.
-- [ ] 6.2 Deletion: the row and everything derived from it in one transaction, both files removed after the commit, a failed unlink logged as a warning and the request still successful, the second delete answering 404. Verify: api tests for the three cases, and an integration test that the embeddings of a deleted asset are gone.
+- [x] 6.1 Partial update of tags and metadata with the normalisation of task 2.1: an omitted field untouched, an explicit null clearing the metadata, and no path by which the picture's own fields can change. Verify: api tests for each case, including an invalid tag leaving the asset untouched.
+- [x] 6.2 Deletion: the row and everything derived from it in one transaction, both files removed after the commit, a failed unlink logged as a warning and the request still successful, the second delete answering 404. Verify: api tests for the three cases, and an integration test that the embeddings of a deleted asset are gone.
 
 ## 7. Readiness and orphans
 

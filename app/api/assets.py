@@ -34,14 +34,29 @@ from app.core.errors import instance_for_current_request, problem, problem_respo
 from app.core.settings import Settings
 from app.db.engine import get_session
 from app.domain import ASSET_SOURCES, Asset
-from app.schemas.assets import DUPLICATE_TYPE, AssetPage, AssetRead, DuplicateAssetProblem
+from app.schemas.assets import (
+    DUPLICATE_TYPE,
+    AssetPage,
+    AssetPatch,
+    AssetRead,
+    DuplicateAssetProblem,
+)
 from app.services import images
-from app.services.assets import DuplicateAssetError, create_asset, get_asset, list_assets
+from app.services.assets import (
+    DuplicateAssetError,
+    create_asset,
+    delete_asset,
+    get_asset,
+    list_assets,
+    update_asset,
+)
 from app.services.tagging import (
     METADATA_MAX_BYTES,
     MetadataError,
     TagError,
+    merge_metadata,
     normalise_filename,
+    normalise_tags,
     parse_metadata,
     split_tag_fields,
 )
@@ -306,6 +321,47 @@ async def read_thumbnail(asset_id: UUID, session: SessionDep, storage: StorageDe
         media_type=THUMBNAIL_MEDIA_TYPE,
         filename=f"{asset.id}.thumb.webp",
     )
+
+
+@router.patch(
+    "/{asset_id}",
+    summary="Change an asset's tags or metadata",
+    description=(
+        "An omitted field is left alone; an explicit null clears it. Tags and metadata go "
+        "through the same rules as at upload. The picture itself — its bytes, its hash, its "
+        "dimensions, its content type — cannot be changed through any endpoint."
+    ),
+    response_model=AssetRead,
+)
+async def patch_asset(asset_id: UUID, patch: AssetPatch, session: SessionDep) -> Any:
+    try:
+        tags = normalise_tags(patch.tags or []) if patch.gives("tags") else None
+        meta = merge_metadata({}, patch.meta) if patch.gives("meta") else None
+    except TagError as exc:
+        return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, INVALID_TAGS_TYPE, str(exc))
+    except MetadataError as exc:
+        return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, INVALID_META_TYPE, str(exc))
+
+    updated = await update_asset(session, asset_id, tags=tags, meta=meta)
+    if updated is None:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="no such asset")
+    return AssetRead.of(updated, prefix=PREFIX)
+
+
+@router.delete(
+    "/{asset_id}",
+    status_code=HTTPStatus.NO_CONTENT,
+    summary="Delete an asset",
+    description=(
+        "Removes the asset with everything derived from it in one transaction, then its "
+        "files. Deleting an asset that is not stored answers 404: the second caller is told "
+        "it does not exist."
+    ),
+)
+async def delete_one_asset(asset_id: UUID, session: SessionDep, storage: StorageDep) -> Response:
+    if not await delete_asset(session, storage, asset_id):
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="no such asset")
+    return Response(status_code=HTTPStatus.NO_CONTENT)
 
 
 def install(app: FastAPI) -> None:
