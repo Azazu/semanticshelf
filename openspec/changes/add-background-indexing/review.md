@@ -48,3 +48,19 @@
 | 4 | changes-requested — decision 11 now gives a feasible non-disclosure mechanism and tasks 3.4, 7.18, 7.19, and 7.19a cover its guards, but the resulting contract is internally inconsistent. Normative FR-IDX-3 still requires `last_error` to contain the exception class and message, and the delta spec's broad “A reason says what happened, not how” scenario likewise requires class and message whenever work fails with an exception; both contradict the new rule and adjacent foreign-failure scenario that record only the class for third-party exceptions. Amend the normative requirement and narrow the broad scenario so the origin-based mechanism is the single enforceable contract. |
 | 5 | confirmed — the inventory now assigns independent probes to the token on done, retry, and exhausted transitions, reset invalidation, disabled-model handling, the byte bound, foreign-message suppression, controlled-message preservation, renewed file inspection, and RGB conversion. |
 | 6 | confirmed — the real-PostgreSQL test holds one due row locked while a second claimant must take another within an enforced deadline, and its probe removes only `SKIP LOCKED`, making blocking observable. |
+
+## Confirmation 3 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** aff810b90a8c83d9a32c7fdfe3c5cc22f49836ab
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — FR-AST-12, FR-IDX-6, the proposal, design, delta spec, implementation task, integration test, and mutation probe consistently define deletion as cascading the job away; a late finish matches nothing, rolls back its vector, and ends quietly without recreating or retrying work. |
+| 2 | confirmed — the lease-timestamp claim token fences the done, retry, and exhausted transitions, reset clears the token, a lost claim rolls back the whole finish transaction, and real-PostgreSQL tests plus separate mutation probes cover stale success, stale retry, stale exhaustion, and reset. |
+| 3 | confirmed — the proposal, design, normative requirement, delta spec, implementation task, integration coverage, and mutation probes require renewed format, pixel-cap, and minimum-side inspection of the stored original before decoding and conversion to three channels before inference, including replaced-file cases. |
+| 4 | confirmed — FR-IDX-3 and the delta spec now use one origin-based disclosure rule: every reason carries the class, only service-raised failures carry a controlled message, and foreign messages are dropped. The design specifies the mechanism, while tasks and probes cover the two-kilobyte boundary, visible truncation, traceback exclusion, foreign file-content suppression, and controlled-message preservation. |
+| 5 | confirmed — the high-tier inventory assigns a feasible single-guard probe to each guard implicated by the round: all three positive settings, every fenced finish and reset invalidation, disabled-model handling, error disclosure and size guards, renewed stored-file inspection, and three-channel conversion. |
+| 6 | confirmed — the PostgreSQL test holds one due row locked while a second claimant must promptly take another due row under an enforced deadline, and its mutation probe removes only `SKIP LOCKED`, so blocking is observably detected. |
