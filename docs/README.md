@@ -25,6 +25,8 @@ implementing change)_
 - [`how-to/uploading.md`](how-to/uploading.md) — uploading a picture: what is
   accepted and refused, the headers, the listing, deletion, and finding
   orphan files
+- [`how-to/indexing.md`](how-to/indexing.md) — the indexing queue: the state
+  of an asset's work, finding what failed and why, and running it again
 
 ## Reference (facts)
 

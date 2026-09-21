@@ -105,9 +105,9 @@ code.
 
 ## 8. Decision record and documentation
 
-- [ ] 8.1 Write `docs/adr/ADR-003-*.md`: why the queue is a table in PostgreSQL, what the claim query is and what it guarantees, why a lease rather than a heartbeat, and what at-least-once costs. Verify: re-read whole; the ADR index lists it.
-- [ ] 8.2 Extend `docs/how-to/uploading.md` (or a new how-to) with watching the work: reading `index_status`, listing an asset's jobs, resetting failed work, and what each state means. Verify: every command run in its exact form, output pasted from the run.
-- [ ] 8.3 Extend `docs/reference/settings.md` with the three settings and the AGENTS.md layout with the indexing service. Verify: both re-read whole.
+- [x] 8.1 Write `docs/adr/ADR-003-*.md`: why the queue is a table in PostgreSQL, what the claim query is and what it guarantees, why a lease rather than a heartbeat, and what at-least-once costs. Verify: re-read whole; the ADR index lists it.
+- [x] 8.2 Extend `docs/how-to/uploading.md` (or a new how-to) with watching the work: reading `index_status`, listing an asset's jobs, resetting failed work, and what each state means. Verify: every command run in its exact form, output pasted from the run.
+- [x] 8.3 Extend `docs/reference/settings.md` with the three settings and the AGENTS.md layout with the indexing service. Verify: both re-read whole.
 
 ## 9. Wrap-up
 
