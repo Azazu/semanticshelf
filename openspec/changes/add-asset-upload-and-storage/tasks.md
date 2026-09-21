@@ -58,7 +58,8 @@ even though the other still refuses.
 | Parser bound on the metadata part, before it is parsed | 8.2 |
 | Parser bound on the number of file parts | 8.3 |
 | Parser bound on the number of fields | 8.4 |
-| Exactly one file part | 8.5 |
+| Exactly one file part, whatever it is called | 8.5 |
+| The single file part is named `file` | 8.5a |
 | Format allowlist | 8.6 |
 | Pixel cap at the number it names | 8.7 |
 | Minimum side | 8.8 |
@@ -73,6 +74,7 @@ even though the other still refuses.
 | Path containment under the media root | 8.17 |
 | Both files before the row | 8.18 |
 | Files removed when the row fails | 8.19 |
+| Staged files removed when publication fails | 8.19a |
 | Thumbnail re-encoded rather than copied | 8.20 |
 | Duplicate refused before any write | 8.21 |
 | Unique violation translated to 409 | 8.22 |
@@ -86,7 +88,8 @@ even though the other still refuses.
 - [x] 8.2 Remove `max_part_size` from the endpoint's parser call, leaving the application's own metadata bound in place: the oversized-metadata test fails because the refusal now comes from the later check — the test asserts the parser-stage refusal specifically and that the metadata parser was never reached, so the two guards are told apart.
 - [x] 8.3 Raise `max_files` beyond what the endpoint accepts: the test that a request with many file parts is refused at the parser fails.
 - [x] 8.4 Raise `max_fields` beyond what the endpoint accepts: the many-fields test fails.
-- [x] 8.5 Remove the check that exactly one file part is present: the no-file and two-file tests fail.
+- [x] 8.5 Remove the check that exactly one file part is present: the two-file test and the differently-named-second-file test fail.
+- [x] 8.5a Remove the check that the file part is named `file`: that test fails.
 - [x] 8.6 Remove the format allowlist: the refused-format test fails.
 - [x] 8.7 Remove the header pixel check, leaving Pillow's guard: the cap-plus-one test fails, which is the evidence that the library's guard alone does not enforce the cap.
 - [x] 8.8 Remove the minimum-side check: the too-small test fails.
@@ -100,7 +103,8 @@ even though the other still refuses.
 - [x] 8.16 Remove the length trim: the overlong-filename test fails.
 - [x] 8.17 Build the stored path from the uploaded filename instead of the identifier: the containment test of task 1.3 fails.
 - [x] 8.18 Insert the row before the files: the write-order test fails, showing a row whose file is absent.
-- [x] 8.19 Remove the cleanup after a failed insert: the test that nothing remains after a failed row fails, showing two orphan files.
+- [x] 8.19 Remove the cleanup after a failed row: the race test fails, showing the loser's files left beside the winner's.
+- [x] 8.19a Remove the staging cleanup in publication: the failure-injection test fails, showing a `.part` file left behind.
 - [x] 8.20 Copy the original into the thumbnail instead of re-encoding: the metadata test fails, showing the original's blocks in the thumbnail.
 - [x] 8.21 Remove the duplicate pre-check, leaving the unique constraint: the test that a duplicate writes nothing fails, showing files written before the refusal.
 - [x] 8.22 Remove the translation of the unique violation to 409: the duplicate test fails with a server error instead.

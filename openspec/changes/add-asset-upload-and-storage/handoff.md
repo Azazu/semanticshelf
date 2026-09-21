@@ -29,9 +29,8 @@ Evidence: `env -u DATABASE_URL make check` 207 passed; `make test-integration`
 
 ## Next step
 
-Gate 2 requested on this HEAD (task 10.3: the user pushed the branch and
-reported both CI jobs green). On `approved` or `confirmed`: State
-`ready-to-merge`, then the user's `/git:merge add-asset-upload-and-storage`.
+Gate 2 round 1 returned `changes-requested` with one blocker and three majors;
+all four are fixed and the confirmation of round 1 is requested next.
 
 ## Blockers
 
