@@ -27,3 +27,16 @@
 | 2 | confirmed |
 | 3 | confirmed |
 | 4 | confirmed |
+
+## Round 1 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** 30a418b8641d78ed61bb023b581ebc97343e2204
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `app/core/settings.py:35-39,63-70`; `tests/unit/test_settings_models.py:36-39`; `docs/reference/settings.md:15-16` | The documented environment syntax for both tuple settings is unusable. `pydantic-settings` JSON-decodes complex fields before the `mode="before"` field validator runs, so a real `ENABLED_MODELS=clip-vit-l14` environment variable raises `SettingsError: error parsing value for field "enabled_models"`; `MODEL_WARMUP=clip-vit-l14` and even the documented empty `MODEL_WARMUP=` fail the same way. The passing test supplies the string as a constructor argument and therefore bypasses the environment source that production and `.env` use. This leaves the required enabled-model and warm-up configuration paths nonfunctional. Mark these fields as non-decoded (or otherwise customize the settings source) and test the exact environment/`.env` forms documented for non-empty and empty lists. | open |
+| 2 | major | `app/services/readiness.py:143-156`; `specs/health-probes/spec.md` Readiness probe | The probe no longer satisfies its normative upper bound of about twice `READINESS_TIMEOUT_SECONDS`. After a successful database check, `run_checks` awaits migrations and models sequentially, and each gets a fresh full timeout; a slow-but-successful `SELECT 1` followed by two silent catalog queries can therefore take almost three timeouts. Even when the migration check has already timed out, the model check still spends another full timeout. Use a shared deadline or run the two dependent checks concurrently after the database check, and add a timing test for the worst successful-database path. | open |
+| 3 | major | `.env.example:14-17`; `docs/how-to/local-development.md:12`; `docs/reference/settings.md:25-39`; `handoff.md:47-51` | The tracked file that the first-run guide tells every developer to copy still exposes the superseded `EMBEDDER_TEXT_IMAGE` and `EMBEDDER_IMAGE_IMAGE` names and says `MODEL_CACHE=.cache/models`, while the implementation ignores the former names and documents `.data/models`. The handoff acknowledges the inconsistency, but all tasks are checked and the change is presented as Gate-2-ready. Update the actual template to the new settings (including the corrected list parsing from finding 1) and verify startup from a copied template, or obtain explicit user acceptance for leaving the public setup path stale. | open |
