@@ -1,7 +1,7 @@
 # Handoff — add-folder-indexing-cli
 
 **Updated:** 2026-09-21 · claude
-**State:** awaiting-gate-1
+**State:** fixing-g1
 **Branch:** change/add-folder-indexing-cli
 
 ## Done this session
@@ -24,9 +24,13 @@
 
 ## Next step
 
-`/gate-review add-folder-indexing-cli 1` — Codex reviews the artifacts before
-any code exists. After `approved`/`confirmed`: `/opsx:apply
-add-folder-indexing-cli`, starting with task group 1 (the walk).
+Gate 1 round 1 on `f010e59`: `changes-requested`, six findings (two blockers,
+four majors), recorded in `review.md` as commit `41f4611`. All six are real and
+none is a misreading; the two blockers both say the same kind of thing — a
+guarantee stated in the artifacts that the named mechanism cannot deliver.
+
+`/workflow:fix-findings add-folder-indexing-cli`, then a confirmation of
+round 1.
 
 ## Blockers
 
