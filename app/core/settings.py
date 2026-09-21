@@ -67,6 +67,17 @@ class Settings(BaseSettings):
     #: write; the guarantee against deleting a live upload is the advisory lock.
     prune_min_age_seconds: int = Field(default=3600, gt=0)
 
+    # --- indexing ------------------------------------------------------------
+    #: How long a claim on a job is good for. Nothing refreshes it: a runner
+    #: that dies releases its work when this expires, and the claim's own
+    #: expiry value is the token that keeps a late finish from landing.
+    job_lease_seconds: int = Field(default=600, gt=0)
+    #: How many times a job may be attempted before it is failed for good.
+    job_max_attempts: int = Field(default=3, gt=0)
+    #: How many jobs a single run of a runner takes. A runner that drained
+    #: while work remained would never end.
+    worker_batch_size: int = Field(default=4, gt=0)
+
     @field_validator("database_url")
     @classmethod
     def _require_asyncpg_scheme(cls, value: str) -> str:

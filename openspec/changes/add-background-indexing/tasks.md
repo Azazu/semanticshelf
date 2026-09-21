@@ -1,8 +1,8 @@
 ## 1. Settings and the queue's vocabulary
 
-- [ ] 1.1 Add the three settings to `app/core/settings.py`: the lease in seconds (default 600), the maximum attempts (default 3), the batch a runner drains (default 4); each validated as positive. Verify: `tests/unit/test_settings_indexing.py` asserts every default by value, refuses a non-positive value, and reads each through the environment as well as the constructor.
-- [ ] 1.2 Extend `app/repositories/jobs.py` with the claim query the requirements fix (pending and due, or running with an expired lease; ordered by when it became due; bounded; `FOR UPDATE SKIP LOCKED`) and the transitions a job can make: claimed, finished, returned to the queue with backoff, exhausted, reset. Verify: `tests/unit/test_backoff.py` covers the delay formula at each attempt, and the integration tests below cover the query itself.
-- [ ] 1.3 Expose the claim statement the way `app/repositories/embeddings.py` exposes its vector query, so a test can read its plan. Verify: an integration test asserts the plan uses `ix_jobs_claim` rather than a sequential scan.
+- [x] 1.1 Add the three settings to `app/core/settings.py`: the lease in seconds (default 600), the maximum attempts (default 3), the batch a runner drains (default 4); each validated as positive. Verify: `tests/unit/test_settings_indexing.py` asserts every default by value, refuses a non-positive value, and reads each through the environment as well as the constructor.
+- [x] 1.2 Extend `app/repositories/jobs.py` with the claim query the requirements fix (pending and due, or running with an expired lease; ordered by when it became due; bounded; `FOR UPDATE SKIP LOCKED`) and the transitions a job can make: claimed, finished, returned to the queue with backoff, exhausted, reset. Verify: `tests/unit/test_backoff.py` covers the delay formula at each attempt, and the integration tests below cover the query itself.
+- [x] 1.3 Expose the claim statement the way `app/repositories/embeddings.py` exposes its vector query, so a test can read its plan. Verify: an integration test asserts the plan uses `ix_jobs_claim` rather than a sequential scan.
 
 ## 2. Enqueue with the asset
 
