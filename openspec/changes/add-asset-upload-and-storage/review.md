@@ -135,3 +135,17 @@
 | 2 | confirmed — `MediaStorage.fill()` removes a partially written target, and `publish_files()` removes every staged or published path on failure. The failure injections now cover partial original and thumbnail writes plus failed thumbnail publication, and verify that no staging file, final file, or asset row remains. |
 | 3 | confirmed — The endpoint counts all `UploadFile` parts regardless of field name, requires the sole file part to be named `file`, and covers both an extra differently named file and a lone misnamed file. |
 | 4 | confirmed — FR-AST-6, the delta, and the proposal consistently define the thumbnail side as at most 256 px without enlargement, and the unit test verifies that an accepted 64×48 source remains 64×48 in WebP. |
+
+## Confirmation 4 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** 689461989df9f4f22b568dedea14d8488db9bd40
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — `receive()` now retains ownership of the descriptor returned by `mkstemp()` until a file object successfully takes it over, closes it on every earlier failure including the refused location inside `MEDIA_ROOT`, and removes the temporary path. The regression test repeats the refused receipt and verifies that every returned descriptor is closed, completing the already verified outside-root receipt and upload/prune protocol. |
+| 2 | confirmed — The exception-safe staged-write and publication cleanup remains unchanged since its confirmation: partial original and thumbnail writes and failed thumbnail publication leave no staging file, final file, or asset row. |
+| 3 | confirmed — The all-file-part count and sole-`file`-field requirement remain unchanged since their confirmation, including coverage for a differently named extra file and a lone misnamed file. |
+| 4 | confirmed — The at-most-256-pixel, no-enlargement requirement and implementation remain unchanged since their confirmation, including coverage for an accepted source smaller than 256 pixels. |
