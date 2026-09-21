@@ -1,36 +1,52 @@
 # Handoff — add-folder-indexing-cli
 
 **Updated:** 2026-09-21 · claude
-**State:** fixing-g1
+**State:** awaiting-gate-1
 **Branch:** change/add-folder-indexing-cli
 
 ## Done this session
 
-- All four artifacts written and strict-valid: `proposal.md`, the delta specs
-  (`folder-indexing` new, `asset-upload` modified), `design.md`, `tasks.md`
-  (33 tasks, 12 of them failing-input probes).
-- Tier raised to `high` and the plan corrected with it: the command walks a
-  directory tree the operator names, which is path handling — an explicit
-  `high` trigger in AGENTS.md. Row 7 now reads `high` in `openspec/ROADMAP.md`
-  and in §7 of `docs/explanation/requirements.md`.
-- Two decisions the user was asked about and settled: the relative path is
-  recorded as metadata while `original_filename` keeps the bare-name guarantee
-  change 5 built (FR-CLI-1 amended by task 6.3), and the tier above.
-- The walk's mechanics were measured rather than assumed on Python 3.12.14 —
-  `rglob` does not descend into symlinked directories, `is_file()` follows a
-  link while `lstat` does not, a fifo would block an open — and the measurements
-  are in `design.md` under Context.
-- `scripts/pregate-verify.sh gate1 add-folder-indexing-cli` passes.
+Gate 1 round 1 (`f010e59`) came back `changes-requested` with six findings —
+two blockers, four majors. All six were real; none is marked `wont-fix`.
+
+- **1, blocker — the check and the open were of a path, not of a thing.** The
+  walk now uses `os.fwalk`, opens each candidate relative to that directory's
+  descriptor with `O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC`, and decides
+  what the file is from `os.fstat` on the descriptor it will read. Measured on
+  Python 3.12.14 and recorded in `design.md`: a symlink is refused by the
+  kernel with `ELOOP`, a fifo opens without blocking and is then rejected as
+  not a regular file, and the bytes read come from that same descriptor. A task
+  (1.4) forces the swap between listing and opening, and probes 6.1, 6.2, 6.3
+  and 6.5 remove each half of the mechanism.
+- **2, blocker — the import could not promise vectors through `drain`.** It
+  claims whatever the queue offers, so older work would swallow every pass.
+  The claim gains an optional set of asset identifiers (a delta on
+  `indexing-jobs`), and the import loops over the state of its **own** assets,
+  stopping when none is unfinished or when a pass claims nothing. The
+  guarantee is now stated as what it is: every asset it created ends with a
+  vector or with work the queue still owns, and the summary says which.
+- **3, major — the symlink policy contradicted itself.** One rule now: regular
+  files only, every symlink skipped and reported. Containment became structural
+  rather than a `resolve()` comparison.
+- **4, major — "indistinguishable from an upload" was false.** The requirement
+  now names the two differences exactly: the source and the recorded origin.
+- **5, major — the applicability table claimed tests that did not exist.** The
+  outcomes for an empty directory, a directory with no candidates, a zero-byte
+  file and a symlinked root are defined in the spec and carry tasks 1.5, 1.6
+  and 2.5, with probe 6.6 for the new root-resolution guard.
+- **6, major — "every asset has vectors" and "a failure does not fail the
+  import" could not both hold.** Rewritten as above, with a scenario and task
+  4.4 for work that fails every attempt.
+
+Swept for siblings: ADR-003 states "first due, first served", which a
+restricted claim refines — task 7.5 writes ADR-004 rather than editing an
+append-only record. `tasks.md` is 48 tasks now, 17 of them probes.
 
 ## Next step
 
-Gate 1 round 1 on `f010e59`: `changes-requested`, six findings (two blockers,
-four majors), recorded in `review.md` as commit `41f4611`. All six are real and
-none is a misreading; the two blockers both say the same kind of thing — a
-guarantee stated in the artifacts that the named mechanism cannot deliver.
-
-`/workflow:fix-findings add-folder-indexing-cli`, then a confirmation of
-round 1.
+Confirmation of round 1: `/gate-review add-folder-indexing-cli 1 confirm 1`.
+After `confirmed`: `/opsx:apply add-folder-indexing-cli`, starting with the
+walk.
 
 ## Blockers
 
