@@ -1,7 +1,7 @@
 # Handoff — add-asset-upload-and-storage
 
 **Updated:** 2026-09-21 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/add-asset-upload-and-storage
 
 ## Done this session
@@ -29,9 +29,9 @@ Evidence: `env -u DATABASE_URL make check` 207 passed; `make test-integration`
 
 ## Next step
 
-The user pushes `change/add-asset-upload-and-storage` and reports the CI run
-(task 10.3). On green: tick 10.3 and 10.4 and run
-`/gate-review add-asset-upload-and-storage 2`.
+Gate 2 requested on this HEAD (task 10.3: the user pushed the branch and
+reported both CI jobs green). On `approved` or `confirmed`: State
+`ready-to-merge`, then the user's `/git:merge add-asset-upload-and-storage`.
 
 ## Blockers
 

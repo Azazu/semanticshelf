@@ -119,5 +119,5 @@ even though the other still refuses.
 
 - [x] 10.1 Commits per logical block, no agent trailers, each body naming the evidence for the tasks its diff holds. Verify: `git log --format=%B main..HEAD | grep -c '^Co-Authored-By'` prints `0`.
 - [x] 10.2 `env -u DATABASE_URL make check` green and `make test-integration` green against pgvector. Verify: both outputs recorded in a commit body.
-- [ ] 10.3 Acceptance on GitHub (the user pushes the branch): both jobs green. Verify: the user reports the run.
-- [ ] 10.4 `openspec validate add-asset-upload-and-storage --strict` and `scripts/pregate-verify.sh gate2 add-asset-upload-and-storage` pass; request Gate 2 with `/gate-review add-asset-upload-and-storage 2`.
+- [x] 10.3 Acceptance on GitHub (the user pushes the branch): both jobs green. Verify: the user reports the run.
+- [x] 10.4 `openspec validate add-asset-upload-and-storage --strict` and `scripts/pregate-verify.sh gate2 add-asset-upload-and-storage` pass; request Gate 2 with `/gate-review add-asset-upload-and-storage 2`.
