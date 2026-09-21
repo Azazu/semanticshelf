@@ -92,9 +92,11 @@ settings: the run is described entirely by its arguments.
 
 4. **Candidates are chosen by extension, accepted by bytes.** The walk
    considers a file whose suffix is one the service stores (`FILE_EXTENSIONS`,
-   case-insensitive) and counts everything else as skipped; what a candidate
-   *is* is still decided by decoding it, so a text file called `photo.png` is
-   refused exactly as an upload of those bytes would be.
+   case-insensitive) — plus `.jpeg`, which is the same format under its other
+   spelling and is what half a photo folder is called — and counts everything
+   else as skipped; what a candidate *is* is still decided by decoding it, so a
+   text file called `photo.png` is refused exactly as an upload of those bytes
+   would be.
    Rejected: inspecting every regular file. On a folder that is not a photo
    folder it turns every document into a "refused" line, which buries the
    refusals that matter; and the operator who really wants that can point the
