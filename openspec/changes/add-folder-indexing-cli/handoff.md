@@ -1,7 +1,7 @@
 # Handoff — add-folder-indexing-cli
 
 **Updated:** 2026-09-21 · claude
-**State:** fixing-g2
+**State:** awaiting-gate-2
 **Branch:** change/add-folder-indexing-cli
 
 ## Done this session
@@ -33,23 +33,20 @@ complete, 47 of 51 tasks checked.
 
 ## Next step
 
-Gate 2 round 1 on `c1faee6`: `changes-requested`, one blocker and one major,
-recorded in `review.md` as commit `5b28341`. Both are real.
+Gate 2 round 1's two findings are fixed on `9e69d2e`:
 
-1. **blocker** — the run resolves its root three times (`import_folder` for the
-   report, `walk` again, and `count_entries` from the CLI a third), so a path
-   replaced between them can send the walk into a different tree than the one
-   the report names. The design's "resolved exactly once" was written and not
-   implemented. The fix is to resolve once, open a descriptor for that
-   directory, and walk relative to it — the same answer the per-file open
-   already uses, applied to the root.
-2. **major** — a dry run classifies each file against the database alone, so
-   two files with identical bytes in one folder are both reported `created`
-   while a real run stores the first and counts the second `already stored`.
-   The dry run has to remember the hashes it has already called new.
+1. the root is resolved once, opened, and every step — count, walk, report —
+   works from that descriptor, so a name taken over mid-run cannot redirect
+   anything (probe 6.19, and 6.6 repointed at what the resolution still buys);
+2. a rehearsal remembers the hashes it has already called new, so two files of
+   identical bytes in one folder are reported exactly as a real run reports
+   them (probe 6.20).
 
-`/workflow:fix-findings add-folder-indexing-cli`, then a confirmation of
-round 1.
+Confirmation of round 1: `/gate-review add-folder-indexing-cli 2 confirm 1`.
+
+Local evidence: `env -u DATABASE_URL make check` green (271 tests);
+`make test-integration` green (149 tests); all 19 probes of group 6 caught
+their removal on a full re-run, and nothing was left running afterwards.
 
 ## Blockers
 
