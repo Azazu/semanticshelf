@@ -112,8 +112,8 @@ even though the other still refuses.
 
 ## 9. Documentation
 
-- [ ] 9.1 Write `docs/how-to/uploading.md`: uploading a picture with curl, what is accepted and what is refused with which answer, where the bytes live, what the thumbnail is, and how to find orphans. Verify: every command in it run in its exact form, output pasted from the run.
-- [ ] 9.2 Extend `docs/reference/settings.md` with the five settings and `docs/reference/commands.md` with the prune command; update the layout in `AGENTS.md` with `app/storage.py`, `app/schemas/` and the new service and router. Verify: all four documents re-read whole after the last edit.
+- [x] 9.1 Write `docs/how-to/uploading.md`: uploading a picture with curl, what is accepted and what is refused with which answer, where the bytes live, what the thumbnail is, and how to find orphans. Verify: every command in it run in its exact form, output pasted from the run.
+- [x] 9.2 Extend `docs/reference/settings.md` with the five settings and `docs/reference/commands.md` with the prune command; update the layout in `AGENTS.md` with `app/storage.py`, `app/schemas/` and the new service and router. Verify: all four documents re-read whole after the last edit.
 
 ## 10. Wrap-up
 

@@ -22,6 +22,9 @@ implementing change)_
   endpoint for Claude Code
 - [`how-to/models.md`](how-to/models.md) — the embedding models: what is
   downloaded, where it is cached, warm-up, offline runs, tuning
+- [`how-to/uploading.md`](how-to/uploading.md) — uploading a picture: what is
+  accepted and refused, the headers, the listing, deletion, and finding
+  orphan files
 
 ## Reference (facts)
 

@@ -20,8 +20,9 @@ SKIP_MSG = [SKIP] no alembic.ini — application not scaffolded yet
 help: ## List available commands
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
 
-init: ## First run: sync the environment, start the database, migrate
+init: ## First run: sync the environment, create the media root, start the database, migrate
 	uv sync
+	mkdir -p $${MEDIA_ROOT:-.data/media}
 	$(COMPOSE) up -d db
 	$(MAKE) migrate
 
