@@ -78,6 +78,26 @@ class AssetRepository:
         row = await self._session.get(AssetRow, asset_id)
         return to_domain(row) if row is not None else None
 
+    async def by_ids(self, asset_ids: Sequence[UUID]) -> dict[UUID, Asset]:
+        """The named assets, by identifier, in one query.
+
+        A mapping rather than a list: the caller has an order of its own — a
+        ranking, usually — and looking each asset up one at a time would make a
+        page of results a page of queries.
+        """
+        if not asset_ids:
+            return {}
+        rows = (
+            (
+                await self._session.execute(
+                    sa.select(AssetRow).where(AssetRow.id.in_(list(asset_ids)))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return {row.id: to_domain(row) for row in rows}
+
     async def get_by_sha256(self, sha256: str) -> Asset | None:
         row = (
             await self._session.execute(sa.select(AssetRow).where(AssetRow.sha256 == sha256))

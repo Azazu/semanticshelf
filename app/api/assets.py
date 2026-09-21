@@ -18,7 +18,6 @@ them leaves the store and the media root exactly as it found them.
 """
 
 import os
-from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -28,7 +27,6 @@ import structlog
 from fastapi import (
     APIRouter,
     BackgroundTasks,
-    Depends,
     FastAPI,
     HTTPException,
     Query,
@@ -36,13 +34,18 @@ from fastapi import (
     Response,
 )
 from fastapi.responses import FileResponse, JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from app.api.deps import (
+    PoolDep,
+    SessionDep,
+    SessionFactoryDep,
+    SettingsDep,
+    StorageDep,
+)
 from app.core.errors import instance_for_current_request, problem, problem_response
-from app.core.settings import Settings
-from app.db.engine import get_session
 from app.domain import ASSET_SOURCES, JOB_STATUSES, Asset, UnknownModelError
 from app.schemas.assets import (
     DUPLICATE_TYPE,
@@ -72,7 +75,6 @@ from app.services.tagging import (
     parse_metadata,
     split_tag_fields,
 )
-from app.storage import MediaStorage
 
 PREFIX = "/api/v1/assets"
 router = APIRouter(prefix=PREFIX, tags=["assets"])
@@ -110,31 +112,8 @@ THUMBNAIL_MEDIA_TYPE = "image/webp"
 log = structlog.stdlib.get_logger(__name__)
 
 
-def get_storage(request: Request) -> MediaStorage:
-    storage: MediaStorage = request.app.state.storage
-    return storage
-
-
-def get_settings(request: Request) -> Settings:
-    settings: Settings = request.app.state.settings
-    return settings
-
-
-def get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
-    factory: async_sessionmaker[AsyncSession] = request.app.state.session_factory
-    return factory
-
-
-def get_pool(request: Request) -> ThreadPoolExecutor:
-    pool: ThreadPoolExecutor = request.app.state.inference_pool
-    return pool
-
-
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
-SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
-PoolDep = Annotated[ThreadPoolExecutor, Depends(get_pool)]
-StorageDep = Annotated[MediaStorage, Depends(get_storage)]
-SettingsDep = Annotated[Settings, Depends(get_settings)]
+# The providers themselves live in `app/api/deps.py`, so that a second router
+# does not have to import this one to ask for a session.
 
 
 def _refuse(status: HTTPStatus, type_: str, detail: str) -> JSONResponse:

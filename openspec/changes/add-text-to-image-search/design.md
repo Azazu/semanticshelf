@@ -64,10 +64,15 @@ names the one it used rather than taking a choice.
    filtered vector search — a different problem with its own measurement
    (change 12), and one that would make `offset` mean something else.
 
-5. **`has_more` is about the ranking, not about the filtered page.** The inner
-   select fetches one row beyond the page; if it came back, more results exist
-   beyond this page. A threshold that empties the page does not make
-   `has_more` false, because the next page may still hold matches.
+5. **`has_more` is one row beyond the page, and the threshold makes that
+   exact.** The search asks for `limit + 1` rows; if the extra one comes back,
+   there is more to show. The first draft of this decision said a threshold
+   must not affect `has_more` "because the next page may still hold matches" —
+   which is false, and pleasantly so: the ranking is ordered by distance, so a
+   row below the threshold has only rows further away after it. A threshold
+   that removes the extra row therefore means there is genuinely nothing more
+   to show, and `has_more` is false for the right reason rather than by
+   accident.
 
 6. **Scores are derived, distances are stored.** `score = 1 − distance`, computed
    where the row is read, so nothing but the repository ever handles a
