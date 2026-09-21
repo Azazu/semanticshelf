@@ -358,10 +358,13 @@ app/
                      never hand an ORM instance outwards
   schemas/           Pydantic request/response models — never the ORM classes
   services/          use cases: indexing, search, assets
-  ml/                embedders behind one Protocol: clip.py, dinov2.py, fake.py
+  ml/                embedders behind one Protocol: base.py (protocol, normalisation,
+                     the checkpoint guard), clip.py, fake.py (deterministic, no
+                     weights), registry.py (lazy per-process cache), pool.py
+                     (the threads loading and inference run on)
   workers/           job claim/execute/finish over indexing_jobs (BackgroundTasks
                      runner in stage 1, the `worker` CLI process from stage 3)
-  cli.py             typer app: index-folder, worker, demo-dataset, storage, models
+  cli.py             typer app: models warm today; index-folder, worker, demo-dataset later
 ui/                  Streamlit demo (own dependency group), HTTP client of the API
 alembic/             migrations
 tests/               unit/ (fake embedder, no DB), integration/ (pgvector, marked),
@@ -375,8 +378,10 @@ tests/               unit/ (fake embedder, no DB), integration/ (pgvector, marke
 - `async def` endpoints and repositories; sync ML inference is offloaded
   with `run_in_threadpool` or a worker — never block the event loop.
 - Pydantic schemas are separate from ORM models; validate at the edge.
-- One `Embedder` Protocol (`embed_text`, `embed_image`, `dim`, `name`);
-  models are loaded lazily through a registry and cached per process.
+- One `Embedder` Protocol (`key`, `dim`, `embed_text`, `embed_images`),
+  returning unit-length float32 rows; models are loaded lazily through
+  the registry, cached per process, and both loading and inference run
+  on the inference pool, never on the event loop.
 - Settings only via `pydantic-settings` from environment — no
   hard-coded paths, model names or thresholds.
 - Repositories return domain objects; services compose them; routers

@@ -12,6 +12,7 @@ Authoritative live source: `make help`.
 | `make revision MSG='…'` | autogenerate an Alembic revision |
 | `make migrate` | apply migrations |
 | `make test` / `make test-integration` | unit and api tests (no database) / pgvector integration tests (`DATABASE_URL`, migrated database) |
+| `make test-models` | the `models` suite against the real weights; downloads the checkpoint on a cold cache, never part of `make check` or CI |
 | `make lock-check` | `uv lock --check`: `uv.lock` matches `pyproject.toml` |
 | `make lint` / `make fmt` / `make fmt-check` / `make types` | ruff check / ruff format / format check / mypy |
 | `make check` | lock check + lint + format + types + unit and api tests — the gate floor |
@@ -21,6 +22,14 @@ Guarded targets: `make run`, `make migrate`, `make revision MSG='…'` and
 scaffolded yet` and exit 0 while `alembic.ini` is absent. The file exists
 since the application scaffold, so the guard is inert and the targets are
 real; `make check` is never guarded.
+
+## Service commands
+
+Installed as the `semanticshelf` console script; run it with `uv run`.
+
+| Command | Purpose |
+|---|---|
+| `uv run semanticshelf models warm` | load every key in `ENABLED_MODELS`, downloading what is missing, and print each model's width and load time ([how-to](../how-to/models.md)) |
 
 ## Workflow scripts
 

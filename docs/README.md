@@ -20,6 +20,8 @@ implementing change)_
   project locally (setup, daily commands, reset, troubleshooting)
 - [`how-to/local-mcp.md`](how-to/local-mcp.md) — wire the IDE's MCP
   endpoint for Claude Code
+- [`how-to/models.md`](how-to/models.md) — the embedding models: what is
+  downloaded, where it is cached, warm-up, offline runs, tuning
 
 ## Reference (facts)
 
