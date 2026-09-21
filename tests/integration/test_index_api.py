@@ -316,6 +316,68 @@ async def test_a_reset_of_an_asset_that_is_not_stored_is_404(client: httpx.Async
     assert response.headers["content-type"] == PROBLEM_MEDIA_TYPE
 
 
+async def test_a_reset_of_an_empty_selection_resets_nothing(
+    client: httpx.AsyncClient, engine: AsyncEngine
+) -> None:
+    """`[]` is a selection of nothing, not the absence of a selection. A caller
+    that built its list by filtering must not have everything reset because the
+    filter matched none of it."""
+    created = await upload(client)
+    await set_state(engine, created["id"], status="failed", attempts=3, last_error="RuntimeError")
+
+    response = await client.post(
+        f"{ASSETS}/{created['id']}/reindex",
+        headers={"content-type": "application/json"},
+        json={"models": []},
+    )
+
+    assert response.status_code == 202, response.text
+    assert response.json() == {"asset_id": created["id"], "models": [], "jobs": 0}
+    async with engine.connect() as connection:
+        row = (
+            await connection.execute(
+                sa.text("SELECT status, attempts, last_error FROM indexing_jobs")
+            )
+        ).one()
+    assert (row.status, row.attempts, row.last_error) == ("failed", 3, "RuntimeError")
+
+
+async def test_a_reset_with_no_body_at_all_resets_everything(
+    client: httpx.AsyncClient, engine: AsyncEngine
+) -> None:
+    created = await upload(client)
+    await set_state(engine, created["id"], status="failed", attempts=3, last_error="RuntimeError")
+
+    response = await client.post(f"{ASSETS}/{created['id']}/reindex")
+
+    assert response.status_code == 202, response.text
+    assert response.json()["models"] == [CLIP_VIT_L14]
+
+
+async def test_the_jobs_of_an_asset_show_when_a_claim_stops_owning_them(
+    client: httpx.AsyncClient, engine: AsyncEngine
+) -> None:
+    """A running job's lease is what tells an operator when it becomes
+    reclaimable; a job at rest holds no claim and reports none."""
+    created = await upload(client)
+    at_rest = (await client.get(f"{ASSETS}/{created['id']}/jobs")).json()["items"][0]
+    assert (at_rest["status"], at_rest["lease_expires_at"]) == ("done", None)
+
+    async with engine.begin() as connection:
+        await connection.execute(
+            sa.text(
+                "UPDATE indexing_jobs SET status = 'running', "
+                "lease_expires_at = now() + interval '600 s'"
+            )
+        )
+
+    running = (await client.get(f"{ASSETS}/{created['id']}/jobs")).json()["items"][0]
+
+    assert running["status"] == "running"
+    assert running["lease_expires_at"] is not None
+    assert running["lease_expires_at"] > running["started_at"]
+
+
 async def test_a_reset_of_work_an_asset_never_had_says_so(
     client: httpx.AsyncClient,
 ) -> None:

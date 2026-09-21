@@ -1,7 +1,7 @@
 # Handoff — add-background-indexing
 
 **Updated:** 2026-09-21 · claude
-**State:** awaiting-gate-2
+**State:** fixing-g2
 **Branch:** change/add-background-indexing
 
 ## Done this session
@@ -33,16 +33,26 @@ Task groups 1-8 complete; 55 of 59 tasks checked.
 
 ## Next step
 
-The branch is pushed and its CI run is green (reported by the user), so all
-59 tasks are checked. Gate 2 requested with
-`/gate-review add-background-indexing 2`; the verdict and its findings are
-recorded in `review.md` by the runner.
+Gate 2 round 1 came back `changes-requested` with two `major` findings, both
+real and both fixed:
 
-Local evidence, each command in its documented form:
-`env -u DATABASE_URL make check` green (252 tests);
-`make test-integration` green (113 tests) against pgvector;
-`openspec validate --all --strict`, every `scripts/*_test.sh` and
-`sh -n scripts/*.sh` green — everything CI runs.
+1. `{"models": []}` reset every job: the endpoint collapsed an empty list to
+   "no selection" and the repository treated an empty sequence as an absent
+   filter. A selection of nothing now selects nothing, in both places, and the
+   rule is in the spec delta, the schema, the endpoint description and the
+   how-to. Probes 7.23 and 7.24.
+2. `lease_expires_at` never reached the wire, so an operator could not see when
+   a running claim stops owning its job. It is in `IndexingJobRead` and its
+   mapping now, with the how-to re-recorded against a live service — the
+   running snapshot shows the lease ten minutes ahead of `started_at`. Probe
+   7.25.
+
+Confirmation of round 1 requested with
+`/gate-review add-background-indexing 2 confirm 1`.
+
+Local evidence: `env -u DATABASE_URL make check` green (252 tests);
+`make test-integration` green (116 tests); all 28 probes of group 7 caught
+their removal on a full re-run.
 
 ## Blockers
 

@@ -21,6 +21,13 @@ class IndexingJobRead(BaseModel):
     status: str
     attempts: int
     available_at: datetime
+    lease_expires_at: datetime | None = Field(
+        description=(
+            "When the current claim stops being the owner. Set only while the job is "
+            "running: after it, another runner may take the job, and the runner that "
+            "held it can no longer finish it. Null at rest."
+        )
+    )
     last_error: str | None
     created_at: datetime
     started_at: datetime | None
@@ -34,6 +41,7 @@ class IndexingJobRead(BaseModel):
             status=job.status,
             attempts=job.attempts,
             available_at=job.available_at,
+            lease_expires_at=job.lease_expires_at,
             last_error=job.last_error,
             created_at=job.created_at,
             started_at=job.started_at,
@@ -52,7 +60,10 @@ class ReindexRequest(BaseModel):
 
     models: list[str] | None = Field(
         default=None,
-        description="Model keys to reset. Omitted or null resets every model's work.",
+        description=(
+            "Model keys to reset. Omitted or null resets every model's work; an empty "
+            "list selects nothing and resets nothing."
+        ),
     )
 
 

@@ -40,8 +40,8 @@
 
 - [x] 6.1 `index_status` in the asset representation: the newest job per model, derived rather than stored. Verify: an integration test covering an asset with work done, one with work waiting and one whose work failed.
 - [x] 6.2 The listing filter on the state of the work, with 422 for an unknown model or state. Verify: api and integration tests for each case.
-- [x] 6.3 The jobs of an asset: attempts, timestamps and last reason; 404 for an identifier that is not stored. Verify: integration tests.
-- [x] 6.4 The reset: chosen models or all of them, attempts cleared, reason cleared, state back to pending, 404 for an unknown asset, and the answer says what was reset. Verify: integration tests including a reset of failed work that then succeeds.
+- [x] 6.3 The jobs of an asset: attempts, timestamps — including the lease a running claim holds — and last reason; 404 for an identifier that is not stored. Verify: integration tests.
+- [x] 6.4 The reset: chosen models or all of them — an empty selection selecting none — attempts cleared, reason cleared, state back to pending, 404 for an unknown asset, and the answer says what was reset. Verify: integration tests including a reset of failed work that then succeeds.
 
 ## 7. Failing inputs (high tier: one per new check)
 
@@ -76,6 +76,9 @@ code.
 | Re-inspection of the stored file (format and caps) | 7.20 |
 | Conversion to three channels before inference | 7.21 |
 | The listing filter refusing an unknown model or state | 7.22 |
+| An empty model selection stays a selection at the edge (gate 2, finding 1) | 7.23 |
+| An empty model selection stays a selection in the reset (gate 2, finding 1) | 7.24 |
+| The lease a running claim holds reaching the wire (gate 2, finding 2) | 7.25 |
 
 - [x] 7.1 Remove the positive bound on the lease setting: its test fails.
 - [x] 7.2 Remove the positive bound on the attempts setting: its test fails.
@@ -102,6 +105,9 @@ code.
 - [x] 7.20 Skip the re-inspection and decode the stored file directly: the replaced-file tests fail.
 - [x] 7.21 Remove the conversion to three channels: the greyscale test fails.
 - [x] 7.22 Accept any model or state in the filter: that test fails.
+- [x] 7.23 Collapse an empty `models` list to "no selection" in the endpoint: the empty-selection test fails, showing every job reset.
+- [x] 7.24 Treat an empty selection as an absent filter in the reset: the same test fails.
+- [x] 7.25 Drop `lease_expires_at` from the wire mapping: the test that a running job says when its claim stops owning it fails.
 
 ## 8. Decision record and documentation
 

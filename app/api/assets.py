@@ -472,10 +472,10 @@ async def read_asset_jobs(asset_id: UUID, session: SessionDep) -> Any:
     description=(
         "Puts the asset's work back in the queue with its attempts and its last reason "
         "cleared — the only way failed work runs again. `models` selects which work to "
-        "reset; omitted, it resets all of it. The answer says what was actually reset, "
-        "which is not what was asked for when the asset never had work for a model. 404 "
-        "when no asset carries that identifier, 422 when a model is one the service does "
-        "not know."
+        "reset; omitted or null, it resets all of it, and an empty list resets nothing. "
+        "The answer says what was actually reset, which is not what was asked for when "
+        "the asset never had work for a model. 404 when no asset carries that identifier, "
+        "422 when a model is one the service does not know."
     ),
     response_model=ReindexResult,
 )
@@ -490,7 +490,10 @@ async def reindex_asset(
     request: ReindexRequest | None = None,
 ) -> Any:
     await _asset_or_404(session, asset_id)
-    asked = (request.models if request is not None else None) or None
+    # `None` and `[]` are different answers: no selection resets everything, a
+    # selection of nothing resets nothing. Collapsing the two would turn an
+    # empty list built by a caller's own filter into "reset all of it".
+    asked = request.models if request is not None else None
     try:
         models = known_models(asked) if asked is not None else None
     except UnknownModelError as exc:

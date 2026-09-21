@@ -30,7 +30,7 @@ The upload's own answer already carries it:
 $ curl -s -X POST http://127.0.0.1:8000/api/v1/assets \
     -F "file=@dragon.png" -F "tags=dragon,blue"
 {
-    "id": "f2c955ec-fbdf-45ba-8f1b-8b9b38271e0b",
+    "id": "56a8ec8b-6b45-4b6c-9679-179ac06e4984",
     …
     "index_status": {"clip-vit-l14": "pending"}
 }
@@ -40,7 +40,7 @@ A moment later it is done — in the background, and the first one also loads
 the model:
 
 ```console
-$ curl -s http://127.0.0.1:8000/api/v1/assets/f2c955ec-… | jq .index_status
+$ curl -s http://127.0.0.1:8000/api/v1/assets/56a8ec8b-… | jq .index_status
 {
   "clip-vit-l14": "done"
 }
@@ -49,22 +49,26 @@ $ curl -s http://127.0.0.1:8000/api/v1/assets/f2c955ec-… | jq .index_status
 The detail is one call further:
 
 ```console
-$ curl -s http://127.0.0.1:8000/api/v1/assets/f2c955ec-…/jobs | jq '.items[0]'
+$ curl -s http://127.0.0.1:8000/api/v1/assets/56a8ec8b-…/jobs | jq '.items[0]'
 {
-  "id": "bc54f468-8292-4e4e-a7e0-96b3d2a71ea8",
+  "id": "072d61a7-e315-4d04-853d-6dc83d302056",
   "model": "clip-vit-l14",
   "status": "done",
   "attempts": 1,
-  "available_at": "2026-09-21T13:58:59.882321Z",
+  "available_at": "2026-09-21T14:24:26.505414Z",
+  "lease_expires_at": null,
   "last_error": null,
-  "created_at": "2026-09-21T13:58:27.316552Z",
-  "started_at": "2026-09-21T13:58:59.886566Z",
-  "finished_at": "2026-09-21T13:59:00.287786Z"
+  "created_at": "2026-09-21T14:24:26.505414Z",
+  "started_at": "2026-09-21T14:24:26.561947Z",
+  "finished_at": "2026-09-21T14:24:29.409125Z"
 }
 ```
 
 `started_at` and `finished_at` are of the **latest** attempt; `attempts`
 counts every claim, including the ones a lease expiry handed back.
+`lease_expires_at` is null here because the job holds no claim any more — while
+one is `running` it says when that claim stops being the owner, which is the
+moment another runner may take the job.
 
 ## Find the work that needs attention
 
@@ -77,7 +81,7 @@ $ curl -s "http://127.0.0.1:8000/api/v1/assets?index_status=clip-vit-l14:failed"
 {
   "items": [
     {
-      "id": "f2c955ec-fbdf-45ba-8f1b-8b9b38271e0b",
+      "id": "56a8ec8b-6b45-4b6c-9679-179ac06e4984",
       "tags": [
         "dragon",
         "blue"
@@ -117,22 +121,23 @@ disk is not necessarily the file that was accepted. Here it was replaced with
 something that is not a picture:
 
 ```console
-$ printf 'this is not a picture any more' > .data/media/f2/f2c955ec-….png
-$ curl -s -X POST http://127.0.0.1:8000/api/v1/assets/f2c955ec-…/reindex \
+$ printf 'this is not a picture any more' > .data/media/56/56a8ec8b-….png
+$ curl -s -X POST http://127.0.0.1:8000/api/v1/assets/56a8ec8b-…/reindex \
     -H 'content-type: application/json' -d '{"models": ["clip-vit-l14"]}'
-{"asset_id":"f2c955ec-fbdf-45ba-8f1b-8b9b38271e0b","models":["clip-vit-l14"],"jobs":1}
+{"asset_id":"56a8ec8b-6b45-4b6c-9679-179ac06e4984","models":["clip-vit-l14"],"jobs":1}
 
-$ curl -s http://127.0.0.1:8000/api/v1/assets/f2c955ec-…/jobs | jq '.items[0]'
+$ curl -s http://127.0.0.1:8000/api/v1/assets/56a8ec8b-…/jobs | jq '.items[0]'
 {
-  "id": "bc54f468-8292-4e4e-a7e0-96b3d2a71ea8",
+  "id": "072d61a7-e315-4d04-853d-6dc83d302056",
   "model": "clip-vit-l14",
   "status": "failed",
   "attempts": 1,
-  "available_at": "2026-09-21T14:00:49.130257Z",
+  "available_at": "2026-09-21T14:24:37.723700Z",
+  "lease_expires_at": null,
   "last_error": "StoredFileUnusable: UndecodableImageError: the file does not decode as an image",
-  "created_at": "2026-09-21T13:58:27.316552Z",
-  "started_at": "2026-09-21T14:00:49.141827Z",
-  "finished_at": "2026-09-21T14:00:49.146474Z"
+  "created_at": "2026-09-21T14:24:26.505414Z",
+  "started_at": "2026-09-21T14:24:37.737025Z",
+  "finished_at": "2026-09-21T14:24:37.742599Z"
 }
 ```
 
@@ -152,20 +157,21 @@ cleared. It is the only way failed work runs again — nothing retries a job
 that reached `failed` on its own.
 
 ```console
-$ cp dragon.png .data/media/f2/f2c955ec-….png          # a picture again
-$ curl -s -X POST http://127.0.0.1:8000/api/v1/assets/f2c955ec-…/reindex
-{"asset_id":"f2c955ec-fbdf-45ba-8f1b-8b9b38271e0b","models":["clip-vit-l14"],"jobs":1}
+$ cp dragon.png .data/media/56/56a8ec8b-….png          # a picture again
+$ curl -s -X POST http://127.0.0.1:8000/api/v1/assets/56a8ec8b-…/reindex
+{"asset_id":"56a8ec8b-6b45-4b6c-9679-179ac06e4984","models":["clip-vit-l14"],"jobs":1}
 
-$ curl -s http://127.0.0.1:8000/api/v1/assets/f2c955ec-…/jobs | jq '.items[0]'
+$ curl -s http://127.0.0.1:8000/api/v1/assets/56a8ec8b-…/jobs | jq '.items[0]'
 {
-  "id": "bc54f468-8292-4e4e-a7e0-96b3d2a71ea8",
+  "id": "072d61a7-e315-4d04-853d-6dc83d302056",
   "model": "clip-vit-l14",
   "status": "running",
   "attempts": 1,
-  "available_at": "2026-09-21T14:00:49.157280Z",
+  "available_at": "2026-09-21T14:24:44.437156Z",
+  "lease_expires_at": "2026-09-21T14:34:44.442848Z",
   "last_error": null,
-  "created_at": "2026-09-21T13:58:27.316552Z",
-  "started_at": "2026-09-21T14:00:49.159981Z",
+  "created_at": "2026-09-21T14:24:26.505414Z",
+  "started_at": "2026-09-21T14:24:44.442848Z",
   "finished_at": null
 }
 ```
@@ -174,28 +180,39 @@ That one caught the runner at work — the answer to a reset comes back before
 the work is done, which is the whole point. Immediately after:
 
 ```console
-$ curl -s http://127.0.0.1:8000/api/v1/assets/f2c955ec-…/jobs | jq '.items[0]'
+$ curl -s http://127.0.0.1:8000/api/v1/assets/56a8ec8b-…/jobs | jq '.items[0]'
 {
-  "id": "bc54f468-8292-4e4e-a7e0-96b3d2a71ea8",
+  "id": "072d61a7-e315-4d04-853d-6dc83d302056",
   "model": "clip-vit-l14",
   "status": "done",
   "attempts": 1,
-  "available_at": "2026-09-21T14:00:49.157280Z",
+  "available_at": "2026-09-21T14:24:44.437156Z",
+  "lease_expires_at": null,
   "last_error": null,
-  "created_at": "2026-09-21T13:58:27.316552Z",
-  "started_at": "2026-09-21T14:00:49.159981Z",
-  "finished_at": "2026-09-21T14:00:49.560795Z"
+  "created_at": "2026-09-21T14:24:26.505414Z",
+  "started_at": "2026-09-21T14:24:44.442848Z",
+  "finished_at": "2026-09-21T14:24:44.846850Z"
 }
 ```
 
-With no body the reset takes every model's work; `{"models": [...]}` selects.
+With no body — or with `"models": null` — the reset takes every model's work;
+`{"models": [...]}` selects. An empty list is a selection of nothing and
+resets nothing, so a caller that builds its list by filtering does not lose
+everything when the filter matches none of it:
+
+```console
+$ curl -s -X POST http://127.0.0.1:8000/api/v1/assets/56a8ec8b-…/reindex \
+    -H 'content-type: application/json' -d '{"models": []}'
+{"asset_id":"56a8ec8b-6b45-4b6c-9679-179ac06e4984","models":[],"jobs":0}
+```
+
 The answer reports what was actually reset, which is not always what was asked
 for — an asset that never had work for a model has none to put back:
 
 ```console
-$ curl -s -X POST http://127.0.0.1:8000/api/v1/assets/f2c955ec-…/reindex \
+$ curl -s -X POST http://127.0.0.1:8000/api/v1/assets/56a8ec8b-…/reindex \
     -H 'content-type: application/json' -d '{"models": ["dinov2-large"]}'
-{"asset_id":"f2c955ec-fbdf-45ba-8f1b-8b9b38271e0b","models":[],"jobs":0}
+{"asset_id":"56a8ec8b-6b45-4b6c-9679-179ac06e4984","models":[],"jobs":0}
 ```
 
 Both endpoints answer 404 for an identifier no asset carries, and `reindex`
@@ -206,7 +223,7 @@ $ curl -s http://127.0.0.1:8000/api/v1/assets/0f9b1d2c-3e4f-4a5b-8c7d-9e0f1a2b3c
 {"type":"about:blank","title":"Not Found","status":404,
  "detail":"no such asset","instance":"urn:request:…"}
 
-$ curl -s -X POST http://127.0.0.1:8000/api/v1/assets/f2c955ec-…/reindex \
+$ curl -s -X POST http://127.0.0.1:8000/api/v1/assets/56a8ec8b-…/reindex \
     -H 'content-type: application/json' -d '{"models": ["dinov2-xl"]}'
 {"type":"/errors/unknown-model","title":"Unprocessable Entity","status":422,
  "detail":"unknown model: 'dinov2-xl'","instance":"urn:request:…"}

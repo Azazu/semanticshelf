@@ -227,7 +227,9 @@ class IndexingJobRepository:
             )
             .returning(IndexingJobRow.model)
         )
-        if models:
+        if models is not None:
+            # `is not None`, not truthiness: an empty selection selects nothing,
+            # and must not fall through to "every model".
             statement = statement.where(IndexingJobRow.model.in_(list(models)))
         return list((await self._session.execute(statement)).scalars().all())
 

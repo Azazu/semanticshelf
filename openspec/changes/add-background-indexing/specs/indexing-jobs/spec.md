@@ -180,10 +180,13 @@ server error. Nothing SHALL remain afterwards: no vector, no work, no file.
 
 The service SHALL report, for each model, the state of the newest unit of work
 for an asset, as part of the asset's representation and as a filter over the
-listing. It SHALL also list an asset's work with its attempts, its timestamps
-and its last reason. An operator SHALL be able to put chosen work back into
-the queue with its attempts cleared, which is the only way failed work runs
-again.
+listing. It SHALL also list an asset's work with its attempts, its timestamps —
+including, while a runner holds it, when that claim stops being the owner — and
+its last reason. An operator SHALL be able to put chosen work back into the
+queue with its attempts cleared, which is the only way failed work runs again.
+Naming no models SHALL reset all of an asset's work and naming an empty set of
+them SHALL reset none: a selection of nothing is a selection, not the absence
+of one.
 
 #### Scenario: An asset that has been indexed
 - **WHEN** an asset whose work has all succeeded is read
@@ -198,6 +201,16 @@ again.
 - **WHEN** an operator asks for an asset's failed work to run again
 - **THEN** that work returns to the queue with no attempts against it, and the
   request says so
+
+#### Scenario: A reset that selects nothing
+- **WHEN** an operator asks for an asset's work to run again and names an empty
+  set of models
+- **THEN** no work is reset, and the answer says that none was
+
+#### Scenario: Work a runner is holding
+- **WHEN** the work of an asset is listed while a runner holds a claim on it
+- **THEN** the answer says when that claim stops being the owner, and says
+  nothing of the kind for work at rest
 
 #### Scenario: An asset that is not stored
 - **WHEN** the work of an identifier no asset carries is asked for, or a reset
