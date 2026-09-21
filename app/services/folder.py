@@ -20,7 +20,7 @@ something else behind the walk's back: the check and the read are of one object.
 import errno
 import os
 import stat
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -108,6 +108,26 @@ def _refusal(error: OSError) -> str:
     if error.errno == errno.ENOENT:
         return SKIP_VANISHED
     return SKIP_UNREADABLE
+
+
+def count_entries(directory: Path, *, recursive: bool = False) -> int:
+    """How many entries a walk of this directory would yield.
+
+    Names only: nothing is opened, nothing is read. It exists so a terminal can
+    draw a bar with a total, and it is a total, not a promise — a tree that
+    changes between this and the walk changes the answer.
+    """
+    root = resolve_directory(directory)
+    entries = 0
+    for _, directories, files, dir_fd in os.fwalk(root, follow_symlinks=False):
+        entries += len(files)
+        if recursive:
+            entries += sum(
+                1 for name in directories if stat.S_ISLNK(os.lstat(name, dir_fd=dir_fd).st_mode)
+            )
+        else:
+            directories.clear()
+    return entries
 
 
 def walk(directory: Path, *, recursive: bool = False) -> Iterator[Candidate | Skipped]:
@@ -327,6 +347,7 @@ async def import_folder(
     tags: Sequence[str] = (),
     meta: Mapping[str, Any] | None = None,
     dry_run: bool = False,
+    on_file: Callable[[FileOutcome], None] | None = None,
 ) -> ImportReport:
     """Import a directory, and account for every file it held.
 
@@ -339,7 +360,10 @@ async def import_folder(
 
     for entry in walk(directory, recursive=recursive):
         if isinstance(entry, Skipped):
-            report.files.append(FileOutcome(entry.path, SKIPPED, reason=entry.reason))
+            skipped = FileOutcome(entry.path, SKIPPED, reason=entry.reason)
+            report.files.append(skipped)
+            if on_file is not None:
+                on_file(skipped)
             continue
         if dry_run:
             outcome = await examine_one(
@@ -355,6 +379,8 @@ async def import_folder(
                 meta=given,
             )
         report.files.append(outcome)
+        if on_file is not None:
+            on_file(outcome)
     return report
 
 
@@ -376,6 +402,7 @@ async def index_imported(
     storage: MediaStorage,
     settings: Settings,
     pool: ThreadPoolExecutor,
+    on_progress: Callable[[int], None] | None = None,
 ) -> WorkReport:
     """Carry out the work this run created — and only that work.
 
@@ -397,14 +424,17 @@ async def index_imported(
     for _ in range(passes):
         async with session_factory() as session:
             statuses = await indexing.status_of(session, created)
-        if not _unfinished(statuses):
+        unfinished = _unfinished(statuses)
+        if on_progress is not None:
+            on_progress(len(created) - len(unfinished))
+        if not unfinished:
             break
         taken = await indexing.run_batch(
             session_factory=session_factory,
             storage=storage,
             settings=settings,
             pool=pool,
-            asset_ids=_unfinished(statuses),
+            asset_ids=unfinished,
         )
         if not taken:
             break
@@ -435,3 +465,25 @@ async def _reason(session: AsyncSession, asset_id: UUID, model: str) -> str:
         if job.model == model and job.last_error:
             return job.last_error
     return "no reason recorded"
+
+
+def describe(report: ImportReport) -> list[str]:
+    """The report as lines for a terminal, in the shape `storage prune` uses."""
+    lines = [f"folder: {report.directory}" + (" (dry run)" if report.dry_run else "")]
+    for state in (CREATED, ALREADY_STORED, REFUSED, SKIPPED):
+        lines.append(f"{state}: {report.count(state)}")
+    lines.extend(
+        f"  {outcome.state:14} {outcome.path} — {outcome.reason}"
+        for outcome in report.files
+        if outcome.state in (REFUSED, SKIPPED) and outcome.reason
+    )
+    work = report.work
+    if work is None:
+        lines.append("indexing: not run" if not report.dry_run else "indexing: nothing to run")
+        return lines
+    lines.append(f"indexed: {work.indexed}")
+    lines.append(f"still queued: {len(work.queued)}")
+    lines.extend(f"  queued  {asset_id} — {why}" for asset_id, why in work.queued)
+    lines.append(f"failed: {len(work.failed)}")
+    lines.extend(f"  failed  {asset_id} — {reason}" for asset_id, reason in work.failed)
+    return lines

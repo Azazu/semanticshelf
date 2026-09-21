@@ -32,9 +32,9 @@
 
 ## 5. The command
 
-- [ ] 5.1 Add `index-folder` to `app/cli.py`: the directory argument, `--recursive`, `--tags`, `--meta`, `--dry-run`, `--no-index`; it builds the settings, storage, session factory and inference pool, calls the service and prints the report through a `describe`-style renderer, as `storage prune` does. Verify: `uv run semanticshelf index-folder --help` pasted into the commit body, and a CLI test asserting the summary's lines for a fixture tree.
-- [ ] 5.2 Exit status: 0 when the run completed, even with refusals; non-zero when it could not run at all (design decision 9). Verify: CLI tests asserting both, including the exit code for a missing directory.
-- [ ] 5.3 `--no-index` leaves the work queued: the assets exist, their work is `pending`, no vector is written, and the summary says so. Verify: an integration test.
+- [x] 5.1 Add `index-folder` to `app/cli.py`: the directory argument, `--recursive`, `--tags`, `--meta`, `--dry-run`, `--no-index`; it builds the settings, storage, session factory and inference pool, calls the service and prints the report through a `describe`-style renderer, as `storage prune` does. Verify: `uv run semanticshelf index-folder --help` pasted into the commit body, and a CLI test asserting the summary's lines for a fixture tree.
+- [x] 5.2 Exit status: 0 when the run completed, even with refusals; non-zero when it could not run at all (design decision 9). Verify: CLI tests asserting both, including the exit code for a missing directory.
+- [x] 5.3 `--no-index` leaves the work queued: the assets exist, their work is `pending`, no vector is written, and the summary says so. Verify: an integration test.
 - [ ] 5.4 Progress is shown for both phases with `click`'s progress bar, and no new dependency is added. Verify: the command run by hand with its output pasted into the how-to; `make lock-check` green.
 
 ## 6. Failing inputs (high tier: one per new check)
