@@ -64,12 +64,14 @@ file — a device node, a socket, a fifo — SHALL NOT be read, and opening it
 SHALL NOT be able to block the run. Each of these SHALL be reported as skipped
 with its reason rather than passed over in silence.
 
-The directory named for the run SHALL be resolved once before the walk starts,
+The directory named for the run SHALL be opened once before the walk starts,
 and every step of the run — counting, walking, importing — SHALL work in the
-directory that was resolved then, not in whatever the name refers to later. A
-run named with a symbolic link to a directory therefore behaves as if it had
-been named with that directory, and replacing that name, or any part of it,
-once the run has begun SHALL NOT be able to send the run into another tree.
+directory that was opened then, not in whatever the name refers to later. The
+directory the run reports SHALL be the directory it read: a run SHALL NOT be
+able to read one directory while naming another. A run named with a symbolic
+link to a directory therefore behaves as if it had been named with that
+directory, and replacing that name, or any part of it, once the run has begun
+SHALL NOT be able to send the run into another tree.
 Without the recursive option the import SHALL consider only the files directly
 in that directory; with it, the files of every directory beneath it.
 
@@ -104,6 +106,11 @@ in that directory; with it, the files of every directory beneath it.
   link to a different directory
 - **THEN** the run reads the directory it began in, reports that directory, and
   reads nothing from the other one
+
+#### Scenario: The folder's name is taken over as the run begins
+- **WHEN** the name is replaced at the moment the run opens it
+- **THEN** whichever directory the run ends up holding is the one it reads and
+  the one it reports — the two are never different directories
 
 #### Scenario: A folder inside the folder
 - **WHEN** a directory holding pictures in subdirectories is imported without

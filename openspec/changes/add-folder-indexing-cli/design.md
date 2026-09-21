@@ -91,12 +91,22 @@ settings: the run is described entirely by its arguments.
    symlink to a directory and behaves as if it had been pointed at the
    directory; if the resolved path is not a directory, the run is refused
    before anything is read.
-   Resolving is not enough on its own, and the first implementation proved it:
-   it resolved in three places — once for the report, once inside the walk,
-   once for the progress bar's count — so the name could be replaced between
-   them and the run could end up in a tree the report did not name. One
-   resolution, one descriptor, and the same rule as for a file: what is worked
-   on is the object that was opened, not the name it had.
+   Resolving is not enough on its own, and two rounds of review proved it. The
+   first implementation resolved in three places — once for the report, once
+   inside the walk, once for the progress bar's count — so the name could be
+   replaced between them and the run could end up in a tree the report did not
+   name. The second still resolved the name and *then* opened the resolved
+   path, which is two steps with a window between them: the open could land on
+   a replacement while the report kept the original name, leaving a run reading
+   one tree and naming another.
+   So there is no resolution step at all now. `open_root` opens the name it was
+   given — following a symbolic link to a directory, which is allowed — and
+   then asks the kernel what that descriptor refers to (`/proc/self/fd/<n>`),
+   which is what the report names. One syscall decides both, so the two cannot
+   disagree, and the same rule as for a file holds for the root: what is worked
+   on is the object that was opened, not the name it had. On a platform without
+   `/proc` the reported path falls back to resolving the name — a worse answer
+   for what is printed, never for what is read.
 
 4. **Candidates are chosen by extension, accepted by bytes.** The walk
    considers a file whose suffix is one the service stores (`FILE_EXTENSIONS`,

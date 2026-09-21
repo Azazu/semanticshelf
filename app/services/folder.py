@@ -68,9 +68,10 @@ class Root:
     """The directory a run works in: resolved once, and then held open.
 
     `path` is what the report names; `fd` is what everything else is relative
-    to. The name may be replaced a moment later — by a link to another tree, by
-    a file, by nothing — and the run still reads the directory it opened. A
-    root that is resolved twice is a root that can change between the two.
+    to. They cannot disagree: the path is read back from the descriptor, so the
+    directory a run reports is the directory it holds. The name may be replaced
+    a moment later — by a link to another tree, by a file, by nothing — and the
+    run still reads, and still names, the directory it opened.
     """
 
     path: Path
@@ -93,24 +94,45 @@ class Candidate:
     handle: BinaryIO
 
 
-def open_root(directory: Path) -> Root:
-    """Resolve the named directory once and open it, or refuse naming what is
-    wrong with it.
+def _open_directory(directory: Path) -> int:
+    """The one open of the root. A seam: a test replaces the name here to prove
+    that the descriptor and the path a run reports cannot disagree."""
+    return os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
 
-    A run may be pointed at a symbolic link to a directory: the link is
-    resolved here, once, and the descriptor that comes back is the directory it
-    pointed at. After this call the name is not consulted again.
+
+def _path_of(descriptor: int, *, named: Path) -> Path:
+    """What that descriptor actually refers to, asked of the kernel.
+
+    Not resolved from the name: resolving a path and then opening it are two
+    steps, and between them the name can come to mean another directory — which
+    would leave a run reading one tree and reporting another. One open decides
+    both. `/proc` is how Linux answers this; anywhere it is missing the run
+    falls back to resolving the name, which is a worse answer only for what is
+    printed, never for what is read.
     """
-    resolved = directory.expanduser().resolve()
     try:
-        descriptor = os.open(resolved, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+        return Path(os.readlink(f"/proc/self/fd/{descriptor}"))
+    except OSError:  # pragma: no cover - /proc is there on every platform we run on
+        return named.expanduser().resolve()
+
+
+def open_root(directory: Path) -> Root:
+    """Open the named directory once, or refuse naming what is wrong with it.
+
+    A run may be pointed at a symbolic link to a directory: the open follows it,
+    once, and everything after that — what is walked, and what the report names
+    — comes from the descriptor it returned. The name is never consulted again,
+    and there is no window between deciding what it means and holding it.
+    """
+    try:
+        descriptor = _open_directory(directory.expanduser())
     except NotADirectoryError as error:
         raise DirectoryUnusableError(f"not a directory: {directory}") from error
     except FileNotFoundError as error:
         raise DirectoryUnusableError(f"no such directory: {directory}") from error
     except OSError as error:
         raise DirectoryUnusableError(f"{directory} could not be read: {error.strerror}") from error
-    return Root(resolved, descriptor)
+    return Root(_path_of(descriptor, named=directory), descriptor)
 
 
 @contextmanager

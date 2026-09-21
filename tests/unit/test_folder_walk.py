@@ -323,3 +323,32 @@ def test_the_root_is_reported_as_the_directory_that_was_opened(tmp_path: Path) -
 
     with folder.opened_root(named) as root:
         assert root.path == inside.resolve(), "resolved once, and that is what is reported"
+
+
+def test_the_root_a_run_reports_is_the_root_it_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The race the reviewer found at the boundary: resolve a name, then open
+    it, and between the two the name can come to mean another directory — a run
+    reading one tree while reporting another. One open now decides both, so the
+    substitution can still happen and the two still agree."""
+    named = tmp_path / "photos"
+    named.mkdir()
+    (named / "ours.png").write_bytes(PICTURE)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "stranger.png").write_bytes(b"not ours")
+    original = folder._open_directory
+
+    def swap_then_open(directory: Path) -> int:
+        named.rename(tmp_path / "photos-moved")
+        (tmp_path / "photos").symlink_to(elsewhere, target_is_directory=True)
+        return original(directory)
+
+    monkeypatch.setattr(folder, "_open_directory", swap_then_open)
+
+    with folder.opened_root(named) as root:
+        seen = outcomes(folder.walk(root))
+
+    assert seen == {"stranger.png": "not "}, "it read the directory the open landed on"
+    assert root.path == elsewhere.resolve(), "and it reports that same directory"

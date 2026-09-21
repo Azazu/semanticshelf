@@ -50,7 +50,7 @@ code.
 | What is validated is the descriptor (`fstat`), not the path | 6.3 |
 | The walk does not enter a symlinked directory | 6.4 |
 | The walk is relative to the directory's descriptor | 6.5 |
-| The run reports the directory it opened, not the name it was given | 6.6 |
+| One open decides both the descriptor and the reported path (gate 2, confirmation 1) | 6.6 |
 | Candidates are chosen by extension | 6.7 |
 | Tags and metadata are validated before the walk | 6.9 |
 | The recorded origin is not overwritten by the run's metadata | 6.10 |
@@ -70,7 +70,7 @@ code.
 - [x] 6.3 Decide from an `lstat` on the path instead of `fstat` on the descriptor: the mutation-race test of task 1.4 fails.
 - [x] 6.4 Pass `followlinks=True` to the walk: the parent-link test fails or does not terminate within its timeout.
 - [x] 6.5 Open by full path instead of relative to the directory descriptor: the mutation-race test that swaps a parent directory for a link fails.
-- [x] 6.6 Open the named path without resolving it: the test that the root reports the directory it opened fails. (The walk itself no longer depends on the resolution — it works from the descriptor — so what the resolution still buys is the directory the report names; probe 6.19 covers the rest.)
+- [x] 6.6 Restore the shape that let the two disagree — resolve the name, open the resolved path, report the name — and the test that a run reads and reports the same directory fails. The guard is the pair: restoring either half alone leaves them agreeing, which the probe's own comment records.
 - [x] 6.7 Accept every regular file as a candidate: the test that a document is skipped rather than refused fails.
 - [x] 6.8 **No probe, and why.** The rule it named — the bytes decide what a file is — is enforced by the inspection inside the pipeline this change only feeds, and change 5 demonstrates it with its own probe (`ea0c781`). Removing it is not an edit inside this change's diff, so a probe here would be theatre. The behaviour is still asserted: `tests/integration/test_folder_import.py` stores nothing for `lying.png`, a text file named like a picture, and `tests/unit/test_folder_walk.py` shows the walk opening it regardless of its name.
 - [x] 6.9 Validate the tags after the walk instead of before: the test that a bad tag leaves the store untouched fails.
