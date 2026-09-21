@@ -67,11 +67,18 @@ future), and no background work of any kind.
      declared length, so a chunked request with no length, or one that
      understates it, is covered — which is what NFR-SEC-5 asks for.
    - **The parser bounds the small parts and the part counts**: the endpoint
-     parses the form itself with `max_part_size` set to the metadata bound, so
-     an oversized `meta` string is refused before it is parsed at all, and
-     with `max_files` and `max_fields` set low, so a request cannot arrive
-     with a thousand parts. A `MultiPartException` becomes 422 problem details
-     naming what was wrong rather than the parser's own 400.
+     parses the form itself with `max_part_size` set to a small multiple of
+     the metadata bound, and with `max_files` and `max_fields` set low, so a
+     request cannot arrive with a thousand parts. A `MultiPartException`
+     becomes 422 problem details naming what was wrong rather than the
+     parser's own 400.
+
+     The multiple matters: it leaves each guard its own band. A metadata
+     string between the application's bound and the parser's is refused by the
+     application, at the exact size the requirement names; one far beyond is
+     refused by the parser before it is ever assembled. Setting the two to the
+     same number would hide the application's guard behind the parser's, and
+     neither could then be tested without disturbing the other.
 
    The earlier claim that the 1 MiB default would reject an ordinary
    photograph was wrong for the same reason: that default never applies to a
