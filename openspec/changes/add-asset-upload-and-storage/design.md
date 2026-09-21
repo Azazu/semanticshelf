@@ -109,8 +109,11 @@ future), and no background work of any kind.
 4. **Two files, one unit.** Each file is written to a temporary name in its
    target directory, flushed, and renamed into place — a rename within a
    directory is atomic, so no half-written file is ever visible under the name
-   the service serves. The row is inserted after both renames; any failure
-   from there unlinks both. Shard directories are created on demand; the media
+   the service serves. A failed write removes its own staging file before it
+   raises, because the caller that would have to clean it up is the caller
+   that just failed and never learned the name (Gate 2 finding 2). The row is
+   inserted after both renames; any failure from there unlinks both. Shard
+   directories are created on demand; the media
    root itself is never created by the service, so a mistyped root is reported
    by readiness instead of being silently created next to the real one.
 
@@ -166,12 +169,21 @@ future), and no background work of any kind.
     changes nothing. Uploads never block each other, because their lock is
     shared.
 
-    Staging — the temporary copy, under a name the service never serves — sits
-    deliberately outside that transaction, and so do the format and dimension
-    checks that read it. Losing a staged file to a prune costs that one upload
-    and nothing else; losing a published file would break the invariant. Only
-    publication needs the guarantee, and keeping the checks outside means a
-    refused upload never touches the database at all.
+    What happens **before** the lock happens outside the media root entirely:
+    the bytes are read into a temporary file elsewhere on the filesystem and
+    inspected there. Prune walks the media root, so it cannot see that file at
+    all — the race is removed by construction rather than by synchronisation,
+    and nothing anywhere assumes how long an upload takes. It also means a
+    refused upload (wrong format, too many pixels, too small) never opens a
+    transaction.
+
+    The cost is copying the bytes once more when the picture turns out to be
+    good, since the temporary file and the media root may be on different
+    filesystems. For a bounded upload that is milliseconds, and it buys the
+    property that every file under the media root is either published or
+    covered by the lock.
+    (Gate 2 finding 1: an earlier version staged inside the media root before
+    taking the lock, which left exactly the window this removes.)
 
     A grace period (`PRUNE_MIN_AGE_SECONDS`) stays as a second line for the
     one case the lock cannot cover: a prune run configured against a different

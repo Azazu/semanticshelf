@@ -84,14 +84,24 @@ class MediaStorage:
 
     @staticmethod
     def fill(staged: Path, chunks: Iterable[bytes]) -> int:
-        """Write chunks to a staged file, flush them to disk, return the size."""
+        """Write chunks to a staged file, flush them to disk, return the size.
+
+        A failure anywhere — the source, the write, the flush — removes what
+        was written. A half-file under a staging name is still rubbish someone
+        has to clean up, and the code that would have to know its path is the
+        code that just failed.
+        """
         written = 0
-        with staged.open("wb") as handle:
-            for chunk in chunks:
-                handle.write(chunk)
-                written += len(chunk)
-            handle.flush()
-            os.fsync(handle.fileno())
+        try:
+            with staged.open("wb") as handle:
+                for chunk in chunks:
+                    handle.write(chunk)
+                    written += len(chunk)
+                handle.flush()
+                os.fsync(handle.fileno())
+        except BaseException:
+            staged.unlink(missing_ok=True)
+            raise
         return written
 
     @staticmethod

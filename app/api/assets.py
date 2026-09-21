@@ -143,16 +143,24 @@ async def upload_asset(
             max_fields=MAX_FIELD_PARTS,
             max_part_size=PARSER_PART_BYTES,
         ) as form:
+            # Every file part, whatever it is called: a second picture under
+            # another field name is still a second picture, and silently
+            # ignoring it would store something the client did not ask for.
             files = [
-                value
-                for key, value in form.multi_items()
-                if key == FILE_FIELD and isinstance(value, UploadFile)
+                (key, value) for key, value in form.multi_items() if isinstance(value, UploadFile)
             ]
             if len(files) != 1:
                 return _refuse(
                     HTTPStatus.UNPROCESSABLE_ENTITY,
                     INVALID_UPLOAD_TYPE,
-                    f"exactly one {FILE_FIELD!r} part is required, got {len(files)}",
+                    f"exactly one {FILE_FIELD!r} part is required, got {len(files)} file part(s)",
+                )
+            field_name, upload = files[0]
+            if field_name != FILE_FIELD:
+                return _refuse(
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    INVALID_UPLOAD_TYPE,
+                    f"the file part must be called {FILE_FIELD!r}, not {field_name!r}",
                 )
             raw_meta = form.get(META_FIELD)
             try:
@@ -173,8 +181,8 @@ async def upload_asset(
                 session=session,
                 storage=storage,
                 settings=settings,
-                source=files[0].file,
-                original_filename=normalise_filename(files[0].filename),
+                source=upload.file,
+                original_filename=normalise_filename(upload.filename),
                 tags=tags,
                 meta=meta,
             )

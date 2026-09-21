@@ -1,7 +1,6 @@
 """What an uploaded file is, and what is refused before anything is decoded."""
 
 import io
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -20,15 +19,6 @@ from app.services.images import (
 )
 
 VALID_URL = "postgresql+asyncpg://localhost/semanticshelf"
-
-
-@pytest.fixture(autouse=True)
-def decoder_guard() -> Iterator[None]:
-    """Pillow's guard is a process-global, so a test that sets it must put it
-    back — otherwise it silently shrinks every picture a later test builds."""
-    original = Image.MAX_IMAGE_PIXELS
-    yield
-    Image.MAX_IMAGE_PIXELS = original
 
 
 @pytest.fixture
@@ -161,3 +151,15 @@ def test_the_application_factory_configures_the_guard(settings: Settings) -> Non
     create_app(settings)
 
     assert Image.MAX_IMAGE_PIXELS == settings.max_image_pixels
+
+
+def test_a_picture_smaller_than_the_bound_keeps_its_own_size(tmp_path: Path) -> None:
+    # Accepted sources start at 32px, so this is ordinary rather than exotic:
+    # the thumbnail is bounded, never enlarged (FR-AST-6).
+    path = picture(tmp_path, "small.png", (64, 48), "PNG")
+
+    data = thumbnail(path)
+
+    with Image.open(io.BytesIO(data)) as thumb:
+        assert thumb.size == (64, 48)
+        assert thumb.format == "WEBP"

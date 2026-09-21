@@ -210,3 +210,44 @@ async def test_a_duplicate_is_refused_before_anything_is_published(
 
     assert response.status_code == 409
     assert published == [], "the duplicate was caught before a file was published"
+
+
+async def test_a_thumbnail_that_cannot_be_made_leaves_nothing_behind(
+    client: httpx.AsyncClient, media_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import images
+
+    def refuse(path: Path) -> bytes:
+        raise OSError("the encoder gave up")
+
+    monkeypatch.setattr(images, "thumbnail", refuse)
+
+    response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+
+    assert response.status_code == 500, "the upload failed"
+    assert files_under(media_root) == [], "not even a staging file remains"
+    assert (await client.get(ASSETS)).json()["items"] == []
+
+
+async def test_a_failed_write_of_the_original_leaves_nothing_behind(
+    client: httpx.AsyncClient, media_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.storage import MediaStorage
+
+    fill = MediaStorage.fill
+    calls = {"n": 0}
+
+    def fail_on_the_original(staged: Path, chunks: object) -> int:
+        calls["n"] += 1
+        if calls["n"] == 1:  # the thumbnail goes first; the original is second
+            return fill(staged, chunks)  # type: ignore[arg-type]
+        staged.write_bytes(b"half a picture")  # a partial file, then the failure
+        raise OSError("the disk gave up")
+
+    monkeypatch.setattr(MediaStorage, "fill", staticmethod(fail_on_the_original))
+
+    response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+
+    assert response.status_code == 500
+    assert files_under(media_root) == [], "the partial file and the thumbnail are both gone"
+    assert (await client.get(ASSETS)).json()["items"] == []

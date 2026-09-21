@@ -114,6 +114,11 @@ upload, path handling and deletion.
   and `app/api/health.py` (the fourth check), `app/main.py` (the router),
   `docs/reference/settings.md`, `docs/reference/commands.md`, a new how-to for
   uploading and storage, the AGENTS.md layout.
+- Amended: FR-AST-6 in `docs/explanation/requirements.md`. It fixed the
+  thumbnail's longest side at 256 px; it now says **at most** 256 px, because
+  a picture may be accepted at 32 px and enlarging it would spend bytes
+  inventing detail it does not have. Gate 2 finding 4 asked for the
+  requirement to be met or revised; this revises it.
 - Unchanged: the schema. Change 3 created the table this change finally fills;
   no migration is needed, and none is written.
 - Data: the first bytes the service owns. `MEDIA_ROOT` defaults to `.data/media`,

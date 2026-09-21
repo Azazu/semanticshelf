@@ -157,8 +157,10 @@ under the media root SHALL be reachable by path from outside the service.
 The thumbnail SHALL be re-encoded from the decoded pixels rather than derived
 from the original file, so that no metadata block of the original — camera
 data, colour profile, comment, or anything hidden in one — is carried into it.
-Its longest side SHALL be the configured thumbnail size, preserving aspect
-ratio, and it SHALL be stored beside the original.
+Its longest side SHALL be at most the configured thumbnail size, preserving
+aspect ratio, and it SHALL be stored beside the original. A picture already
+smaller than that size SHALL keep its own, because enlarging it would spend
+bytes inventing detail the original does not have.
 
 #### Scenario: A picture with metadata
 - **WHEN** a picture carrying metadata blocks is uploaded
@@ -166,9 +168,16 @@ ratio, and it SHALL be stored beside the original.
   contains none of them
 
 #### Scenario: Thumbnail proportions
-- **WHEN** a picture wider than it is tall is uploaded
+- **WHEN** a picture wider than it is tall and larger than the thumbnail size
+  is uploaded
 - **THEN** the thumbnail's longest side is the configured size and its aspect
   ratio matches the original within rounding
+
+#### Scenario: A picture smaller than the thumbnail size
+- **WHEN** a picture whose longest side is already under the thumbnail size is
+  uploaded
+- **THEN** its thumbnail keeps the original's dimensions rather than being
+  enlarged, and is still a thumbnail in the stored format
 
 ### Requirement: The upload request has one shape
 

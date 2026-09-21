@@ -172,6 +172,35 @@ async def test_an_upload_with_two_file_parts_is_refused(
     assert stored(media_root) == []
 
 
+async def test_a_second_file_part_under_another_name_is_refused(
+    client: httpx.AsyncClient, media_root: Path
+) -> None:
+    # A picture is a picture whatever the field is called; ignoring the extra
+    # one would store something the client did not ask to store.
+    response = await client.post(
+        ASSETS,
+        files=[
+            ("file", ("one.png", picture_bytes())),
+            ("attachment", ("two.png", picture_bytes((40, 40)))),
+        ],
+    )
+
+    assert response.status_code == 422
+    assert response.json()["type"] == "/errors/invalid-upload"
+    assert "2 file part" in response.json()["detail"]
+    assert stored(media_root) == []
+
+
+async def test_the_single_file_part_must_be_called_file(
+    client: httpx.AsyncClient, media_root: Path
+) -> None:
+    response = await client.post(ASSETS, files={"attachment": ("one.png", picture_bytes())})
+
+    assert response.status_code == 422
+    assert "must be called 'file'" in response.json()["detail"]
+    assert stored(media_root) == []
+
+
 async def test_more_file_parts_than_the_parser_allows_are_refused(
     client: httpx.AsyncClient, media_root: Path
 ) -> None:

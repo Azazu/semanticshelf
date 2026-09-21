@@ -221,3 +221,45 @@ async def test_prune_does_not_run_while_an_upload_is_in_flight(
     response = await upload_in_flight
     assert response.status_code == 201
     assert len(list(storage.walk())) == 2, "the upload kept its files"
+
+
+async def test_prune_cannot_touch_an_upload_that_has_not_published_yet(
+    client: httpx.AsyncClient,
+    prune_session: AsyncSession,
+    storage: MediaStorage,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The window before the lock, which the first version of this design left
+    open (gate 2, finding 1).
+
+    An upload reads and inspects its bytes before it takes the lock. Those
+    bytes live outside the media root, so prune — which walks only the root —
+    cannot see them however long the upload is held, and the upload completes
+    with both files afterwards.
+    """
+    received = threading.Event()
+    release = threading.Event()
+    receive = assets_service.receive
+
+    def hold_after_receiving(source: object) -> object:
+        result = receive(source)  # type: ignore[arg-type]
+        received.set()
+        assert release.wait(timeout=60), "the test never released the upload"
+        return result
+
+    monkeypatch.setattr(assets_service, "receive", hold_after_receiving)
+    upload_in_flight = asyncio.create_task(
+        client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+    )
+    await asyncio.to_thread(received.wait, 30)
+    assert list(storage.walk()) == [], "nothing of this upload is under the media root yet"
+
+    report = await prune(prune_session, storage, min_age_seconds=0, apply=True)
+
+    assert report.ran is True, "no upload holds the lock yet, so prune may run"
+    assert report.removed_files == (), "and it finds nothing belonging to the upload"
+
+    release.set()
+    response = await upload_in_flight
+    assert response.status_code == 201
+    assert len(list(storage.walk())) == 2
