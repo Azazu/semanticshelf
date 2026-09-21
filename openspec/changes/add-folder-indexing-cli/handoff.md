@@ -1,28 +1,32 @@
 # Handoff — add-folder-indexing-cli
 
 **Updated:** 2026-09-21 · claude
-**State:** proposing
+**State:** awaiting-gate-1
 **Branch:** change/add-folder-indexing-cli
 
 ## Done this session
 
-- Branch and scaffold created. The work, from roadmap row 7 and
-  `docs/explanation/requirements.md` §2.7 (FR-CLI-1): `index-folder <dir>`
-  walks a folder and feeds every JPEG, PNG and WebP through the same pipeline
-  an upload goes through — the same inspection, the same storage rules, the
-  same duplicate check by content hash, the same work queued per enabled
-  model — with `--recursive`, `--tags`, `--meta`, `--dry-run`, `source =
-  folder`, the file's relative path kept as the original filename, and a
-  summary of what was created, skipped as a duplicate and refused with its
-  reason. With the background runner it then drains the queue before exiting.
+- All four artifacts written and strict-valid: `proposal.md`, the delta specs
+  (`folder-indexing` new, `asset-upload` modified), `design.md`, `tasks.md`
+  (33 tasks, 12 of them failing-input probes).
+- Tier raised to `high` and the plan corrected with it: the command walks a
+  directory tree the operator names, which is path handling — an explicit
+  `high` trigger in AGENTS.md. Row 7 now reads `high` in `openspec/ROADMAP.md`
+  and in §7 of `docs/explanation/requirements.md`.
+- Two decisions the user was asked about and settled: the relative path is
+  recorded as metadata while `original_filename` keeps the bare-name guarantee
+  change 5 built (FR-CLI-1 amended by task 6.3), and the tier above.
+- The walk's mechanics were measured rather than assumed on Python 3.12.14 —
+  `rglob` does not descend into symlinked directories, `is_file()` follows a
+  link while `lstat` does not, a fifo would block an open — and the measurements
+  are in `design.md` under Context.
+- `scripts/pregate-verify.sh gate1 add-folder-indexing-cli` passes.
 
 ## Next step
 
-`/opsx:propose add-folder-indexing-cli` — proposal, spec delta, design and
-tasks. Tier is `medium` by the roadmap, but the proposal has to argue it: the
-command reads paths the user supplies, which is the one place this change
-touches input handling, and that is a `high` trigger in AGENTS.md if a path a
-client controls can reach the media root.
+`/gate-review add-folder-indexing-cli 1` — Codex reviews the artifacts before
+any code exists. After `approved`/`confirmed`: `/opsx:apply
+add-folder-indexing-cli`, starting with task group 1 (the walk).
 
 ## Blockers
 

@@ -334,7 +334,7 @@ The stage plan is the source for `openspec/ROADMAP.md`; ids are stable across bo
 | 4 | `add-embedder-protocol-and-clip` | `Embedder` protocol, lazy registry, dedicated inference threadpool, fake embedder, CLIP adapter (both towers), `models warm`, `tests/models` smoke, readiness dimension check | high (model download is network egress from the service) | fake-embedder tests green; `make test-models` loads CLIP and asserts 768 |
 | 5 | `add-asset-upload-and-storage` | `POST/GET/PATCH/DELETE /assets`, `/file`, `/thumbnail`, listing, tags and meta rules, storage layout, dedup, thumbnails, crash-safe write order, `storage prune` | high | every rejection class has a failing-input test; dedup 409; delete cascades and unlinks |
 | 6 | `add-background-indexing` | job enqueue in the upload transaction, `BackgroundTasks` runner over the shared claim/execute/finish functions, `index_status`, `/jobs`, `/reindex`, retries and leases, delete-race handling, **ADR-003** (queue in PostgreSQL) | high (concurrency) | concurrency and lease tests against PostgreSQL; an upload ends `done` for CLIP without a request-path model call (asserted) |
-| 7 | `add-folder-indexing-cli` | `typer` app, `index-folder` through the upload pipeline, summary and dry run | medium | fixture-tree test: created / duplicates / rejected counts |
+| 7 | `add-folder-indexing-cli` | `typer` app, `index-folder` through the upload pipeline, summary and dry run | high (path handling) | fixture-tree test: created / duplicates / rejected counts; the walk's refusals (links out of the tree, non-regular files) demonstrated |
 
 ### Stage 2 — text→image search, demo data, demo UI
 
