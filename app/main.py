@@ -20,6 +20,7 @@ from app.core.request_id import RequestIdMiddleware
 from app.core.settings import Settings
 from app.db.engine import create_engine, create_session_factory
 from app.ml.pool import create_pool, warm_up
+from app.services.images import configure_decoder_guard
 
 DESCRIPTION = (
     "Semantic search over images: CLIP text→image and DINOv2 image→image embeddings "
@@ -31,6 +32,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Values come from the environment; mypy cannot see that the required field is read there.
     settings = settings if settings is not None else Settings()  # type: ignore[call-arg]
     configure_logging(settings.log_level, settings.log_json)
+    # Pillow's own bomb guard, as the second line behind the upload's explicit
+    # check on the header; see `app/services/images.py`.
+    configure_decoder_guard(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
