@@ -31,3 +31,19 @@
 | 4 | confirmed — the equality claim and task 2.1 now identify both intentional differences: `source` and the recorded-origin metadata. |
 | 5 | confirmed — the root-symlink outcome is defined, and tasks 1.5, 1.6, and 2.5 explicitly verify empty/no-candidate directories, a symlinked root, and a zero-byte candidate. |
 | 6 | changes-requested — the requirement now generally permits return with work still queued, but its plain “A folder is imported” scenario still unconditionally requires every created asset to have vectors. More importantly, decision 8 stops when a claim takes nothing; after a failed non-terminal attempt the existing queue applies backoff, so the next targeted claim takes nothing and the command returns with that job queued rather than exercising every permitted attempt. Task 4.4 nevertheless requires a job that fails every permitted attempt to be terminally failed and reported as such. Align the scenario and task with the actual queued-after-retry outcome, or define a feasible policy that waits/retries to terminal failure, then verify both the retriable and terminal paths. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** f2452127a458e9dcfc8d5e126bb2bbf61349ccd8
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — descriptor-relative `O_NOFOLLOW`/`O_NONBLOCK` opening and `fstat` bind classification and reading to the opened object; tasks 1.4, 6.3, and 6.5 cover entry and parent-directory replacement races. |
+| 2 | confirmed — asset-restricted claims isolate this import's work from an arbitrarily large older queue, while state observation and tasks 4.1–4.3 verify targeted completion. |
+| 3 | confirmed — proposal, design, specification, tasks, and probes consistently refuse every file symlink, including links whose targets remain inside the tree. |
+| 4 | confirmed — the acceptance oracle now limits stored differences from upload to `source` and recorded-origin metadata, matching task 2.1. |
+| 5 | confirmed — empty and no-candidate directories, zero-byte candidates, and a symlinked root each have a defined outcome with explicit verification and applicable failing-input probes. |
+| 6 | confirmed — the contract now distinguishes successful work, retriable work left queued during backoff, and terminal failure after attempts are spent; tasks 4.4–4.6 verify both failure paths and task 6.18 supplies the required guard-removal probe. |
