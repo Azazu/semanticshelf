@@ -1,7 +1,7 @@
 # Handoff — add-folder-indexing-cli
 
 **Updated:** 2026-09-21 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/add-folder-indexing-cli
 
 ## Done this session
@@ -33,19 +33,19 @@ complete, 47 of 51 tasks checked.
 
 ## Next step
 
-Push the branch and report the CI run:
-
-```
-git push -u origin change/add-folder-indexing-cli
-```
-
-Then tasks 8.3 and 8.4 are checked and Gate 2 is requested with
-`/gate-review add-folder-indexing-cli 2`.
+The branch is pushed and its CI run is green (reported by the user), so all 51
+tasks are checked. Gate 2 requested with `/gate-review add-folder-indexing-cli
+2`; the verdict and its findings are recorded in `review.md` by the runner.
 
 Local evidence, every check CI runs: `openspec validate --all --strict` (10
 items), every `scripts/*_test.sh`, `sh -n scripts/*.sh`,
 `env -u DATABASE_URL make check` (269 tests) and `make test-integration`
 (148 tests) — all green.
+
+One operational note from this session: two probes are meant to hang, and the
+runner's timeout used to kill `uv` while leaving `pytest` spinning. The runner
+now starts each probe in its own process group and kills the group; the
+orphans it had left were stopped.
 
 ## Blockers
 
