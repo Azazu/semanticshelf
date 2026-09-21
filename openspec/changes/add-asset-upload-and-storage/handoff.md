@@ -1,7 +1,7 @@
 # Handoff — add-asset-upload-and-storage
 
 **Updated:** 2026-09-21 · claude
-**State:** fixing-g1
+**State:** implementing
 **Branch:** change/add-asset-upload-and-storage
 
 ## Done this session
@@ -15,13 +15,11 @@
 
 ## Next step
 
-Gate 1, round 1: five findings confirmed. Finding 6 (one failing input per
-guard) has now come back twice, so the workflow's own rule applies — after two
-failed confirmations on the same finding, stop and ask the user to arbitrate
-rather than loop. The latest commit splits the grouped probes into
-twenty-seven, one per guard, and repairs the probe that could not have failed.
-Waiting on the user: run the third confirmation, reduce the change, or waive.
+Gate 1 passed: Confirmation 4 on `34b3cf7` reads `confirmed`, all six findings
+resolved. Implementation may start — `/opsx:apply add-asset-upload-and-storage`
+— beginning with task group 1 (settings, `app/storage.py`, the containment
+property).
 
 ## Blockers
 
-None technical; the decision is the user's.
+None.
