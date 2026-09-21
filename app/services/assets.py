@@ -18,6 +18,7 @@ uploads must not stall embedding.
 """
 
 import hashlib
+import os
 import tempfile
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
@@ -91,19 +92,26 @@ def receive(storage: MediaStorage, source: BinaryIO) -> Received:
     source.seek(0)
     handle, name = tempfile.mkstemp(prefix="semanticshelf-upload-")
     temporary = Path(name)
-    if temporary.resolve().is_relative_to(storage.root):
-        temporary.unlink(missing_ok=True)
-        raise StagingLocationError(
-            "the temporary directory lies inside the media root; "
-            "set TMPDIR outside it, or move MEDIA_ROOT"
-        )
+    # `mkstemp` hands back an open descriptor, and it is ours until the file
+    # object below takes it over. Every way out before that has to close it, or
+    # a refused configuration leaks one descriptor per request.
+    ours = True
     size = 0
     try:
-        with open(handle, "wb") as sink:
+        if temporary.resolve().is_relative_to(storage.root):
+            raise StagingLocationError(
+                "the temporary directory lies inside the media root; "
+                "set TMPDIR outside it, or move MEDIA_ROOT"
+            )
+        sink = open(handle, "wb")
+        ours = False
+        with sink:
             for chunk in _hashing_chunks(source, digest):
                 sink.write(chunk)
                 size += len(chunk)
     except BaseException:
+        if ours:
+            os.close(handle)
         temporary.unlink(missing_ok=True)
         raise
     return Received(path=temporary, sha256=digest.hexdigest(), size_bytes=size)

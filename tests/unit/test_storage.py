@@ -125,3 +125,41 @@ def test_receiving_into_the_media_root_is_refused(
         tempfile.tempdir = None
 
     assert list(tmp_path.rglob("*upload*")) == [], "the refused file did not survive"
+
+
+def test_a_refused_receipt_closes_its_descriptor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`mkstemp` hands back an open descriptor; a refusal that does not close it
+    leaks one per request, and the upload endpoint answers even when readiness
+    is false."""
+    import io
+    import os
+    import tempfile
+
+    from app.services.assets import StagingLocationError, receive
+
+    inside = tmp_path / "tmp"
+    inside.mkdir()
+    monkeypatch.setenv("TMPDIR", str(inside))
+    tempfile.tempdir = None
+    handed_out: list[int] = []
+    mkstemp = tempfile.mkstemp
+
+    def remember(*args: object, **kwargs: object) -> tuple[int, str]:
+        handle, name = mkstemp(*args, **kwargs)  # type: ignore[arg-type]
+        handed_out.append(handle)
+        return handle, name
+
+    monkeypatch.setattr(tempfile, "mkstemp", remember)
+    try:
+        for _ in range(3):
+            with pytest.raises(StagingLocationError):
+                receive(MediaStorage.at(tmp_path), io.BytesIO(b"a picture"))
+    finally:
+        tempfile.tempdir = None
+
+    assert len(handed_out) == 3
+    for handle in handed_out:
+        with pytest.raises(OSError):
+            os.fstat(handle)
