@@ -63,3 +63,19 @@
 | 4 | confirmed — Filename normalisation has explicit implementation, API, and independently split failing-input coverage for path segments and separators, controls, and the stored length bound, including an unusable result and preserved non-Latin text. |
 | 5 | confirmed — The endpoint and parser tasks implement and verify exactly one required file, both tag encodings, bounded JSON-object metadata, and the malformed, duplicate, absent, and excessive-part cases. |
 | 6 | changes-requested — The grouped probes identified in Confirmation 2 are now split, and probe 8.2 distinguishes the parser-stage metadata refusal from the application guard. However, probe 8.12 still violates the section's explicit one-guard rule: it removes the application metadata-size bound **and** raises the parser bound. Give the application metadata-size guard a test below the parser limit or exercise it directly at the normalisation boundary, so its probe changes only that guard. |
+
+## Confirmation 4 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** 34b3cf71e09d2d7cf1d9b10daf49c8e2ad0a90ab
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The shared/exclusive transaction-scoped advisory-lock design and its unbounded-delay integration test still prevent prune from acting while an upload is between its file writes and row commit. |
+| 2 | confirmed — The ASGI middleware remains the sole whole-body and file-byte bound, while the parser is assigned only field-size and part-count limits that Starlette enforces; the planned tests distinguish each refusal stage. |
+| 3 | confirmed — The explicit header-dimension comparison still enforces the configured pixel cap before decode at the exact cap/cap-plus-one boundary, independently of Pillow's weaker guard. |
+| 4 | confirmed — Filename normalisation still has explicit implementation, API, and one-guard failing-input coverage for separators and parent segments, controls, and the stored length bound. |
+| 5 | confirmed — The multipart contract still assigns and verifies exactly one required file, both tag encodings, bounded JSON-object metadata, and malformed, duplicate, absent, and excessive-part cases. |
+| 6 | confirmed — The parser metadata-part bound is now deliberately above the application metadata-size bound, creating separate observable bands. Task 2.1 tests the application boundary directly, task 3.2 tests a value between the bounds, and probe 8.12 removes only the application guard, so every mapped validation check now has an independent one-guard failing-input probe. |
