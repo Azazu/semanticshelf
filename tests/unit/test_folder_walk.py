@@ -248,3 +248,34 @@ def test_the_handle_of_an_abandoned_walk_is_closed(tmp_path: Path) -> None:
     entries.close()
 
     assert first.handle.closed
+
+
+def test_a_parent_directory_swapped_for_a_link_does_not_redirect_the_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The walk opens relative to a descriptor of the directory it entered, so
+    replacing that directory with a link afterwards redirects nothing."""
+    inside = tmp_path / "folder"
+    (inside / "sub").mkdir(parents=True)
+    (inside / "sub" / "a.png").write_bytes(PICTURE)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "a.png").write_bytes(b"not ours")
+    original = folder._open_candidate
+    swapped = False
+
+    def swap_the_parent_then_open(name: str, dir_fd: int) -> int:
+        nonlocal swapped
+        if name == "a.png" and not swapped:
+            swapped = True
+            # The directory keeps its file and loses its name: what is left
+            # under `sub` is a link to somewhere else entirely.
+            (inside / "sub").rename(inside / "sub-real")
+            (inside / "sub").symlink_to(elsewhere, target_is_directory=True)
+        return original(name, dir_fd)
+
+    monkeypatch.setattr(folder, "_open_candidate", swap_the_parent_then_open)
+
+    seen = outcomes(folder.walk(inside, recursive=True))
+
+    assert seen["sub/a.png"] == "\x89PNG", "read from the directory the walk entered"

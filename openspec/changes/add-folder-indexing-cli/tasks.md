@@ -52,7 +52,6 @@ code.
 | The walk is relative to the directory's descriptor | 6.5 |
 | The named directory is resolved once, before the walk | 6.6 |
 | Candidates are chosen by extension | 6.7 |
-| The bytes still decide what a file is | 6.8 |
 | Tags and metadata are validated before the walk | 6.9 |
 | The recorded origin is not overwritten by the run's metadata | 6.10 |
 | `original_filename` stays a bare name | 6.11 |
@@ -64,24 +63,24 @@ code.
 | The import's wait is bounded | 6.17 |
 | Still queued and failed are not conflated | 6.18 |
 
-- [ ] 6.1 Open without `O_NOFOLLOW`: the outside-symlink test fails, showing a file from beyond the tree stored.
-- [ ] 6.2 Open without `O_NONBLOCK`: the fifo test fails by hanging until its timeout.
-- [ ] 6.3 Decide from an `lstat` on the path instead of `fstat` on the descriptor: the mutation-race test of task 1.4 fails.
-- [ ] 6.4 Pass `followlinks=True` to the walk: the parent-link test fails or does not terminate within its timeout.
-- [ ] 6.5 Open by full path instead of relative to the directory descriptor: the mutation-race test that swaps a parent directory for a link fails.
-- [ ] 6.6 Walk the named path without resolving it: the symlinked-root test fails.
-- [ ] 6.7 Accept every regular file as a candidate: the test that a document is skipped rather than refused fails.
-- [ ] 6.8 Trust the extension instead of the bytes: the lying-extension test fails, showing a text file stored as a picture.
-- [ ] 6.9 Validate the tags after the walk instead of before: the test that a bad tag leaves the store untouched fails.
-- [ ] 6.10 Merge the run's metadata last: the test that the recorded origin survives fails.
-- [ ] 6.11 Put the relative path in `original_filename`: the test that the field holds a bare name fails.
-- [ ] 6.12 Let the dry run call `create_asset`: the snapshot test fails.
-- [ ] 6.13 Re-raise the first refusal: the mixed-tree test fails, showing a run that stopped.
-- [ ] 6.14 Exit 0 for a missing directory: that CLI test fails.
-- [ ] 6.15 Ignore the asset restriction in the claim: the restricted-claim test fails, showing another asset's work taken.
-- [ ] 6.16 Decide the import is finished by the number of batches rather than by the state of its own assets: the test of task 4.3 fails, showing a run that returned with its own work pending.
-- [ ] 6.17 Remove the "a pass that claimed nothing ends it" rule: the test that an import whose work is held by another runner still returns fails by hanging until its timeout.
-- [ ] 6.18 Report every unfinished job as failed: the test of task 4.4 fails, showing a retriable job counted as a terminal failure.
+- [x] 6.1 Open without `O_NOFOLLOW`: the outside-symlink test fails, showing a file from beyond the tree stored.
+- [x] 6.2 Open without `O_NONBLOCK`: the fifo test fails by hanging until its timeout.
+- [x] 6.3 Decide from an `lstat` on the path instead of `fstat` on the descriptor: the mutation-race test of task 1.4 fails.
+- [x] 6.4 Pass `followlinks=True` to the walk: the parent-link test fails or does not terminate within its timeout.
+- [x] 6.5 Open by full path instead of relative to the directory descriptor: the mutation-race test that swaps a parent directory for a link fails.
+- [x] 6.6 Walk the named path without resolving it: the symlinked-root test fails.
+- [x] 6.7 Accept every regular file as a candidate: the test that a document is skipped rather than refused fails.
+- [x] 6.8 **No probe, and why.** The rule it named — the bytes decide what a file is — is enforced by the inspection inside the pipeline this change only feeds, and change 5 demonstrates it with its own probe (`ea0c781`). Removing it is not an edit inside this change's diff, so a probe here would be theatre. The behaviour is still asserted: `tests/integration/test_folder_import.py` stores nothing for `lying.png`, a text file named like a picture, and `tests/unit/test_folder_walk.py` shows the walk opening it regardless of its name.
+- [x] 6.9 Validate the tags after the walk instead of before: the test that a bad tag leaves the store untouched fails.
+- [x] 6.10 Merge the run's metadata last: the test that the recorded origin survives fails.
+- [x] 6.11 Put the relative path in `original_filename`: the test that the field holds a bare name fails.
+- [x] 6.12 Let the dry run call `create_asset`: the snapshot test fails.
+- [x] 6.13 Re-raise the first refusal: the mixed-tree test fails, showing a run that stopped.
+- [x] 6.14 Exit 0 for a missing directory: that CLI test fails.
+- [x] 6.15 Ignore the asset restriction in the claim: the restricted-claim test fails, showing another asset's work taken.
+- [x] 6.16 Decide the import is finished by the number of batches rather than by the state of its own assets: the test of task 4.3 fails, showing a run that returned with its own work pending.
+- [x] 6.17 Remove the "a pass that claimed nothing ends it" rule: the test that an import whose work is held by another runner still returns fails by hanging until its timeout.
+- [x] 6.18 Report every unfinished job as failed: the test of task 4.4 fails, showing a retriable job counted as a terminal failure.
 
 ## 7. Documentation and the requirement amendments
 

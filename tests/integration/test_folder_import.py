@@ -569,14 +569,25 @@ async def test_work_that_will_be_attempted_again_is_reported_as_queued(
     settings: Settings,
     pool: ThreadPoolExecutor,
     engine: AsyncEngine,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The queue puts a failed attempt back with a growing delay; the import
-    reports that rather than sleeping through it."""
+    reports that rather than sleeping through it — and stops as soon as there
+    is nothing of its own to claim, rather than spinning to its pass bound."""
     (incoming / "picture.png").write_bytes(picture_bytes())
     report = await folder.import_folder(
         incoming, session=session, storage=storage, settings=settings
     )
     breaking_embedder()
+    passes = 0
+    claiming = indexing.run_batch
+
+    async def counted(**arguments: Any) -> int:
+        nonlocal passes
+        passes += 1
+        return await claiming(**arguments)
+
+    monkeypatch.setattr(indexing, "run_batch", counted)
     started = time.monotonic()
 
     work = await folder.index_imported(
@@ -584,6 +595,10 @@ async def test_work_that_will_be_attempted_again_is_reported_as_queued(
     )
 
     assert time.monotonic() - started < 5, "it did not wait out the backoff"
+    assert passes <= 2, (
+        f"it claimed {passes} times: a pass that takes nothing ends the wait, "
+        "rather than running to the bound"
+    )
     assert work.indexed == 0
     assert work.failed == []
     assert work.queued == [(report.created_assets[0], folder.QUEUED_WAITING)]
