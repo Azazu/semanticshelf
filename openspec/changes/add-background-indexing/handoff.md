@@ -1,7 +1,7 @@
 # Handoff — add-background-indexing
 
 **Updated:** 2026-09-21 · claude
-**State:** fixing-g2
+**State:** ready-to-merge
 **Branch:** change/add-background-indexing
 
 ## Done this session
@@ -47,12 +47,15 @@ real and both fixed:
    running snapshot shows the lease ten minutes ahead of `started_at`. Probe
    7.25.
 
-Confirmation of round 1 requested with
-`/gate-review add-background-indexing 2 confirm 1`.
+Gate 2 passed: Confirmation 1 on `d24b2e0` reads `confirmed`, both findings
+resolved.
 
 Local evidence: `env -u DATABASE_URL make check` green (252 tests);
 `make test-integration` green (116 tests); all 28 probes of group 7 caught
 their removal on a full re-run.
+
+Next: push the branch so CI runs on the head that Gate 2 confirmed, then
+`/git:merge add-background-indexing`, then `/opsx:archive`.
 
 ## Blockers
 
