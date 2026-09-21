@@ -56,6 +56,9 @@ upload, path handling and deletion.
   counts.
 - New settings: `MEDIA_ROOT`, `MAX_UPLOAD_BYTES`, `MAX_IMAGE_PIXELS`,
   `MIN_IMAGE_SIDE`, `PRUNE_MIN_AGE_SECONDS`.
+- One new dependency: `python-multipart`, which is the multipart backend
+  Starlette parses uploads with. Without it the framework refuses to parse a
+  form at all, so it arrives with the first endpoint that accepts one.
 
 ### Deliberately not in this change, and why
 

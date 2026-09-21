@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app import __version__
-from app.api import health
+from app.api import assets, health
 from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.errors import problem_responses, register_exception_handlers
 from app.core.logging import configure_logging
@@ -22,6 +22,7 @@ from app.core.settings import Settings
 from app.db.engine import create_engine, create_session_factory
 from app.ml.pool import create_pool, warm_up
 from app.services.images import configure_decoder_guard
+from app.storage import MediaStorage
 
 DESCRIPTION = (
     "Semantic search over images: CLIP text→image and DINOv2 image→image embeddings "
@@ -47,6 +48,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # the pool, so a start that pulls gigabytes still answers other work.
         pool = create_pool(settings)
         app.state.inference_pool = pool
+        # Resolved once: every path under it is compared against this.
+        app.state.storage = MediaStorage.at(settings.media_root)
         try:
             await warm_up(pool, settings)
             yield
@@ -75,5 +78,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(RequestIdMiddleware)
     register_exception_handlers(app)
     app.include_router(health.router)
+    assets.install(app)
     install_problem_media_type(app)
     return app

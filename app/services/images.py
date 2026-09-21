@@ -109,7 +109,11 @@ def _verify(path: Path) -> None:
 
 
 def thumbnail(path: Path) -> bytes:
-    """A WebP thumbnail, re-encoded from the decoded pixels."""
+    """A WebP thumbnail, re-encoded from the decoded pixels.
+
+    Bounded by its longest side, never enlarged: a picture already smaller than
+    the bound is kept at its own size rather than blown up into blur.
+    """
     with Image.open(path) as image:
         image.load()
         picture = image.convert("RGB")

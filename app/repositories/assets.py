@@ -37,6 +37,7 @@ class AssetRepository:
     async def add(
         self,
         *,
+        asset_id: UUID | None = None,
         sha256: str,
         content_type: str,
         file_ext: str,
@@ -51,6 +52,10 @@ class AssetRepository:
         """Insert one asset. The store rejects a duplicate content hash and any
         value outside the domains it enforces."""
         row = AssetRow(
+            # Supplied by the caller when the files are written before the row
+            # (the upload path needs the identifier to build their names); the
+            # column default covers every other caller.
+            **({"id": asset_id} if asset_id is not None else {}),
             sha256=sha256,
             content_type=content_type,
             file_ext=file_ext,
@@ -101,6 +106,76 @@ class AssetRepository:
         if meta:
             statement = statement.where(AssetRow.meta.contains(dict(meta)))
         return statement.order_by(AssetRow.created_at.desc(), AssetRow.id.desc()).limit(limit)
+
+    def page_statement(
+        self,
+        *,
+        tags_all: Sequence[str] = (),
+        tags_any: Sequence[str] = (),
+        source: str | None = None,
+        limit: int = DEFAULT_LIMIT,
+        offset: int = 0,
+    ) -> sa.Select[Any]:
+        """One page of the listing, plus one row: the extra row is how the
+        caller knows more exist without a count that would be stale anyway."""
+        statement = sa.select(AssetRow)
+        if tags_all:
+            statement = statement.where(AssetRow.tags.contains(list(tags_all)))
+        if tags_any:
+            statement = statement.where(AssetRow.tags.overlap(list(tags_any)))
+        if source is not None:
+            statement = statement.where(AssetRow.source == source)
+        return (
+            statement.order_by(AssetRow.created_at.desc(), AssetRow.id.desc())
+            .offset(offset)
+            .limit(limit + 1)
+        )
+
+    async def page(
+        self,
+        *,
+        tags_all: Sequence[str] = (),
+        tags_any: Sequence[str] = (),
+        source: str | None = None,
+        limit: int = DEFAULT_LIMIT,
+        offset: int = 0,
+    ) -> tuple[list[Asset], bool]:
+        """A page of assets, newest first, and whether more exist after it."""
+        rows = (
+            (
+                await self._session.execute(
+                    self.page_statement(
+                        tags_all=tags_all,
+                        tags_any=tags_any,
+                        source=source,
+                        limit=limit,
+                        offset=offset,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [to_domain(row) for row in rows[:limit]], len(rows) > limit
+
+    async def set_tags_and_meta(
+        self,
+        asset_id: UUID,
+        *,
+        tags: Sequence[str] | None = None,
+        meta: Mapping[str, Any] | None = None,
+    ) -> Asset | None:
+        """Replace what an edit may change, leaving anything not given alone."""
+        row = await self._session.get(AssetRow, asset_id)
+        if row is None:
+            return None
+        if tags is not None:
+            row.tags = list(tags)
+        if meta is not None:
+            row.meta = dict(meta)
+        await self._session.flush()
+        await self._session.refresh(row)
+        return to_domain(row)
 
     async def find(
         self,

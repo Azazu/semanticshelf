@@ -111,6 +111,13 @@ class MediaStorage:
         self.discard(self.original(asset_id, file_ext))
         self.discard(self.thumbnail(asset_id))
 
+    def remove_any(self, asset_id: UUID) -> None:
+        """Everything belonging to an asset, whatever format it turned out to
+        be. Used when an upload fails before its format is even known."""
+        self.discard(self.thumbnail(asset_id))
+        for file_ext in FILE_EXTENSIONS:
+            self.discard(self.original(asset_id, file_ext))
+
     def walk(self) -> Iterator[tuple[Path, float]]:
         """Every file under the root with the time it was last modified.
 

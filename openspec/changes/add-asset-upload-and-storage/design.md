@@ -158,13 +158,20 @@ future), and no background work of any kind.
     container — so a grace period alone only shrinks the window rather than
     closing it.
 
-    The upload therefore opens its database transaction **before** it writes,
-    takes a shared transaction-scoped advisory lock, writes both files,
-    inserts the row and commits; the lock is released by the commit or the
-    rollback, and by the connection dying, so nothing can leak it. Prune takes
-    the exclusive lock of the same key without waiting: if any upload is in
-    flight it does not run, says so, and changes nothing. Uploads never block
-    each other, because their lock is shared.
+    The upload therefore holds a shared transaction-scoped advisory lock from
+    before it publishes either file until its row is committed; the lock is
+    released by the commit or the rollback, and by the connection dying, so
+    nothing can leak it. Prune takes the exclusive lock of the same key
+    without waiting: if any upload is in flight it does not run, says so, and
+    changes nothing. Uploads never block each other, because their lock is
+    shared.
+
+    Staging — the temporary copy, under a name the service never serves — sits
+    deliberately outside that transaction, and so do the format and dimension
+    checks that read it. Losing a staged file to a prune costs that one upload
+    and nothing else; losing a published file would break the invariant. Only
+    publication needs the guarantee, and keeping the checks outside means a
+    refused upload never touches the database at all.
 
     A grace period (`PRUNE_MIN_AGE_SECONDS`) stays as a second line for the
     one case the lock cannot cover: a prune run configured against a different

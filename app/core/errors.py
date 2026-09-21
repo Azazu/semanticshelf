@@ -71,7 +71,9 @@ def problem_response(
 ) -> JSONResponse:
     return JSONResponse(
         status_code=body.status,
-        content=body.model_dump(exclude_none=True),
+        # `mode="json"` so an extension member that is a UUID or a datetime
+        # renders as text rather than failing the encoder.
+        content=body.model_dump(mode="json", exclude_none=True),
         media_type=PROBLEM_MEDIA_TYPE,
         headers=headers,
     )
