@@ -37,6 +37,13 @@ that an attempt has begun, SHALL set a lease that says how long the claim is
 good for, and SHALL give the claimer a token identifying that particular
 claim.
 
+A claimer MAY restrict a claim to the work of named assets. A restricted claim
+SHALL take only work for those assets and SHALL leave every other unit exactly
+as it found it, under the same rules as any claim — one runner at a time, the
+same lease, the same attempt, the same order among the units it may take. A
+claim that names no assets SHALL behave exactly as it did before: it takes
+whatever is due.
+
 #### Scenario: Two runners claim at once
 - **WHEN** two runners claim from a queue holding one unit of work
 - **THEN** one of them gets it and the other gets nothing, and the work is
@@ -51,6 +58,17 @@ claim.
   second claimer claims while it is held
 - **THEN** the second claimer promptly takes a different due unit rather than
   waiting for the first to finish
+
+#### Scenario: A claim restricted to named assets
+- **WHEN** a runner claims work for named assets from a queue that also holds
+  older due work for other assets
+- **THEN** it takes only the named assets' work, however much older work is
+  waiting, and the older work stays claimable by anyone
+
+#### Scenario: A restricted claim finds nothing of its own
+- **WHEN** a runner claims work for named assets whose work is all finished,
+  while other assets' work is due
+- **THEN** it takes nothing, and the other assets' work is untouched
 
 ### Requirement: A runner that dies releases its work by itself
 

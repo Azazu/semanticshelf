@@ -1,7 +1,7 @@
 # Handoff — add-folder-indexing-cli
 
 **Updated:** 2026-09-21 · claude
-**State:** ready-to-merge
+**State:** archived
 **Branch:** change/add-folder-indexing-cli
 
 ## Done this session
@@ -31,19 +31,10 @@ complete, 47 of 51 tasks checked.
 - Security-sensitive surface: path handling (the walk) and input handling (the
   pipeline it feeds), which is why the tier is `high`.
 
-## Next step
-
-Gate 2 passed: Confirmation 3 of round 1 on `f91ae83` reads `confirmed`, both
-findings resolved.
-
-The branch has moved since the CI run that was green (`c1faee6`): three fixes,
-their tests, the probes and the artefacts. Push it again so CI runs on the head
-Gate 2 confirmed, then `/git:merge add-folder-indexing-cli`, then
-`/opsx:archive`.
-
-Local evidence: `env -u DATABASE_URL make check` green (275 tests);
-`make test-integration` green (149 tests); all 20 probes of group 6 caught
-their removal; nothing left running after any probe.
+Merged into `main` as `754287f` (`--no-ff`, gate 2 approved) and pushed. The
+delta specs are synced into `openspec/specs/` — `folder-indexing` is a new
+capability, `asset-upload` and `indexing-jobs` carry the rewritten
+requirements — and this change is archived.
 
 ## Blockers
 

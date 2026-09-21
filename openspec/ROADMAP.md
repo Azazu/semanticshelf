@@ -14,9 +14,10 @@ carries the full scope, exit criteria and the declared tier.
 
 ## Stage 1 — skeleton, schema, CLIP, upload, background indexing
 
-| # | Change id | Scope (summary) | Tier |
-|---|---|---|---|
-| 7 | `add-folder-indexing-cli` | `typer` CLI, `index-folder` through the upload pipeline, summary, dry run | high |
+Done: every change of this stage is merged and archived. A picture can be
+uploaded over HTTP or imported from a folder, is stored under a generated name,
+and gets its vectors in the background. The history is in git and in
+`openspec/changes/archive/`.
 
 ## Stage 2 — text→image search, demo data, demo UI
 
