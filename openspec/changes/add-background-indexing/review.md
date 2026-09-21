@@ -16,3 +16,19 @@
 | 5 | blocker | `tasks.md` §7, especially 1.1, 3.4 and 7.11 | The high-tier failing-input table is not “one per new guard” as it claims. It omits at least the new positive-value validators for all three settings, the disabled/unknown model terminal branch, and the file-content and 2 KB error guards; FR-IDX-7 will also require probes for the renewed decode/cap boundary. Ordinary positive/unit tests elsewhere do not satisfy the mandatory demonstration that the named test fails when each guard is removed. Make the inventory exhaustive and assign a feasible, single-guard probe to every new or changed check before implementation. | fixed |
 | 6 | major | `tasks.md` 5.1 and 7.2 | The proposed one-job/two-claimer test does not reliably prove `SKIP LOCKED`: without that clause, PostgreSQL may merely block the second claim until the first commits, re-evaluate the predicate, and still return exactly “one gets it, one gets nothing,” leaving the test green. “One blocks” is also not an assertion unless the plan defines a deterministic held lock and deadline. Exercise the skip behavior observably—for example, hold the first due row locked while a second claimant promptly takes another due row—and make the mutation probe remove only `SKIP LOCKED`. | fixed |
 | 7 | minor | `design.md` Migration Plan | The migration plan says the reset endpoint can create work for pre-existing assets with no jobs, while Decision 8 and task 6.4 define reset strictly as updating existing rows without delete/recreate. Remove that claim or explicitly design and verify job creation; as written, the stated operator path cannot work. | fixed |
+
+## Confirmation 1 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** 6ea573dfbba9820a5f43a745608a2150653cdaf0
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — `docs/explanation/requirements.md` still promises the impossible persisted state twice: FR-AST-12 says the worker acknowledges the deleted job as `failed` with `asset-deleted`, and the test inventory still says `delete-then-job race → failed asset-deleted`. These contradict the corrected FR-IDX-6 and leave the claim unreconciled across sibling artifacts. |
+| 2 | confirmed — the design now fences every success and failure finish with the claim's lease-timestamp token, invalidates outstanding ownership on reset, specifies a no-op/rollback when ownership is lost, and assigns real-PostgreSQL coverage for stale success, stale failure, reclaim, and reset. |
+| 3 | confirmed — proposal, design, delta spec, implementation task, integration coverage, and failing-input probes now require renewed format/cap inspection of the stored original and RGB conversion, including replaced invalid and oversized files. |
+| 4 | changes-requested — the byte bound and its boundary probe are now explicit, but the scrub remains unspecified. Decision 11 only says that a scrub is applied where the reason is built; it does not say how file bytes embedded in an arbitrary exception message are identified or removed. Task 3.4 and probe 7.19 therefore do not define a feasible mechanism whose security claim can be enforced. |
+| 5 | changes-requested — the inventory adds the guards named in Round 1, but it is still not exhaustive after adding the ownership fix. The token condition is required separately on `done`, retry-to-`pending`, and exhausted-to-`failed` finishing statements; probe 7.9 removes it only from a finishing statement and observes only late success. No single-guard probe demonstrates that removing the token from either failure transition makes the stale-failure test fail. |
+| 6 | confirmed — task 5.1 now holds one due row in an open transaction, requires a second claimer to take another due row within an enforced deadline, and probe 7.5 removes only `SKIP LOCKED`, making blocking observable. |
