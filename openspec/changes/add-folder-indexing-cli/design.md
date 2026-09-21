@@ -121,9 +121,12 @@ settings: the run is described entirely by its arguments.
    metadata.** `normalise_filename` reduces a value to its last segment so that
    no path survives in that field (change 5), and this change does not weaken
    it. The relative path is recorded under a reserved metadata key, through the
-   same metadata checks as any other value — so a tree deep enough to push the
-   metadata over its bound refuses that file with that reason, like any other
-   oversized metadata. The run's own `--meta` is merged first and the recorded
+   same metadata checks as any other value — so a file whose recorded path
+   pushes the run's metadata over its bound is refused with that reason, like
+   any other oversized metadata. (A path long enough to break the bound by
+   itself does not exist: a filesystem stops at four kilobytes and the bound is
+   eight. The check is per file because the path is per file, not because a
+   path can be enormous.) The run's own `--meta` is merged first and the recorded
    origin last, so a run cannot overwrite it by accident.
    FR-CLI-1 asks for the relative path in `original_filename`; the proposal
    amends it, because the field's guarantee is older and stronger than the

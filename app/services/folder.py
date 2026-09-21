@@ -20,12 +20,23 @@ something else behind the walk's back: the check and the read are of one object.
 import errno
 import os
 import stat
-from collections.abc import Iterator
-from dataclasses import dataclass
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import BinaryIO
+from typing import Any, BinaryIO
+from uuid import UUID
 
+import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
+
+from app.core.settings import Settings
 from app.domain import FILE_EXTENSIONS
+from app.repositories.assets import AssetRepository
+from app.services import images
+from app.services.assets import DuplicateAssetError, create_asset, receive
+from app.services.tagging import MetadataError, check_metadata, normalise_tags
+from app.storage import MediaStorage
 
 #: Suffixes worth opening: the extensions the service stores, plus `.jpeg`,
 #: which is the same format under its other spelling. The suffix only decides
@@ -42,6 +53,8 @@ SKIP_NOT_REGULAR = "not a regular file"
 SKIP_NO_PICTURE_SUFFIX = "not named like a picture"
 SKIP_VANISHED = "it vanished during the walk"
 SKIP_UNREADABLE = "it could not be opened"
+
+log = structlog.stdlib.get_logger(__name__)
 
 
 class DirectoryUnusableError(Exception):
@@ -137,3 +150,186 @@ def walk(directory: Path, *, recursive: bool = False) -> Iterator[Candidate | Sk
                 yield Candidate(relative, handle)
             finally:
                 handle.close()
+
+
+# --- importing what the walk found -------------------------------------------
+#
+# One asset at a time, each through `app/services/assets.py::create_asset` and
+# nothing else: the import adds no rule to the pipeline, it only feeds it.
+
+#: Where a file's path relative to the imported directory is recorded. It is
+#: metadata because a path is text; `original_filename` keeps the guarantee
+#: change 5 gave it, that it holds one name and no directory.
+SOURCE_PATH_KEY = "source_path"
+
+CREATED = "created"
+ALREADY_STORED = "already stored"
+REFUSED = "refused"
+SKIPPED = "skipped"
+
+#: What a file may be refused for. Anything else is not a refusal but a failure
+#: of the run, and is left to the caller.
+REFUSALS = (
+    images.UndecodableImageError,
+    images.UnsupportedFormatError,
+    images.ImageTooLargeError,
+    images.ImageTooSmallError,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class FileOutcome:
+    """What happened to one file the walk considered."""
+
+    path: Path
+    state: str
+    reason: str | None = None
+    asset_id: UUID | None = None
+
+
+@dataclass(slots=True)
+class ImportReport:
+    """Everything a run did, in the order it did it."""
+
+    directory: Path
+    dry_run: bool
+    files: list[FileOutcome] = field(default_factory=list)
+
+    def count(self, state: str) -> int:
+        return sum(1 for outcome in self.files if outcome.state == state)
+
+    @property
+    def created_assets(self) -> list[UUID]:
+        return [
+            outcome.asset_id
+            for outcome in self.files
+            if outcome.state == CREATED and outcome.asset_id is not None
+        ]
+
+
+def metadata_for(relative: Path, meta: Mapping[str, Any]) -> dict[str, Any]:
+    """The run's metadata with the recorded origin last, so a run cannot
+    overwrite where the file came from — by accident or otherwise."""
+    return check_metadata({**dict(meta), SOURCE_PATH_KEY: str(relative)})
+
+
+async def import_one(
+    candidate: Candidate,
+    *,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+    tags: Sequence[str],
+    meta: Mapping[str, Any],
+) -> FileOutcome:
+    """Store one file through the upload pipeline, or say why it was not.
+
+    Only the refusals an upload gives are outcomes here. Anything else — a
+    database that went away, a disk that filled — is a failure of the run and
+    is left to the caller, because continuing past it would import a folder
+    into nothing.
+    """
+    try:
+        recorded = metadata_for(candidate.path, meta)
+    except MetadataError as error:  # the bound a long path can push it over
+        return FileOutcome(candidate.path, REFUSED, reason=str(error))
+    try:
+        asset = await create_asset(
+            session=session,
+            storage=storage,
+            settings=settings,
+            source=candidate.handle,
+            original_filename=candidate.path.name,
+            tags=tags,
+            meta=recorded,
+            asset_source="folder",
+        )
+    except DuplicateAssetError as duplicate:
+        return FileOutcome(candidate.path, ALREADY_STORED, asset_id=duplicate.existing_asset_id)
+    except REFUSALS as refusal:
+        return FileOutcome(candidate.path, REFUSED, reason=str(refusal))
+    return FileOutcome(candidate.path, CREATED, asset_id=asset.id)
+
+
+async def examine_one(
+    candidate: Candidate,
+    *,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+    meta: Mapping[str, Any],
+) -> FileOutcome:
+    """What `import_one` would do, without doing it.
+
+    The same steps up to the write: the bytes are read and hashed into a
+    temporary file outside the media root, inspected through the same
+    inspection, and the hash is looked up the same way. Then the temporary file
+    goes and nothing else has happened.
+    """
+    try:
+        metadata_for(candidate.path, meta)  # for its refusal; a dry run stores nothing
+    except MetadataError as error:
+        return FileOutcome(candidate.path, REFUSED, reason=str(error))
+
+    received = await run_in_threadpool(receive, storage, candidate.handle)
+    try:
+        try:
+            await run_in_threadpool(images.inspect, received.path, settings)
+        except REFUSALS as refusal:
+            return FileOutcome(candidate.path, REFUSED, reason=str(refusal))
+        existing = await AssetRepository(session).get_by_sha256(received.sha256)
+    finally:
+        await run_in_threadpool(_discard, received.path)
+
+    if existing is not None:
+        return FileOutcome(candidate.path, ALREADY_STORED, asset_id=existing.id)
+    return FileOutcome(candidate.path, CREATED)
+
+
+def _discard(path: Path) -> None:
+    """Blocking; called in a worker thread. Never raises."""
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:  # pragma: no cover - nothing to do about it here
+        log.warning("temporary file could not be removed", file=str(path))
+
+
+async def import_folder(
+    directory: Path,
+    *,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+    recursive: bool = False,
+    tags: Sequence[str] = (),
+    meta: Mapping[str, Any] | None = None,
+    dry_run: bool = False,
+) -> ImportReport:
+    """Import a directory, and account for every file it held.
+
+    The run's tags and metadata are checked once, before anything is read, so
+    a folder cannot be half imported under a tag the service then rejects.
+    """
+    normalised = normalise_tags(tags)
+    given = check_metadata(dict(meta or {}))
+    report = ImportReport(directory=resolve_directory(directory), dry_run=dry_run)
+
+    for entry in walk(directory, recursive=recursive):
+        if isinstance(entry, Skipped):
+            report.files.append(FileOutcome(entry.path, SKIPPED, reason=entry.reason))
+            continue
+        if dry_run:
+            outcome = await examine_one(
+                entry, session=session, storage=storage, settings=settings, meta=given
+            )
+        else:
+            outcome = await import_one(
+                entry,
+                session=session,
+                storage=storage,
+                settings=settings,
+                tags=normalised,
+                meta=given,
+            )
+        report.files.append(outcome)
+    return report

@@ -9,12 +9,12 @@
 
 ## 2. Importing a file through the pipeline
 
-- [ ] 2.1 Extend `app/services/folder.py` with the per-file import: hand `create_asset` the open descriptor, `source = folder`, the file's own name as `original_filename`, the run's tags, and the run's metadata with the recorded relative path merged last (design decision 7). Nothing in `app/services/assets.py` changes. Verify: an integration test imports a folder and asserts the stored asset equals the same picture uploaded over HTTP in every stored value except `source` and the recorded origin; `git diff --stat main..HEAD -- app/services/assets.py` is empty.
-- [ ] 2.2 The run's tags and metadata are validated once, before the walk starts, through the same normalisation an upload uses; an unacceptable value refuses the run with nothing stored. Verify: unit tests for a bad tag and for oversized metadata, and an integration test asserting the store is untouched after such a refusal.
-- [ ] 2.3 A file whose recorded path would push its metadata past the bound is refused with that reason, and the run continues. Verify: an integration test with a deep enough path.
-- [ ] 2.4 Metadata given for the run cannot replace the recorded origin: the import's key wins (design decision 7). Verify: an integration test importing with metadata that names that key.
-- [ ] 2.5 A zero-byte file with a picture's extension is refused as undecodable, exactly as an upload of no bytes is. Verify: an integration test asserting the reason and that nothing was stored.
-- [ ] 2.6 Every outcome per file — created, already stored, refused with the reason, skipped with the reason — is recorded in a report object, and the run never stops at the first failure. Verify: an integration test over a mixed fixture tree asserts every count and every reason.
+- [x] 2.1 Extend `app/services/folder.py` with the per-file import: hand `create_asset` the open descriptor, `source = folder`, the file's own name as `original_filename`, the run's tags, and the run's metadata with the recorded relative path merged last (design decision 7). Nothing in `app/services/assets.py` changes. Verify: an integration test imports a folder and asserts the stored asset equals the same picture uploaded over HTTP in every stored value except `source` and the recorded origin; `git diff --stat main..HEAD -- app/services/assets.py` is empty.
+- [x] 2.2 The run's tags and metadata are validated once, before the walk starts, through the same normalisation an upload uses; an unacceptable value refuses the run with nothing stored. Verify: unit tests for a bad tag and for oversized metadata, and an integration test asserting the store is untouched after such a refusal.
+- [x] 2.3 A file whose recorded path would push its metadata past the bound is refused with that reason, and the run continues. Verify: an integration test with a deep enough path.
+- [x] 2.4 Metadata given for the run cannot replace the recorded origin: the import's key wins (design decision 7). Verify: an integration test importing with metadata that names that key.
+- [x] 2.5 A zero-byte file with a picture's extension is refused as undecodable, exactly as an upload of no bytes is. Verify: an integration test asserting the reason and that nothing was stored.
+- [x] 2.6 Every outcome per file — created, already stored, refused with the reason, skipped with the reason — is recorded in a report object, and the run never stops at the first failure. Verify: an integration test over a mixed fixture tree asserts every count and every reason.
 
 ## 3. The dry run
 
