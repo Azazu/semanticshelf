@@ -59,3 +59,15 @@
 |---|----------|----------|---------|--------|
 | 1 | blocker | `app/services/folder.py:359-361`; `app/cli.py:104-111`; `design.md` decision 3; `specs/folder-indexing/spec.md` “Only a regular file inside the folder is ever read” | The service does not bind a run to the root it initially resolved. `import_folder` resolves `directory` for `report.directory`, then passes the original path to `walk`, which resolves it again; the CLI adds another resolution in `count_entries`. If the named directory (or one of its parents) is replaced with a symlink between those steps, the second resolution can follow the replacement and import a different tree, including one outside the root recorded in the report. This recreates the root-level form of the symlink TOCTOU that the approved design's “resolved exactly once” rule was meant to exclude. Resolve once for the import and walk that resolved object without following a later replacement; add a deterministic root/parent replacement race test and its failing-input probe. | fixed |
 | 2 | major | `app/services/folder.py:290-329,368-371`; `tests/integration/test_folder_import.py:311-327,446-467`; `specs/folder-indexing/spec.md:138-158` | Dry-run duplicate classification diverges from a real run when two files in the same folder have identical bytes. Each dry-run file only queries the unchanged database, so both are reported `created`; a real run stores the first and reports the second `already stored`. That violates both the content-hash duplicate rule and the explicit requirement that dry-run and real-run summaries match. Track hashes that the dry run has already classified as newly created (in addition to database hits), and extend the dry-run parity test with same-run duplicate bytes. | fixed |
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** 0a90a4e9fddfc4af2a004a853a897df7429f6035
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — `open_root` still performs `Path.resolve()` and then a separate path-based `os.open(resolved, ...)`. Replacing the resolved root (or one of its parents) with an outward symlink between those operations makes the descriptor refer to the replacement while `Root.path` continues to report the original resolved path. A deterministic substitution at that boundary reproduced the violation by reporting the original root and reading a file from the outside tree. The added test replaces the name only after `opened_root` has returned, so it does not cover this remaining race or provide the requested failing-input probe for it. |
+| 2 | confirmed — the dry run now carries hashes already classified as new, reports later same-run copies as `already stored`, and the added integration test compares that two-copy result directly with the subsequent real run. |
