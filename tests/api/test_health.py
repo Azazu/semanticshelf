@@ -59,6 +59,7 @@ async def test_ready_reports_unreachable_database_as_a_problem(
     assert body["instance"] == "urn:request:ready-1"
     assert body["checks"]["database"] != "ok"
     assert body["checks"]["migrations"] == "skipped: database check failed"
+    assert body["checks"]["models"] == "skipped: database check failed"
     assert "postgresql" not in response.text
     assert "127.0.0.1" not in response.text
 
@@ -114,4 +115,5 @@ async def test_ready_returns_within_the_budget_when_the_database_is_silent(
     body = response.json()
     assert body["checks"]["database"] == "TimeoutError: no response within 0.3s"
     assert body["checks"]["migrations"] == "skipped: database check failed"
+    assert body["checks"]["models"] == "skipped: database check failed"
     assert elapsed < 3.0, elapsed

@@ -27,7 +27,12 @@ async def test_ready_when_migrated(db_settings: Settings) -> None:
     async for client in make_client(app):
         response = await client.get("/ready")
     assert response.status_code == 200, response.text
-    assert response.json() == {"status": "ready", "checks": {"database": "ok", "migrations": "ok"}}
+    assert response.json() == {
+        "status": "ready",
+        # The third check read the real dimension constraint out of the catalog
+        # and found the width the code declares for every enabled model.
+        "checks": {"database": "ok", "migrations": "ok", "models": "ok"},
+    }
 
 
 async def test_not_ready_when_migrations_are_behind(db_settings: Settings) -> None:
@@ -42,5 +47,9 @@ async def test_not_ready_when_migrations_are_behind(db_settings: Settings) -> No
         assert body["type"] == "/errors/not-ready"
         assert body["checks"]["database"] == "ok"
         assert body["checks"]["migrations"] == f"database at none, code head {code_head()}"
+        # No table, so no constraint to compare against: the check fails with a
+        # class name, never with a message that could carry connection material.
+        assert body["checks"]["models"] != "ok"
+        assert "postgresql" not in response.text
     finally:
         _alembic("upgrade", "head")
