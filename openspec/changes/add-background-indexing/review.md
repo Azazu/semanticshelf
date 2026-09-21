@@ -76,3 +76,15 @@
 |---|----------|----------|---------|--------|
 | 1 | major | `app/api/assets.py:493`; `app/repositories/jobs.py:230`; `app/schemas/jobs.py:50`; `docs/how-to/indexing.md:191` | An explicitly empty model selection resets every job. The request schema documents only an omitted or null `models` value as “all,” while the how-to says a supplied list selects work, but the endpoint collapses `[]` to `None` with `... or None`, and the repository also treats any empty sequence as an absent filter. Consequently `POST .../reindex` with `{"models": []}` unexpectedly resets and schedules all of the asset's work instead of selecting none (or rejecting an empty selection). Preserve the distinction or validate it at the edge, cover the HTTP case, and add the high-tier failing-input demonstration for the chosen guard. | fixed |
 | 2 | major | `app/schemas/jobs.py:16-41`; `openspec/changes/add-background-indexing/specs/indexing-jobs/spec.md:179-186`; `docs/explanation/requirements.md` FR-IDX-4 | The jobs endpoint omits `lease_expires_at`. The contract requires an asset's jobs to expose their timestamps, and this timestamp is the one that tells an operator when a `running` claim becomes reclaimable; it is present in the domain object but dropped by `IndexingJobRead.of`. Add it to the wire schema and mapping, verify running and at-rest values, and reconcile the recorded how-to output that currently demonstrates a running job without its lease expiry. | fixed |
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** d24b2e0f171032d7e74aa61164f95d48062324b2
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the endpoint now preserves `[]` instead of collapsing it to `None`, and the repository applies a model filter for every non-`None` selection, so an empty selection matches and resets no rows while an omitted or null selection still resets all rows. The HTTP integration test asserts the response and unchanged failed-job state; the specification, request schema, endpoint description, how-to, and separate edge/repository mutation probes record the same distinction. |
+| 2 | confirmed — `IndexingJobRead` now exposes nullable `lease_expires_at` and `of` maps it from the domain object. The integration test verifies a non-null expiry for running work and null at rest, while the delta specification and re-recorded how-to show both wire states and explain when the claim becomes reclaimable. |
