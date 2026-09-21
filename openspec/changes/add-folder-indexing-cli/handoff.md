@@ -1,7 +1,7 @@
 # Handoff — add-folder-indexing-cli
 
 **Updated:** 2026-09-21 · claude
-**State:** awaiting-gate-2
+**State:** fixing-g2
 **Branch:** change/add-folder-indexing-cli
 
 ## Done this session
@@ -33,19 +33,23 @@ complete, 47 of 51 tasks checked.
 
 ## Next step
 
-The branch is pushed and its CI run is green (reported by the user), so all 51
-tasks are checked. Gate 2 requested with `/gate-review add-folder-indexing-cli
-2`; the verdict and its findings are recorded in `review.md` by the runner.
+Gate 2 round 1 on `c1faee6`: `changes-requested`, one blocker and one major,
+recorded in `review.md` as commit `5b28341`. Both are real.
 
-Local evidence, every check CI runs: `openspec validate --all --strict` (10
-items), every `scripts/*_test.sh`, `sh -n scripts/*.sh`,
-`env -u DATABASE_URL make check` (269 tests) and `make test-integration`
-(148 tests) — all green.
+1. **blocker** — the run resolves its root three times (`import_folder` for the
+   report, `walk` again, and `count_entries` from the CLI a third), so a path
+   replaced between them can send the walk into a different tree than the one
+   the report names. The design's "resolved exactly once" was written and not
+   implemented. The fix is to resolve once, open a descriptor for that
+   directory, and walk relative to it — the same answer the per-file open
+   already uses, applied to the root.
+2. **major** — a dry run classifies each file against the database alone, so
+   two files with identical bytes in one folder are both reported `created`
+   while a real run stores the first and counts the second `already stored`.
+   The dry run has to remember the hashes it has already called new.
 
-One operational note from this session: two probes are meant to hang, and the
-runner's timeout used to kill `uv` while leaving `pytest` spinning. The runner
-now starts each probe in its own process group and kills the group; the
-orphans it had left were stopped.
+`/workflow:fix-findings add-folder-indexing-cli`, then a confirmation of
+round 1.
 
 ## Blockers
 
