@@ -22,8 +22,8 @@ def _alembic(*args: str) -> None:
     subprocess.run([sys.executable, "-m", "alembic", *args], check=True, cwd=REPO_ROOT)
 
 
-async def test_ready_when_migrated(db_settings: Settings) -> None:
-    app = create_app(db_settings)
+async def test_ready_when_migrated(db_settings: Settings, tmp_path: Path) -> None:
+    app = create_app(db_settings.model_copy(update={"media_root": tmp_path}))
     async for client in make_client(app):
         response = await client.get("/ready")
     assert response.status_code == 200, response.text
@@ -31,12 +31,12 @@ async def test_ready_when_migrated(db_settings: Settings) -> None:
         "status": "ready",
         # The third check read the real dimension constraint out of the catalog
         # and found the width the code declares for every enabled model.
-        "checks": {"database": "ok", "migrations": "ok", "models": "ok"},
+        "checks": {"database": "ok", "migrations": "ok", "models": "ok", "media": "ok"},
     }
 
 
-async def test_not_ready_when_migrations_are_behind(db_settings: Settings) -> None:
-    app = create_app(db_settings)
+async def test_not_ready_when_migrations_are_behind(db_settings: Settings, tmp_path: Path) -> None:
+    app = create_app(db_settings.model_copy(update={"media_root": tmp_path}))
     _alembic("downgrade", "base")
     try:
         async for client in make_client(app):

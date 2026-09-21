@@ -30,6 +30,7 @@ Installed as the `semanticshelf` console script; run it with `uv run`.
 | Command | Purpose |
 |---|---|
 | `uv run semanticshelf models warm` | load every key in `ENABLED_MODELS`, downloading what is missing, and print each model's width and load time ([how-to](../how-to/models.md)) |
+| `uv run semanticshelf storage prune [--apply]` | report files no asset owns and assets whose files are gone; `--apply` removes and marks. Does nothing while an upload is in flight ([how-to](../how-to/uploading.md)) |
 
 ## Workflow scripts
 

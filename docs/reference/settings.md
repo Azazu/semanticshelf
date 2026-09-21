@@ -19,6 +19,11 @@ file next to `pyproject.toml` (the environment wins). Source of truth:
 | `TORCH_NUM_THREADS` | no | `0` | API, CLI | Threads for one forward pass. `0` leaves torch its own default; set it to the CPU quota in a container. |
 | `EMBED_BATCH_SIZE` | no | `8` | API, CLI | Inputs per forward pass. Memory, not speed, sets this: a batch is one tensor. |
 | `INFERENCE_WORKERS` | no | `2` | API | Threads that load models and run inference, away from the event loop. |
+| `MEDIA_ROOT` | no | `.data/media` | API, CLI | Where an asset's bytes live: `<root>/<two hex characters of the id>/<id>.<ext>` and the thumbnail beside it. Outside any directory served by path, and never created by the service — `make init` creates it and `GET /ready` reports it when it is missing. |
+| `MAX_UPLOAD_BYTES` | no | `20971520` (20 MiB) | API | The bound on a whole request body, counted as it arrives. It is the only bound on an uploaded file's size, so a deployment that wants larger pictures raises this one. |
+| `MAX_IMAGE_PIXELS` | no | `40000000` | API | Width × height, refused above this from the picture's header before a pixel is allocated. |
+| `MIN_IMAGE_SIDE` | no | `32` | API | The shorter side a picture must have to be worth indexing. |
+| `PRUNE_MIN_AGE_SECONDS` | no | `3600` | CLI | `storage prune` ignores files younger than this. A margin, not the guarantee: an upload in flight is protected by an advisory lock. |
 
 Template lines for the environment file (the template is `.env.example`,
 copied to `.env` on first run):
@@ -35,11 +40,17 @@ CLIP_MODEL_NAME=openai/clip-vit-large-patch14
 TORCH_NUM_THREADS=0
 EMBED_BATCH_SIZE=8
 INFERENCE_WORKERS=2
+MEDIA_ROOT=.data/media
+MAX_UPLOAD_BYTES=20971520
+MAX_IMAGE_PIXELS=40000000
+MIN_IMAGE_SIDE=32
+PRUNE_MIN_AGE_SECONDS=3600
 ```
 
 What the model settings mean in practice — the download, warm-up and
-running offline — is in
-[`../how-to/models.md`](../how-to/models.md).
+running offline — is in [`../how-to/models.md`](../how-to/models.md); what the
+media settings mean when a picture arrives is in
+[`../how-to/uploading.md`](../how-to/uploading.md).
 
 `<DB_USER>`, `<DB_PASSWORD>` and `<DB_NAME>` are the values of the
 Compose variables in the same file. `APP_PORT` is read by `make run` only

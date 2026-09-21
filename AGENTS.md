@@ -353,6 +353,7 @@ app/
   db/                engine/session, base, alembic env
   domain.py          frozen dataclasses, value domains, the model registry;
                      imports no framework, so every layer may depend on it
+  storage.py         the media root: the only module that builds a path under it
   models/            SQLAlchemy ORM (Asset, Embedding, IndexingJob)
   repositories/      one per table; take a session, return domain objects,
                      never hand an ORM instance outwards
@@ -364,7 +365,8 @@ app/
                      (the threads loading and inference run on)
   workers/           job claim/execute/finish over indexing_jobs (BackgroundTasks
                      runner in stage 1, the `worker` CLI process from stage 3)
-  cli.py             typer app: models warm today; index-folder, worker, demo-dataset later
+  cli.py             typer app: models warm and storage prune today; index-folder,
+                     worker and demo-dataset later
 ui/                  Streamlit demo (own dependency group), HTTP client of the API
 alembic/             migrations
 tests/               unit/ (fake embedder, no DB), integration/ (pgvector, marked),
@@ -407,7 +409,11 @@ tests/               unit/ (fake embedder, no DB), integration/ (pgvector, marke
 - Index choice (HNSW vs IVFFlat) is a per-model migration decision,
   recorded in an ADR.
 - Uploaded files are stored outside the web root under a generated name;
-  the original filename is metadata only.
+  the original filename is metadata only. Every path under `MEDIA_ROOT` is
+  built in `app/storage.py` from an identifier the service generated — nothing
+  a client sends reaches a path — and the whole request body is bounded by
+  `app/core/body_limit.py`, because the framework parses a multipart request
+  before an endpoint runs.
 
 ### Risk-tier triggers specific to this project
 

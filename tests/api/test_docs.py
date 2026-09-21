@@ -12,7 +12,9 @@ async def test_openapi_document(client: httpx.AsyncClient) -> None:
     assert document["openapi"].startswith("3.1")
     assert document["info"]["version"] == __version__
     assert {"/health", "/ready"} <= document["paths"].keys()
-    assert not any(path.startswith("/api/v1") for path in document["paths"])
+    # The probes stay outside the versioned API; the resources live inside it.
+    assert not any(path.startswith("/api/v1") for path in ("/health", "/ready"))
+    assert "/api/v1/assets" in document["paths"]
     for path, operations in document["paths"].items():
         for operation in operations.values():
             assert operation.get("summary"), path

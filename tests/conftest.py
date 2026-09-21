@@ -6,16 +6,29 @@ readiness tests rely on the connection failing fast. Integration tests build
 their own settings from the environment.
 """
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 
 import httpx
 import pytest
 from fastapi import FastAPI
+from PIL import Image
 
 from app.core.settings import Settings
 from app.main import create_app
 
 UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://127.0.0.1:1/nowhere"
+
+
+@pytest.fixture(autouse=True)
+def decoder_guard() -> Iterator[None]:
+    """Pillow's bomb guard is a process-global, and the application factory sets
+    it from `MAX_IMAGE_PIXELS` (`app/services/images.py`). Any test that builds
+    an app with a small cap would otherwise shrink every picture a later test
+    in the same process may decode — which is exactly what happened once.
+    """
+    original = Image.MAX_IMAGE_PIXELS
+    yield
+    Image.MAX_IMAGE_PIXELS = original
 
 
 @pytest.fixture

@@ -12,7 +12,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app import __version__
-from app.api import health
+from app.api import assets, health
+from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.errors import problem_responses, register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.openapi import install_problem_media_type
@@ -20,6 +21,8 @@ from app.core.request_id import RequestIdMiddleware
 from app.core.settings import Settings
 from app.db.engine import create_engine, create_session_factory
 from app.ml.pool import create_pool, warm_up
+from app.services.images import configure_decoder_guard
+from app.storage import MediaStorage
 
 DESCRIPTION = (
     "Semantic search over images: CLIP text→image and DINOv2 image→image embeddings "
@@ -31,6 +34,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Values come from the environment; mypy cannot see that the required field is read there.
     settings = settings if settings is not None else Settings()  # type: ignore[call-arg]
     configure_logging(settings.log_level, settings.log_json)
+    # Pillow's own bomb guard, as the second line behind the upload's explicit
+    # check on the header; see `app/services/images.py`.
+    configure_decoder_guard(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -42,6 +48,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # the pool, so a start that pulls gigabytes still answers other work.
         pool = create_pool(settings)
         app.state.inference_pool = pool
+        # Resolved once: every path under it is compared against this.
+        app.state.storage = MediaStorage.at(settings.media_root)
         try:
             await warm_up(pool, settings)
             yield
@@ -62,8 +70,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         responses=problem_responses(422, 500),
     )
     app.state.settings = settings
+    # `add_middleware` inserts at the front, so the last one added is the
+    # outermost. The request-id layer renders unhandled exceptions as 500 and
+    # must stay outermost; the body limit goes inside it, so its refusal is a
+    # 413 rather than a swallowed exception.
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_upload_bytes)
     app.add_middleware(RequestIdMiddleware)
     register_exception_handlers(app)
     app.include_router(health.router)
+    assets.install(app)
     install_problem_media_type(app)
     return app
