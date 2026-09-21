@@ -6,49 +6,46 @@
 
 ## Done this session
 
-Gate 1 round 1 (`f010e59`) came back `changes-requested` with six findings —
-two blockers, four majors. All six were real; none is marked `wont-fix`.
+Gate 1 passed after one round and two confirmations; task groups 1-7 are
+complete, 47 of 51 tasks checked.
 
-- **1, blocker — the check and the open were of a path, not of a thing.** The
-  walk now uses `os.fwalk`, opens each candidate relative to that directory's
-  descriptor with `O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC`, and decides
-  what the file is from `os.fstat` on the descriptor it will read. Measured on
-  Python 3.12.14 and recorded in `design.md`: a symlink is refused by the
-  kernel with `ELOOP`, a fifo opens without blocking and is then rejected as
-  not a regular file, and the bytes read come from that same descriptor. A task
-  (1.4) forces the swap between listing and opening, and probes 6.1, 6.2, 6.3
-  and 6.5 remove each half of the mechanism.
-- **2, blocker — the import could not promise vectors through `drain`.** It
-  claims whatever the queue offers, so older work would swallow every pass.
-  The claim gains an optional set of asset identifiers (a delta on
-  `indexing-jobs`), and the import loops over the state of its **own** assets,
-  stopping when none is unfinished or when a pass claims nothing. The
-  guarantee is now stated as what it is: every asset it created ends with a
-  vector or with work the queue still owns, and the summary says which.
-- **3, major — the symlink policy contradicted itself.** One rule now: regular
-  files only, every symlink skipped and reported. Containment became structural
-  rather than a `resolve()` comparison.
-- **4, major — "indistinguishable from an upload" was false.** The requirement
-  now names the two differences exactly: the source and the recorded origin.
-- **5, major — the applicability table claimed tests that did not exist.** The
-  outcomes for an empty directory, a directory with no candidates, a zero-byte
-  file and a symlinked root are defined in the spec and carry tasks 1.5, 1.6
-  and 2.5, with probe 6.6 for the new root-resolution guard.
-- **6, major — "every asset has vectors" and "a failure does not fail the
-  import" could not both hold.** Rewritten as above, with a scenario and task
-  4.4 for work that fails every attempt.
-
-Swept for siblings: ADR-003 states "first due, first served", which a
-restricted claim refines — task 7.5 writes ADR-004 rather than editing an
-append-only record. `tasks.md` is 48 tasks now, 17 of them probes.
+- `app/services/folder.py`: the walk (`os.fwalk`, a descriptor-relative
+  `O_NOFOLLOW | O_NONBLOCK` open, `fstat` on the descriptor), the per-file
+  import through `create_asset`, the dry run that reads everything and writes
+  nothing, the report, and the loop that finishes the work the run created.
+- `app/repositories/jobs.py` and `app/services/indexing.py`: a claim may name
+  the assets whose work it wants. Every existing caller is untouched and its
+  tests stayed green as written.
+- `app/cli.py`: `index-folder` with `--recursive`, `--tags`, `--meta`,
+  `--dry-run`, `--no-index`, two progress bars and an exit status that is
+  non-zero only when the run could not start.
+- 17 probes, each removing one guard; three of them were wrong the first time
+  and each correction is in the commit body of `1fe86a9` (a probe that checked
+  after the race, a probe that edited the wrong function — the harness now
+  refuses an ambiguous match — and a probe whose guard was not the one
+  bounding the loop).
+- Task 6.8 has no probe and says so: the rule it named lives in change 5's
+  inspection and was demonstrated there.
+- ADR-004, the how-to walkthrough run against real CLIP weights, the command
+  in the reference, and FR-CLI-1 amended twice.
+- Security-sensitive surface: path handling (the walk) and input handling (the
+  pipeline it feeds), which is why the tier is `high`.
 
 ## Next step
 
-Gate 1 passed: Confirmation 2 of round 1 on `f245212` reads `confirmed`, all
-six findings resolved. Implementation may start —
-`/opsx:apply add-folder-indexing-cli` — beginning with task group 1: the walk
-(`os.fwalk`, the descriptor-relative open, the classification from `fstat`),
-whose unit tests need no database.
+Push the branch and report the CI run:
+
+```
+git push -u origin change/add-folder-indexing-cli
+```
+
+Then tasks 8.3 and 8.4 are checked and Gate 2 is requested with
+`/gate-review add-folder-indexing-cli 2`.
+
+Local evidence, every check CI runs: `openspec validate --all --strict` (10
+items), every `scripts/*_test.sh`, `sh -n scripts/*.sh`,
+`env -u DATABASE_URL make check` (269 tests) and `make test-integration`
+(148 tests) — all green.
 
 ## Blockers
 
