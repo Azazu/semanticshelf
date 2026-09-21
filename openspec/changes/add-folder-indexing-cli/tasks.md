@@ -18,8 +18,8 @@
 
 ## 3. The dry run
 
-- [ ] 3.1 A dry run walks, opens, hashes, inspects and looks the hash up, and writes nothing: no file under the media root, no asset, no job, no change to an existing asset (design decision 6). Verify: an integration test snapshots the media root and the three tables before and after, and asserts both are unchanged while the report names what would have been created.
-- [ ] 3.2 The dry run's verdicts equal the real run's: for the same tree, what it says would be created, refused or already stored is what a real run then does. Verify: an integration test runs both over one fixture tree and compares the reports field by field.
+- [x] 3.1 A dry run walks, opens, hashes, inspects and looks the hash up, and writes nothing: no file under the media root, no asset, no job, no change to an existing asset (design decision 6). Verify: an integration test snapshots the media root and the three tables before and after, and asserts both are unchanged while the report names what would have been created.
+- [x] 3.2 The dry run's verdicts equal the real run's: for the same tree, what it says would be created, refused or already stored is what a real run then does. Verify: an integration test runs both over one fixture tree and compares the reports field by field.
 
 ## 4. Claiming the work this run created
 

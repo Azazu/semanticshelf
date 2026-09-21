@@ -265,6 +265,10 @@ async def examine_one(
     temporary file outside the media root, inspected through the same
     inspection, and the hash is looked up the same way. Then the temporary file
     goes and nothing else has happened.
+
+    The lookup opens and closes a transaction of its own, so the session is as
+    clean afterwards as `create_asset` leaves it. A read that left one open
+    would make the next file — dry run or not — fail to begin its own.
     """
     try:
         metadata_for(candidate.path, meta)  # for its refusal; a dry run stores nothing
@@ -277,7 +281,10 @@ async def examine_one(
             await run_in_threadpool(images.inspect, received.path, settings)
         except REFUSALS as refusal:
             return FileOutcome(candidate.path, REFUSED, reason=str(refusal))
-        existing = await AssetRepository(session).get_by_sha256(received.sha256)
+        # In its own transaction, and ended here: a read left open would be a
+        # transaction the next file's `create_asset` cannot begin inside.
+        async with session.begin():
+            existing = await AssetRepository(session).get_by_sha256(received.sha256)
     finally:
         await run_in_threadpool(_discard, received.path)
 

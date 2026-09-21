@@ -379,3 +379,104 @@ async def test_a_mixed_folder_is_accounted_for_file_by_file(
         folder.SKIP_NOT_REGULAR,
     ]
     assert len(report.created_assets) == 1
+
+
+# --- the dry run --------------------------------------------------------------
+
+
+async def snapshot(engine: AsyncEngine, media_root: Path) -> tuple[Any, ...]:
+    """Everything a run could change: the store's three tables and every byte
+    under the media root."""
+    async with engine.connect() as connection:
+        tables = []
+        for table in ("assets", "embeddings", "indexing_jobs"):
+            result = await connection.execute(sa.text(f"SELECT * FROM {table} ORDER BY id"))
+            tables.append(tuple(result.all()))
+    files = tuple(
+        (str(path.relative_to(media_root)), path.read_bytes())
+        for path in sorted(media_root.rglob("*"))
+        if path.is_file()
+    )
+    return (*tables, files)
+
+
+async def mixed_folder(incoming: Path) -> None:
+    (incoming / "fresh.png").write_bytes(picture_bytes(seed=1))
+    (incoming / "stored.png").write_bytes(picture_bytes(seed=2))
+    (incoming / "lying.png").write_bytes(b"not a picture at all")
+    (incoming / "notes.txt").write_bytes(b"a document")
+
+
+async def test_a_dry_run_changes_nothing_at_all(
+    incoming: Path,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+    engine: AsyncEngine,
+    media_root: Path,
+    tmp_path: Path,
+) -> None:
+    await mixed_folder(incoming)
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    (seed / "stored.png").write_bytes(picture_bytes(seed=2))
+    await folder.import_folder(seed, session=session, storage=storage, settings=settings)
+    before = await snapshot(engine, media_root)
+
+    report = await folder.import_folder(
+        incoming, session=session, storage=storage, settings=settings, dry_run=True
+    )
+
+    assert await snapshot(engine, media_root) == before, "a dry run writes nothing"
+    assert {str(outcome.path): outcome.state for outcome in report.files} == {
+        "fresh.png": CREATED,
+        "stored.png": ALREADY_STORED,
+        "lying.png": REFUSED,
+        "notes.txt": SKIPPED,
+    }
+    assert report.dry_run is True
+    assert report.created_assets == [], "nothing was created, so nothing is named"
+
+
+async def test_a_dry_run_says_what_the_real_run_then_does(
+    incoming: Path,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+    tmp_path: Path,
+) -> None:
+    await mixed_folder(incoming)
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    (seed / "stored.png").write_bytes(picture_bytes(seed=2))
+    await folder.import_folder(seed, session=session, storage=storage, settings=settings)
+
+    rehearsal = await folder.import_folder(
+        incoming, session=session, storage=storage, settings=settings, dry_run=True
+    )
+    real = await folder.import_folder(incoming, session=session, storage=storage, settings=settings)
+
+    def verdicts(report: folder.ImportReport) -> dict[str, tuple[str, str | None]]:
+        return {str(one.path): (one.state, one.reason) for one in report.files}
+
+    assert verdicts(rehearsal) == verdicts(real)
+
+
+async def test_a_run_leaves_the_session_as_it_found_it(
+    incoming: Path,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+) -> None:
+    """A read that left a transaction open would make the next run — or the
+    next file — unable to begin one. It has cost this project three sessions;
+    here it is a test."""
+    await mixed_folder(incoming)
+
+    await folder.import_folder(
+        incoming, session=session, storage=storage, settings=settings, dry_run=True
+    )
+    assert not session.in_transaction(), "after a dry run"
+
+    await folder.import_folder(incoming, session=session, storage=storage, settings=settings)
+    assert not session.in_transaction(), "after a real run"
