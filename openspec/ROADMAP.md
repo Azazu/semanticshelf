@@ -16,7 +16,6 @@ carries the full scope, exit criteria and the declared tier.
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 4 | `add-embedder-protocol-and-clip` | `Embedder` protocol, lazy registry, inference threadpool, fake embedder, CLIP adapter, `models warm`, on-demand real-model smoke | high |
 | 4a | `fix-dimension-constraint-name` | rename the `embeddings` dimension constraint to the name the ORM declares: migration 0002 passed an already prefixed name and the naming convention prefixed it again, so the database carries `ck_embeddings_ck_embeddings_model_dimension` while the metadata declares `ck_embeddings_model_dimension`, and an autogenerate will propose dropping and recreating it. A pure `ALTER TABLE … RENAME CONSTRAINT`: no data is touched, and readiness reads the constraint by table rather than by name, so nothing depends on the old one. | medium |
 | 5 | `add-asset-upload-and-storage` | asset CRUD, `/file`, `/thumbnail`, listing, tag/meta rules, storage layout, dedup, thumbnails, crash-safe writes, `storage prune` | high |
 | 6 | `add-background-indexing` | transactional job enqueue, `BackgroundTasks` runner over the shared claim/execute/finish functions, `index_status`, `/jobs`, `/reindex`, leases, retries, ADR-003 | high |

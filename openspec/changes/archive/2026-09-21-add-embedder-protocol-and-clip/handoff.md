@@ -1,7 +1,7 @@
 # Handoff — add-embedder-protocol-and-clip
 
 **Updated:** 2026-09-21 · claude
-**State:** ready-to-merge
+**State:** merged
 **Branch:** change/add-embedder-protocol-and-clip
 
 ## Done this session
@@ -37,10 +37,9 @@ two tasks that the push and the gate request themselves close.
 
 ## Next step
 
-Gate 2 passed: round 1 was `changes-requested` with three `major` findings,
-all three fixed, and Confirmation 1 on commit 6e6643f reads `confirmed`.
-The user merges with `/git:merge add-embedder-protocol-and-clip`, then
-`/opsx:archive add-embedder-protocol-and-clip`.
+Merged into `main` as `eda06c6` and archived. The specs it introduced live
+in `openspec/specs/embedding-models/spec.md`; the readiness requirement it
+changed lives in `openspec/specs/health-probes/spec.md`.
 
 ## Blockers
 
