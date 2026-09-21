@@ -31,3 +31,19 @@
 | 4 | confirmed — Decision 13 and task 2.2 now assign filename normalization and cover separators, parent segments, controls, the stored bound, an empty result, and preserved non-Latin text; task 4.4 verifies the recorded API value. |
 | 5 | confirmed — Decision 14, the added upload requirement, and tasks 2.1, 4.3, and 4.4 now assign and verify the required/duplicate file cases, both tag forms, and bounded JSON-object metadata parsing. |
 | 6 | changes-requested — The new mapping covers the guards originally named, but it is still not exhaustive for the revised plan: task 3.2 newly requires bounded file and field counts, yet no failing-input probe covers `max_fields` (or independently demonstrates the parser's file-count bound), and probe 8.2 targets a file-size check that `max_part_size` does not perform. Update the exhaustive mapping and probes after correcting finding 2. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** 928b30661e6dbcbe6b6e8ab77b4312a05dd105a8
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — Decision 12 now serialises upload and prune with shared/exclusive transaction-scoped advisory locks, without a time assumption. Tasks 7.5–7.6 verify lock lifetime and hold an upload between rename and commit until a non-waiting prune has finished, so prune changes nothing while the whole-asset invariant is exposed. |
+| 2 | confirmed — Decision 2 now matches Starlette 1.6.0: `max_part_size` applies only to non-file parts, while the ASGI middleware is the sole file and whole-body byte bound. Tasks 3.1–3.2 cover an oversized file, aggregate extra-part overhead, absent or understated length, parser part counts, and the parser's actual file-part behavior. |
+| 3 | confirmed — The explicit header-dimension comparison remains the enforcing guard before decode, with exact-cap and cap-plus-one verification in task 2.3 and removal of that guard in probe 8.5. |
+| 4 | confirmed — Decision 13 and tasks 2.2, 4.4, and 8.9 assign implementation, API verification, and failing-input evidence for separators, parent segments, controls, the stored bound, empty results, and preserved non-Latin text. |
+| 5 | confirmed — Decision 14 and tasks 2.1, 3.2, 4.3, and 4.4 cover exactly one required file, both tag forms, bounded JSON-object metadata, parser limits, and malformed, duplicate, and absent input cases. |
+| 6 | changes-requested — The mapping now names the omitted validation families, but it still does not provide one independently demonstrated failing input per new check. Probes 8.2a, 8.7, and 8.8 each remove multiple distinct guards despite the section's rule that each probe removes exactly one; the same issue appears in 8.13. In addition, removing only the parser's metadata `max_part_size` cannot make the stated oversized-metadata refusal test fail, because task 2.1 independently rejects the same raw value at the metadata-size bound before JSON parsing. Split the grouped guards into independently removed probes and make 8.2 observe the parser-stage bound specifically (for example, by proving the downstream metadata parser is not reached). |
