@@ -71,3 +71,15 @@
 |---|------------|
 | 1 | changes-requested — `open_root` still performs `Path.resolve()` and then a separate path-based `os.open(resolved, ...)`. Replacing the resolved root (or one of its parents) with an outward symlink between those operations makes the descriptor refer to the replacement while `Root.path` continues to report the original resolved path. A deterministic substitution at that boundary reproduced the violation by reporting the original root and reading a file from the outside tree. The added test replaces the name only after `opened_root` has returned, so it does not cover this remaining race or provide the requested failing-input probe for it. |
 | 2 | confirmed — the dry run now carries hashes already classified as new, reports later same-run copies as `already stored`, and the added integration test compares that two-copy result directly with the subsequent real run. |
+
+## Confirmation 2 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** c7f6154502fe36d4ccdc49a9d4c05e714bdea75f
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — the descriptor-derived `/proc/self/fd/<n>` path and the new boundary test fix the race while `/proc` is available, but `_path_of` falls back to resolving the supplied name after the descriptor was opened. If the name is replaced in that interval and `/proc` is unavailable, the run again reads the directory held by the descriptor while reporting the replacement. A deterministic reproduction made `os.readlink` fail only for `/proc/self/fd`, replaced the root immediately after `_open_directory` returned, and observed `reported=<outside>` while the walk read `ours.png` from the original directory. This contradicts the unconditional requirement that the reported and read directories agree and is not covered by probe 6.6. Decision 3 also still says that `open_root` resolves and then opens the name immediately before saying there is no resolution step; align the complete claim when fixing the fallback. |
+| 2 | confirmed — the dry run tracks hashes first classified as new, so a later file with identical bytes is reported as `already stored`; the same-run duplicate integration test compares the rehearsal with the real run, and no later diff reopens this resolution. |
