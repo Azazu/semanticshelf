@@ -83,3 +83,15 @@
 |---|------------|
 | 1 | changes-requested — the descriptor-derived `/proc/self/fd/<n>` path and the new boundary test fix the race while `/proc` is available, but `_path_of` falls back to resolving the supplied name after the descriptor was opened. If the name is replaced in that interval and `/proc` is unavailable, the run again reads the directory held by the descriptor while reporting the replacement. A deterministic reproduction made `os.readlink` fail only for `/proc/self/fd`, replaced the root immediately after `_open_directory` returned, and observed `reported=<outside>` while the walk read `ours.png` from the original directory. This contradicts the unconditional requirement that the reported and read directories agree and is not covered by probe 6.6. Decision 3 also still says that `open_root` resolves and then opens the name immediately before saying there is no resolution step; align the complete claim when fixing the fallback. |
 | 2 | confirmed — the dry run tracks hashes first classified as new, so a later file with identical bytes is reported as `already stored`; the same-run duplicate integration test compares the rehearsal with the real run, and no later diff reopens this resolution. |
+
+## Confirmation 3 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** f91ae83037b3aed30547807d8b84839794c7dc76
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — one open now determines the held root, counting and walking remain descriptor-relative, and the report path is derived from that descriptor on Linux. When `/proc` is unavailable, the fallback compares the resolved name's device and inode with the held descriptor and refuses before reading if the name was replaced or vanished. The deterministic fallback tests cover both takeover and disappearance, the guard-removal probe targets the identity check, and design decision 3 now describes the same unconditional policy. |
+| 2 | confirmed — the dry run retains hashes already classified as new and therefore reports later same-run copies as `already stored`; the integration test directly compares this two-copy rehearsal with the subsequent real run, and the later root-handling changes do not affect that resolution. |
