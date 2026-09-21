@@ -110,8 +110,16 @@ class IndexingJobRepository:
     # --- claiming -------------------------------------------------------------
 
     @staticmethod
-    def claim_statement(*, limit: int) -> sa.Select[tuple[UUID]]:
-        """The rows a claim would take. Exposed so a test can read its plan."""
+    def claim_statement(
+        *, limit: int, asset_ids: Sequence[UUID] | None = None
+    ) -> sa.Select[tuple[UUID]]:
+        """The rows a claim would take. Exposed so a test can read its plan.
+
+        `asset_ids` restricts the claim to those assets' work — a runner that
+        created work of its own can finish it without waiting behind everything
+        else the queue holds. Everything else about a claim is unchanged, and a
+        claim that names no assets behaves exactly as it always has.
+        """
         due = sa.or_(
             sa.and_(
                 IndexingJobRow.status == "pending",
@@ -122,17 +130,24 @@ class IndexingJobRepository:
                 IndexingJobRow.lease_expires_at < sa.func.now(),
             ),
         )
+        statement = sa.select(IndexingJobRow.id).where(due)
+        if asset_ids is not None:
+            statement = statement.where(IndexingJobRow.asset_id.in_(list(asset_ids)))
         return (
-            sa.select(IndexingJobRow.id)
-            .where(due)
-            .order_by(IndexingJobRow.available_at)
+            statement.order_by(IndexingJobRow.available_at)
             .limit(limit)
             .with_for_update(skip_locked=True)
         )
 
-    async def claim(self, *, limit: int, lease_seconds: int) -> list[ClaimedJob]:
+    async def claim(
+        self, *, limit: int, lease_seconds: int, asset_ids: Sequence[UUID] | None = None
+    ) -> list[ClaimedJob]:
         """Take up to `limit` due jobs, count an attempt and set a lease."""
-        ids = (await self._session.execute(self.claim_statement(limit=limit))).scalars().all()
+        ids = (
+            (await self._session.execute(self.claim_statement(limit=limit, asset_ids=asset_ids)))
+            .scalars()
+            .all()
+        )
         if not ids:
             return []
         rows = (

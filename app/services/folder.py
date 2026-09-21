@@ -21,19 +21,20 @@ import errno
 import os
 import stat
 from collections.abc import Iterator, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, BinaryIO
 from uuid import UUID
 
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.concurrency import run_in_threadpool
 
 from app.core.settings import Settings
 from app.domain import FILE_EXTENSIONS
 from app.repositories.assets import AssetRepository
-from app.services import images
+from app.services import images, indexing
 from app.services.assets import DuplicateAssetError, create_asset, receive
 from app.services.tagging import MetadataError, check_metadata, normalise_tags
 from app.storage import MediaStorage
@@ -187,6 +188,19 @@ class FileOutcome:
     asset_id: UUID | None = None
 
 
+QUEUED_WAITING = "waiting in the queue"
+QUEUED_HELD = "held by a runner"
+
+
+@dataclass(slots=True)
+class WorkReport:
+    """What became of the work the import created."""
+
+    indexed: int = 0
+    queued: list[tuple[UUID, str]] = field(default_factory=list)
+    failed: list[tuple[UUID, str]] = field(default_factory=list)
+
+
 @dataclass(slots=True)
 class ImportReport:
     """Everything a run did, in the order it did it."""
@@ -194,6 +208,8 @@ class ImportReport:
     directory: Path
     dry_run: bool
     files: list[FileOutcome] = field(default_factory=list)
+    #: `None` when the run was a dry run or was asked to leave the work queued.
+    work: WorkReport | None = None
 
     def count(self, state: str) -> int:
         return sum(1 for outcome in self.files if outcome.state == state)
@@ -340,3 +356,82 @@ async def import_folder(
             )
         report.files.append(outcome)
     return report
+
+
+# --- finishing the work the import created ------------------------------------
+
+
+def _unfinished(statuses: Mapping[UUID, Mapping[str, str]]) -> list[UUID]:
+    return [
+        asset_id
+        for asset_id, per_model in statuses.items()
+        if any(state in ("pending", "running") for state in per_model.values())
+    ]
+
+
+async def index_imported(
+    report: ImportReport,
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    pool: ThreadPoolExecutor,
+) -> WorkReport:
+    """Carry out the work this run created — and only that work.
+
+    The queue may hold anything else, however old and however much of it: the
+    claims here name the assets this run created, so an import finishes what it
+    started instead of being satisfied by someone else's backlog.
+
+    It stops when none of its own work is unfinished, or when a pass claims
+    nothing while some still is — work another runner holds, or work waiting
+    out the delay before its next attempt. It does not sleep to outlast that
+    delay: what it could not do is reported, not waited for.
+    """
+    created = report.created_assets
+    work = WorkReport()
+    if not created:
+        return work
+
+    passes = len(created) * settings.job_max_attempts + 1
+    for _ in range(passes):
+        async with session_factory() as session:
+            statuses = await indexing.status_of(session, created)
+        if not _unfinished(statuses):
+            break
+        taken = await indexing.run_batch(
+            session_factory=session_factory,
+            storage=storage,
+            settings=settings,
+            pool=pool,
+            asset_ids=_unfinished(statuses),
+        )
+        if not taken:
+            break
+
+    async with session_factory() as session:
+        statuses = await indexing.status_of(session, created)
+        for asset_id in created:
+            states = statuses.get(asset_id, {})
+            if all(state == "done" for state in states.values()) and states:
+                work.indexed += 1
+                continue
+            for model, state in sorted(states.items()):
+                if state == "done":
+                    continue
+                if state == "failed":
+                    work.failed.append((asset_id, await _reason(session, asset_id, model)))
+                else:
+                    work.queued.append(
+                        (asset_id, QUEUED_HELD if state == "running" else QUEUED_WAITING)
+                    )
+    report.work = work
+    return work
+
+
+async def _reason(session: AsyncSession, asset_id: UUID, model: str) -> str:
+    """What the queue recorded about a job that failed for good."""
+    for job in await indexing.jobs_of(session, asset_id):
+        if job.model == model and job.last_error:
+            return job.last_error
+    return "no reason recorded"

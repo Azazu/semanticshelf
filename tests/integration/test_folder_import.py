@@ -8,7 +8,9 @@ which are refused before anything is opened — is a unit test.
 import io
 import json
 import os
-from collections.abc import AsyncIterator
+import time
+from collections.abc import AsyncIterator, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -17,13 +19,16 @@ import pytest
 import sqlalchemy as sa
 from fastapi import FastAPI
 from PIL import Image
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.settings import Settings
 from app.db.engine import create_session_factory
-from app.domain import CLIP_VIT_L14
+from app.domain import CLIP_VIT_L14, dimension_of
 from app.main import create_app
-from app.services import folder
+from app.ml import registry
+from app.ml.fake import FakeEmbedder
+from app.ml.pool import create_pool
+from app.services import folder, indexing
 from app.services.folder import ALREADY_STORED, CREATED, REFUSED, SKIPPED, SOURCE_PATH_KEY
 from app.services.tagging import METADATA_MAX_BYTES, TagError
 from app.storage import MediaStorage
@@ -480,3 +485,181 @@ async def test_a_run_leaves_the_session_as_it_found_it(
 
     await folder.import_folder(incoming, session=session, storage=storage, settings=settings)
     assert not session.in_transaction(), "after a real run"
+
+
+# --- finishing the work the import created ------------------------------------
+
+
+@pytest.fixture
+def sessions(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    return create_session_factory(engine)
+
+
+@pytest.fixture
+def pool(settings: Settings) -> Iterator[ThreadPoolExecutor]:
+    executor = create_pool(settings)
+    yield executor
+    executor.shutdown(wait=True)
+
+
+def breaking_embedder() -> None:
+    """Make the model fail, whatever it is handed."""
+
+    def refuse(images: Any) -> Any:
+        raise RuntimeError("the model fell over")
+
+    embedder = FakeEmbedder(CLIP_VIT_L14, dimension_of(CLIP_VIT_L14))
+    embedder.embed_images = refuse  # type: ignore[method-assign]
+    registry.FACTORIES[CLIP_VIT_L14] = lambda settings: embedder
+    registry.clear()
+
+
+async def vectors(engine: AsyncEngine) -> set[str]:
+    async with engine.connect() as connection:
+        rows = (await connection.execute(sa.text("SELECT asset_id FROM embeddings"))).scalars()
+        return {str(one) for one in rows}
+
+
+async def test_an_import_finishes_its_own_work_and_not_the_queue_s(
+    incoming: Path,
+    session: AsyncSession,
+    sessions: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    pool: ThreadPoolExecutor,
+    engine: AsyncEngine,
+    tmp_path: Path,
+) -> None:
+    """A queue holding more older work than a batch can take must not be able
+    to swallow the passes this import needs."""
+    older = tmp_path / "older"
+    older.mkdir()
+    for seed in range(1, 7):
+        (older / f"old-{seed}.png").write_bytes(picture_bytes(seed=seed))
+    await folder.import_folder(older, session=session, storage=storage, settings=settings)
+    for seed in (20, 21):
+        (incoming / f"mine-{seed}.png").write_bytes(picture_bytes(seed=seed))
+    report = await folder.import_folder(
+        incoming, session=session, storage=storage, settings=settings
+    )
+    mine = {str(asset_id) for asset_id in report.created_assets}
+    assert len(mine) == 2
+
+    work = await folder.index_imported(
+        report, session_factory=sessions, storage=storage, settings=settings, pool=pool
+    )
+
+    assert work.indexed == 2
+    assert (work.queued, work.failed) == ([], [])
+    assert await vectors(engine) == mine, "only this run's work was carried out"
+    async with engine.connect() as connection:
+        waiting = (
+            await connection.execute(
+                sa.text("SELECT count(*) FROM indexing_jobs WHERE status = 'pending'")
+            )
+        ).scalar_one()
+    assert waiting == 6, "the older queue is exactly as it was"
+
+
+async def test_work_that_will_be_attempted_again_is_reported_as_queued(
+    incoming: Path,
+    session: AsyncSession,
+    sessions: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    pool: ThreadPoolExecutor,
+    engine: AsyncEngine,
+) -> None:
+    """The queue puts a failed attempt back with a growing delay; the import
+    reports that rather than sleeping through it."""
+    (incoming / "picture.png").write_bytes(picture_bytes())
+    report = await folder.import_folder(
+        incoming, session=session, storage=storage, settings=settings
+    )
+    breaking_embedder()
+    started = time.monotonic()
+
+    work = await folder.index_imported(
+        report, session_factory=sessions, storage=storage, settings=settings, pool=pool
+    )
+
+    assert time.monotonic() - started < 5, "it did not wait out the backoff"
+    assert work.indexed == 0
+    assert work.failed == []
+    assert work.queued == [(report.created_assets[0], folder.QUEUED_WAITING)]
+    async with engine.connect() as connection:
+        row = (
+            await connection.execute(
+                sa.text("SELECT status, attempts, available_at > now() AS later FROM indexing_jobs")
+            )
+        ).one()
+    assert (row.status, row.attempts, row.later) == ("pending", 1, True)
+
+
+async def test_work_whose_attempts_are_spent_is_reported_as_failed(
+    incoming: Path,
+    session: AsyncSession,
+    sessions: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    pool: ThreadPoolExecutor,
+) -> None:
+    (incoming / "picture.png").write_bytes(picture_bytes())
+    spent = settings.model_copy(update={"job_max_attempts": 1})
+    report = await folder.import_folder(incoming, session=session, storage=storage, settings=spent)
+    breaking_embedder()
+
+    work = await folder.index_imported(
+        report, session_factory=sessions, storage=storage, settings=spent, pool=pool
+    )
+
+    assert work.indexed == 0
+    assert work.queued == []
+    assert work.failed == [(report.created_assets[0], "RuntimeError")]
+
+
+async def test_the_three_states_of_the_work_are_reported_apart(
+    incoming: Path,
+    session: AsyncSession,
+    sessions: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    pool: ThreadPoolExecutor,
+) -> None:
+    (incoming / "good.png").write_bytes(picture_bytes(seed=1))
+    (incoming / "doomed.png").write_bytes(picture_bytes(seed=2))
+    (incoming / "held.png").write_bytes(picture_bytes(seed=3))
+    spent = settings.model_copy(update={"job_max_attempts": 1})
+    report = await folder.import_folder(incoming, session=session, storage=storage, settings=spent)
+    # The walk is sorted, so the ids come back in name order; ask by name.
+    by_name = {outcome.path.name: outcome.asset_id for outcome in report.files}
+    good, doomed, held = by_name["good.png"], by_name["doomed.png"], by_name["held.png"]
+    assert good is not None and doomed is not None and held is not None
+
+    # Another runner takes one of them and keeps it: a valid lease is not
+    # reclaimable, so this import can only report it.
+    holder = await indexing.claim(sessions, spent, asset_ids=[held])
+    assert len(holder) == 1
+    # The first picture succeeds, the second does not.
+    real = FakeEmbedder(CLIP_VIT_L14, dimension_of(CLIP_VIT_L14))
+    original = real.embed_images
+
+    def sometimes(pictures: Any) -> Any:
+        if any(
+            picture.size == (400, 200) and picture.getpixel((0, 0))[0] == 2 for picture in pictures
+        ):
+            raise RuntimeError("the model fell over")
+        return original(pictures)
+
+    real.embed_images = sometimes  # type: ignore[method-assign]
+    registry.FACTORIES[CLIP_VIT_L14] = lambda settings: real
+    registry.clear()
+
+    work = await folder.index_imported(
+        report, session_factory=sessions, storage=storage, settings=spent, pool=pool
+    )
+
+    assert work.indexed == 1
+    assert work.failed == [(doomed, "RuntimeError")]
+    assert work.queued == [(held, folder.QUEUED_HELD)]
+    assert good not in [asset for asset, _ in work.queued + work.failed]
