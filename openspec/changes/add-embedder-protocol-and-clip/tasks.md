@@ -56,5 +56,5 @@
 
 - [x] 10.1 Commits per block without agent trailers, each body naming the evidence of the tasks whose diff it holds. Verify: `git log --format=%B main..HEAD | grep -c '^Co-Authored-By'` prints `0`.
 - [x] 10.2 `make check` green with no weights present (`env -u DATABASE_URL make check`), `make test-integration` green against pgvector, `make test-models` green once locally. Verify: all three outputs recorded in the commit bodies.
-- [ ] 10.3 Acceptance on GitHub (user pushes the branch): `workflow` green and `python` green, with the uv cache in place and no model download in the run. Verify: the user reports the run.
-- [ ] 10.4 `openspec validate add-embedder-protocol-and-clip --strict` and `scripts/pregate-verify.sh gate2 add-embedder-protocol-and-clip` pass; request Gate 2 with `/gate-review add-embedder-protocol-and-clip 2`.
+- [x] 10.3 Acceptance on GitHub (user pushes the branch): `workflow` green and `python` green, with the uv cache in place and no model download in the run. Verify: the user reports the run.
+- [x] 10.4 `openspec validate add-embedder-protocol-and-clip --strict` and `scripts/pregate-verify.sh gate2 add-embedder-protocol-and-clip` pass; request Gate 2 with `/gate-review add-embedder-protocol-and-clip 2`.

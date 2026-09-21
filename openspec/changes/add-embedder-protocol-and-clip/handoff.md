@@ -1,7 +1,7 @@
 # Handoff — add-embedder-protocol-and-clip
 
 **Updated:** 2026-09-21 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/add-embedder-protocol-and-clip
 
 ## Done this session
@@ -37,9 +37,9 @@ two tasks that the push and the gate request themselves close.
 
 ## Next step
 
-The user pushes `change/add-embedder-protocol-and-clip` and reports the CI
-run. On green: check tasks 10.3 and 10.4 and run
-`/gate-review add-embedder-protocol-and-clip 2`.
+Gate 2 requested on this HEAD (task 10.3: the user pushed the branch and
+reported both CI jobs green). On `approved` or `confirmed`: State
+`ready-to-merge`, then the user's `/git:merge add-embedder-protocol-and-clip`.
 
 ## Blockers
 
