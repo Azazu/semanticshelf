@@ -47,3 +47,15 @@
 | 4 | confirmed — the acceptance oracle now limits stored differences from upload to `source` and recorded-origin metadata, matching task 2.1. |
 | 5 | confirmed — empty and no-candidate directories, zero-byte candidates, and a symlinked root each have a defined outcome with explicit verification and applicable failing-input probes. |
 | 6 | confirmed — the contract now distinguishes successful work, retriable work left queued during backoff, and terminal failure after attempts are spent; tasks 4.4–4.6 verify both failure paths and task 6.18 supplies the required guard-removal probe. |
+
+## Round 1 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** c1faee6f6fd2cfe8721e520db67d9b6ecc118375
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | blocker | `app/services/folder.py:359-361`; `app/cli.py:104-111`; `design.md` decision 3; `specs/folder-indexing/spec.md` “Only a regular file inside the folder is ever read” | The service does not bind a run to the root it initially resolved. `import_folder` resolves `directory` for `report.directory`, then passes the original path to `walk`, which resolves it again; the CLI adds another resolution in `count_entries`. If the named directory (or one of its parents) is replaced with a symlink between those steps, the second resolution can follow the replacement and import a different tree, including one outside the root recorded in the report. This recreates the root-level form of the symlink TOCTOU that the approved design's “resolved exactly once” rule was meant to exclude. Resolve once for the import and walk that resolved object without following a later replacement; add a deterministic root/parent replacement race test and its failing-input probe. |
+| 2 | major | `app/services/folder.py:290-329,368-371`; `tests/integration/test_folder_import.py:311-327,446-467`; `specs/folder-indexing/spec.md:138-158` | Dry-run duplicate classification diverges from a real run when two files in the same folder have identical bytes. Each dry-run file only queries the unchanged database, so both are reported `created`; a real run stores the first and reports the second `already stored`. That violates both the content-hash duplicate rule and the explicit requirement that dry-run and real-run summaries match. Track hashes that the dry run has already classified as newly created (in addition to database hits), and extend the dry-run parity test with same-run duplicate bytes. |
