@@ -6,19 +6,32 @@
 
 ## Done this session
 
-- Branch and scaffold created. The work, from roadmap row 5 and
-  `docs/explanation/requirements.md` §2.2 (FR-AST-1…12): the first endpoints
-  that take data from outside — multipart upload with format detection from
-  the bytes, size and dimension limits, deduplication by SHA-256, storage
-  under a generated name outside the web root, thumbnails, crash-safe write
-  order, read, listing, patch, deletion, and `storage prune`.
+Gate 1 passed after one round and four confirmations; everything the change
+promises is implemented and tested.
+
+- `app/storage.py` — the only module that builds a path under the media root,
+  with staging and atomic publication.
+- `app/core/body_limit.py` — the whole-body bound, counted on the ASGI stream,
+  which is the only bound on an uploaded file's size on this stack.
+- `app/services/{images,tagging,assets,prune}.py` — what a file is, what a
+  client may say about it, the upload and its write order under the shared
+  media lock, and the reconciliation that never runs beside a live upload.
+- `app/api/assets.py` — upload, read, bytes, thumbnail, listing, patch, delete.
+- Readiness gained the media check, running beside the database rather than
+  after it.
+- `semanticshelf storage prune [--apply]`.
+- 27 guards, 27 probes, all demonstrated; `docs/how-to/uploading.md` written
+  against a running service.
+
+Evidence: `env -u DATABASE_URL make check` 207 passed; `make test-integration`
+66 passed; `openspec validate --all --strict` 7 passed; both script suites and
+`sh -n` over every script clean; no agent trailer on the branch.
 
 ## Next step
 
-Gate 1 passed: Confirmation 4 on `34b3cf7` reads `confirmed`, all six findings
-resolved. Implementation may start — `/opsx:apply add-asset-upload-and-storage`
-— beginning with task group 1 (settings, `app/storage.py`, the containment
-property).
+The user pushes `change/add-asset-upload-and-storage` and reports the CI run
+(task 10.3). On green: tick 10.3 and 10.4 and run
+`/gate-review add-asset-upload-and-storage 2`.
 
 ## Blockers
 
