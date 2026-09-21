@@ -33,20 +33,20 @@ complete, 47 of 51 tasks checked.
 
 ## Next step
 
-Gate 2 round 1's two findings are fixed on `9e69d2e`:
+Confirmation 1 confirmed finding 2 and refused finding 1: `open_root` still
+resolved the name and then opened the resolved path, and the window between
+those two steps is the finding. Fixed on `9f8ad9e` — one open, and the reported
+path read back from the descriptor, so the directory a run reads and the
+directory it names cannot be different ones.
 
-1. the root is resolved once, opened, and every step — count, walk, report —
-   works from that descriptor, so a name taken over mid-run cannot redirect
-   anything (probe 6.19, and 6.6 repointed at what the resolution still buys);
-2. a rehearsal remembers the hashes it has already called new, so two files of
-   identical bytes in one folder are reported exactly as a real run reports
-   them (probe 6.20).
+Second confirmation of round 1: `/gate-review add-folder-indexing-cli 2
+confirm 1`. If it refuses finding 1 again, that is the second failed
+confirmation on one finding and the protocol says stop and ask the user to
+arbitrate rather than loop.
 
-Confirmation of round 1: `/gate-review add-folder-indexing-cli 2 confirm 1`.
-
-Local evidence: `env -u DATABASE_URL make check` green (271 tests);
-`make test-integration` green (149 tests); all 19 probes of group 6 caught
-their removal on a full re-run, and nothing was left running afterwards.
+Local evidence: `env -u DATABASE_URL make check` green (272 tests);
+`make test-integration` green (149 tests); all 20 probes of group 6 caught
+their removal, nothing left running.
 
 ## Blockers
 
