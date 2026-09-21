@@ -10,17 +10,17 @@
 - [x] 2.1 Write `app/services/search.py`: embed the query through the inference pool, open one transaction, set `hnsw.ef_search` to `max(HNSW_EF_SEARCH, limit + offset)`, run the vector query, and return the hits with their scores and whether more exist (design decisions 1, 3, 4, 5). Verify: unit tests with the fake embedder cover the score arithmetic, the truncation flag and the `has_more` rule; the integration tests of section 3 cover the query.
 - [x] 2.2 A search model this build does not run is refused with 503 problem details naming it, before any query runs (design decision 2). Verify: an api test with an empty `ENABLED_MODELS`.
 - [x] 2.5 No api test can load a real checkpoint: the suite replaces the CLIP factory with the fake, as the integration suite does. The first search test written here loaded real weights, which in CI would have been a download. Verify: `tests/api/conftest.py` holds the autouse fixture, and the suite passes with `HF_HUB_OFFLINE=1` and an empty model cache.
-- [ ] 2.3 The search's transaction is opened and closed in one place, and the session is clean afterwards. Verify: an integration test asserts `session.in_transaction()` is false after a search, and that a second search on the same session works.
-- [ ] 2.4 The assets of a page are fetched in one query and returned in the ranking's order, with their indexing states, as the listing does (design decision 8). Verify: an integration test asserts the order and that the number of queries does not grow with the page size.
+- [x] 2.3 The search's transaction is opened and closed in one place, and the session is clean afterwards. Verify: an integration test asserts `session.in_transaction()` is false after a search, and that a second search on the same session works.
+- [x] 2.4 The assets of a page are fetched in one query and returned in the ranking's order, with their indexing states, as the listing does (design decision 8). Verify: an integration test asserts the order and that the number of queries does not grow with the page size.
 
 ## 3. The endpoint
 
 - [x] 3.1 Add `app/api/search.py` with `GET /api/v1/search/text`, mounted by the app factory, and `app/schemas/search.py` for the item and the envelope (`items`, `limit`, `offset`, `has_more`, `model`, `query_truncated`). Verify: an api test asserts the shape of an answer, and `GET /api/openapi.json` lists the operation with its summary and description.
 - [x] 3.2 Query validation: required, non-empty after trimming, at most 256 characters; 422 problem details naming the parameter otherwise. Verify: api tests for a missing query, an empty one, one of only spaces, and one a character too long.
 - [x] 3.3 Pagination: `limit` default 20 and at most 100, `offset` at least 0, and `limit + offset` beyond 1000 refused with 422 `page-too-deep` before anything is searched. Verify: api tests for each bound, including the page that is exactly at the bound and the one a single item beyond it.
-- [ ] 3.4 `min_score` drops items below it and does not refill the page; `has_more` still reflects the ranking (design decisions 4 and 5). Verify: integration tests for a threshold that removes some of a page, for one nothing reaches, and for a page that is short while more results exist.
-- [ ] 3.5 A truncated query answers normally and says so. Verify: an integration test with a query longer than the model's context asserts `query_truncated` is true and that results still come back.
-- [ ] 3.6 An asset appears exactly while it has a vector for the model: an asset whose work was reset but whose vector remains is still found, and one that has never been indexed is not (the amendment of task 6.3). Verify: integration tests for both.
+- [x] 3.4 `min_score` drops items below it and does not refill the page; `has_more` still reflects the ranking (design decisions 4 and 5). Verify: integration tests for a threshold that removes some of a page, for one nothing reaches, and for a page that is short while more results exist.
+- [x] 3.5 A truncated query answers normally and says so. Verify: an integration test with a query longer than the model's context asserts `query_truncated` is true and that results still come back.
+- [x] 3.6 An asset appears exactly while it has a vector for the model: an asset whose work was reset but whose vector remains is still found, and one that has never been indexed is not (the amendment of task 6.3). Verify: integration tests for both.
 
 ## 4. The two views the UI needs
 
@@ -30,10 +30,10 @@
 
 ## 5. Evidence that the ranking is right
 
-- [ ] 5.1 The order a search returns is asserted exactly, not approximately: with the fake embedder's deterministic vectors, a fixture of assets has one known correct ranking. Verify: an integration test asserts the full order of a page, and the next page's.
-- [ ] 5.2 Model isolation at the endpoint: an asset with a vector under another model only does not appear. Verify: an integration test with vectors under two models.
+- [x] 5.1 The order a search returns is asserted exactly, not approximately: with the fake embedder's deterministic vectors, a fixture of assets has one known correct ranking. Verify: an integration test asserts the full order of a page, and the next page's.
+- [x] 5.2 Model isolation at the endpoint: an asset with a vector under another model only does not appear. Verify: an integration test with vectors under two models.
 - [ ] 5.3 A real-model smoke test (`-m models`, never in CI): a handful of pictures indexed with real CLIP, and a query in words that describes one of them ranks it first. Verify: `uv run pytest -m models` output recorded in the commit body.
-- [ ] 5.4 `SET LOCAL hnsw.ef_search` is in effect for the query rather than merely sent. Verify: an integration test reads `current_setting('hnsw.ef_search')` inside the search's transaction and asserts the value the request implies.
+- [x] 5.4 `SET LOCAL hnsw.ef_search` is in effect for the query rather than merely sent. Verify: an integration test reads `current_setting('hnsw.ef_search')` inside the search's transaction and asserts the value the request implies.
 
 ## 6. Documentation
 

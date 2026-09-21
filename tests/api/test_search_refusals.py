@@ -15,7 +15,7 @@ from app.core.errors import PROBLEM_MEDIA_TYPE
 from app.core.settings import Settings
 from app.main import create_app
 from app.services.search import QUERY_MAX_LENGTH
-from tests.conftest import UNREACHABLE_DATABASE_URL, make_client
+from tests.conftest import make_client
 
 SEARCH = "/api/v1/search/text"
 
