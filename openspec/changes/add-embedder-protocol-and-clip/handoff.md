@@ -37,15 +37,19 @@ two tasks that the push and the gate request themselves close.
 
 ## Next step
 
-Gate 2 requested on this HEAD (task 10.3: the user pushed the branch and
-reported both CI jobs green). On `approved` or `confirmed`: State
-`ready-to-merge`, then the user's `/git:merge add-embedder-protocol-and-clip`.
+Gate 2 round 1 came back `changes-requested` with three `major` findings;
+all three are fixed and the confirmation of round 1 is requested next.
+
+1. List settings were unreadable from the environment (a complex type is
+   JSON-decoded before validators run) — both fields are `NoDecode` now, and
+   the tests go through the environment and a dotenv file.
+2. Three sequential checks broke the probe's own "about twice the timeout"
+   bound — the two that need the database run concurrently, with a timing
+   test.
+3. The tracked configuration template still named the superseded settings —
+   the developer replaced the block (the security tooling blocks an agent
+   from writing that file); the application starts with exactly those values.
 
 ## Blockers
 
-None for the gate. One item needs the developer's own hand: the tracked
-configuration template still names `EMBEDDER_TEXT_IMAGE`,
-`EMBEDDER_IMAGE_IMAGE` and a `.cache/models` directory from the bootstrap
-change, which this change's settings replace. The workstation's security
-tooling blocks an agent from writing that file; the correct lines are in
-`docs/reference/settings.md`.
+None.
