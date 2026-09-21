@@ -1,7 +1,7 @@
 # Handoff — fix-dimension-constraint-name
 
 **Updated:** 2026-09-21 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/fix-dimension-constraint-name
 
 ## Done this session
@@ -24,9 +24,9 @@ suites and `sh -n` over every script clean; no agent trailer on the branch.
 
 ## Next step
 
-The user pushes `change/fix-dimension-constraint-name` and reports the CI run
-(task 5.3). On green: tick 5.3 and 5.4 and run
-`/gate-review fix-dimension-constraint-name 2`.
+Gate 2 requested on this HEAD (task 5.3: the user pushed the branch and
+reported both CI jobs green). On `approved` or `confirmed`: State
+`ready-to-merge`, then the user's `/git:merge fix-dimension-constraint-name`.
 
 ## Blockers
 

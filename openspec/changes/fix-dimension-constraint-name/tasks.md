@@ -22,5 +22,5 @@
 
 - [x] 5.1 Commits per logical block, no agent trailers, each body naming the evidence for the tasks its diff holds. Verify: `git log --format=%B main..HEAD | grep -c '^Co-Authored-By'` prints `0`.
 - [x] 5.2 `env -u DATABASE_URL make check` green and `make test-integration` green against pgvector at head. Verify: both outputs recorded in a commit body.
-- [ ] 5.3 Acceptance on GitHub (the user pushes the branch): `workflow` and `python` jobs green, the migration applied in CI before the integration suite. Verify: the user reports the run.
-- [ ] 5.4 `openspec validate fix-dimension-constraint-name --strict` and `scripts/pregate-verify.sh gate2 fix-dimension-constraint-name` pass; request Gate 2 with `/gate-review fix-dimension-constraint-name 2`.
+- [x] 5.3 Acceptance on GitHub (the user pushes the branch): `workflow` and `python` jobs green, the migration applied in CI before the integration suite. Verify: the user reports the run.
+- [x] 5.4 `openspec validate fix-dimension-constraint-name --strict` and `scripts/pregate-verify.sh gate2 fix-dimension-constraint-name` pass; request Gate 2 with `/gate-review fix-dimension-constraint-name 2`.
