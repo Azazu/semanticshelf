@@ -375,8 +375,9 @@ tests/               unit/ (fake embedder, no DB), integration/ (pgvector, marke
 
 - Type hints everywhere; `mypy --strict` on `app/`; ruff default rules +
   `I` (isort) + `B` + `UP`; line length 100.
-- `async def` endpoints and repositories; sync ML inference is offloaded
-  with `run_in_threadpool` or a worker — never block the event loop.
+- `async def` endpoints and repositories; model loading and inference are
+  offloaded to the dedicated inference pool (`app/ml/pool.py`) or run in
+  the worker process — never block the event loop.
 - Pydantic schemas are separate from ORM models; validate at the edge.
 - One `Embedder` Protocol (`key`, `dim`, `embed_text`, `embed_images`),
   returning unit-length float32 rows; models are loaded lazily through

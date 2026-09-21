@@ -29,24 +29,24 @@
 
 ## 6. Warm-up command and documentation
 
-- [ ] 6.1 Write `app/cli.py`: a `typer` application with `models warm`, loading each enabled model and printing its key, width and load time; register the console script in `pyproject.toml`. Verify: `uv run semanticshelf models warm --help` prints the command's help without loading anything, recorded in the commit body.
+- [x] 6.1 Write `app/cli.py`: a `typer` application with `models warm`, loading each enabled model and printing its key, width and load time; register the console script in `pyproject.toml`. Verify: `uv run semanticshelf models warm --help` prints the command's help without loading anything, recorded in the commit body.
 - [x] 6.2 Add the `test-models` target to the `Makefile`. Verify: `make help` lists it and `make test-models` runs only the marked suite.
-- [ ] 6.3 Write `docs/how-to/models.md` (what is downloaded, where it goes, how much it weighs, how to warm it up, how to run offline) and extend `docs/reference/settings.md` with the seven settings, `docs/reference/commands.md` with the new target and command, and the `AGENTS.md` layout with `ml/` and `cli.py`. Verify: re-read all four whole; every command in them was run in its exact form.
+- [x] 6.3 Write `docs/how-to/models.md` (what is downloaded, where it goes, how much it weighs, how to warm it up, how to run offline) and extend `docs/reference/settings.md` with the seven settings, `docs/reference/commands.md` with the new target and command, and the `AGENTS.md` layout with `ml/` and `cli.py`. Verify: re-read all four whole; every command in them was run in its exact form.
 
 ## 7. Failing inputs (high tier: one per new or changed check)
 
 - [x] 7.1 Settings guard: a configuration naming an unimplemented model key makes the application refuse to start with that key in the message. Verify: output recorded in the commit body.
 - [x] 7.2 Conformance test: an embedder variant that returns a wrong width, and one that returns an unnormalised vector, each fail the shared conformance test. Verify: both outputs recorded, variants removed.
-- [ ] 7.3 Registry: with the success-store removed, the "load once under concurrency" test fails. Verify: output recorded, code restored.
-- [ ] 7.4 Import discipline: a temporary top-level `import torch` in a module under `app/` fails the import test. Verify: output recorded, import removed, `git status --short` clean.
+- [x] 7.3 Registry: with the success-store removed, the "load once under concurrency" test fails. Verify: output recorded, code restored.
+- [x] 7.4 Import discipline: a temporary top-level `import torch` in a module under `app/` fails the import test. Verify: output recorded, import removed, `git status --short` clean.
 - [x] 7.5 Readiness: enabling a model key the schema does not declare makes `/ready` answer 503 with `checks.models` naming the key and the widths, and no model loaded. Verify: this is a test, not a probe — output recorded in the commit body.
-- [ ] 7.6 Event loop, inference: running the embed call inline instead of through the pool fails the progress test. Verify: output recorded, code restored.
-- [ ] 7.7 Event loop, loading: obtaining an embedder synchronously on the loop instead of through `acquire` fails the load-progress test. Verify: output recorded, code restored.
-- [ ] 7.8 Checkpoint guard: a declared width that disagrees with the loaded checkpoint's width raises `CheckpointWidthError` naming the key and both numbers. Verify: output recorded (a unit test, so no second download).
+- [x] 7.6 Event loop, inference: running the embed call inline instead of through the pool fails the progress test. Verify: output recorded, code restored.
+- [x] 7.7 Event loop, loading: obtaining an embedder synchronously on the loop instead of through `acquire` fails the load-progress test. Verify: output recorded, code restored.
+- [x] 7.8 Checkpoint guard: a declared width that disagrees with the loaded checkpoint's width raises `CheckpointWidthError` naming the key and both numbers. Verify: output recorded (a unit test, so no second download).
 
 ## 8. Specification amendments
 
-- [ ] 8.1 Amend `docs/explanation/requirements.md` as the proposal's item 12 states: FR-IDX-1's default for `ENABLED_MODELS` becomes the keys the build implements; FR-MDL-4 drops the `DEVICE` setting and states CPU inference once, consistent with §10; FR-MDL-7 splits into the readiness comparison and the adapter's checkpoint guard. Verify: re-read §2.3 and §2.4 whole; `rg -n 'DEVICE' docs/ app/ openspec/specs/` returns nothing outside this change's own history, and no artifact still claims the probe catches a wrong checkpoint.
+- [x] 8.1 Amend `docs/explanation/requirements.md` as the proposal's item 12 states: FR-IDX-1's default for `ENABLED_MODELS` becomes the keys the build implements; FR-MDL-4 drops the `DEVICE` setting and states CPU inference once, consistent with §10; FR-MDL-7 splits into the readiness comparison and the adapter's checkpoint guard. Verify: re-read §2.3 and §2.4 whole; `rg -n 'DEVICE' docs/ app/ openspec/specs/` returns nothing outside this change's own history, and no artifact still claims the probe catches a wrong checkpoint.
 
 ## 9. CI
 
