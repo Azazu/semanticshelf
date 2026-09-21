@@ -1,7 +1,7 @@
 # Handoff — add-background-indexing
 
 **Updated:** 2026-09-21 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/add-background-indexing
 
 ## Done this session
@@ -33,18 +33,16 @@ Task groups 1-8 complete; 55 of 59 tasks checked.
 
 ## Next step
 
-Push the branch and report the CI run:
+The branch is pushed and its CI run is green (reported by the user), so all
+59 tasks are checked. Gate 2 requested with
+`/gate-review add-background-indexing 2`; the verdict and its findings are
+recorded in `review.md` by the runner.
 
-```
-git push -u origin change/add-background-indexing
-```
-
-Then tasks 9.3 and 9.4 are checked and Gate 2 is requested with
-`/gate-review add-background-indexing 2`.
-
-Local evidence, both in their documented form:
+Local evidence, each command in its documented form:
 `env -u DATABASE_URL make check` green (252 tests);
-`make test-integration` green (113 tests) against pgvector.
+`make test-integration` green (113 tests) against pgvector;
+`openspec validate --all --strict`, every `scripts/*_test.sh` and
+`sh -n scripts/*.sh` green — everything CI runs.
 
 ## Blockers
 
