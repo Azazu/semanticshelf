@@ -16,7 +16,7 @@ carries the full scope, exit criteria and the declared tier.
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 7 | `add-folder-indexing-cli` | `typer` CLI, `index-folder` through the upload pipeline, summary, dry run | medium |
+| 7 | `add-folder-indexing-cli` | `typer` CLI, `index-folder` through the upload pipeline, summary, dry run | high |
 
 ## Stage 2 — text→image search, demo data, demo UI
 

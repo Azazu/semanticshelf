@@ -104,6 +104,7 @@ async def claim(
     settings: Settings,
     *,
     limit: int | None = None,
+    asset_ids: Sequence[UUID] | None = None,
 ) -> list[ClaimedJob]:
     """Take due work and commit the claim, so every other runner can see it.
 
@@ -116,6 +117,7 @@ async def claim(
         return await IndexingJobRepository(session).claim(
             limit=limit if limit is not None else settings.worker_batch_size,
             lease_seconds=settings.job_lease_seconds,
+            asset_ids=asset_ids,
         )
 
 
@@ -209,13 +211,16 @@ async def run_batch(
     storage: MediaStorage,
     settings: Settings,
     pool: ThreadPoolExecutor,
+    asset_ids: Sequence[UUID] | None = None,
 ) -> int:
     """Claim a bounded batch, work through it, and report how many were taken.
 
     Bounded on purpose: a runner that drained while work remained would never
-    end, and this one lives inside the process that serves requests.
+    end, and this one lives inside the process that serves requests. With
+    `asset_ids` the batch is restricted to those assets' work, which is how a
+    runner finishes work it created itself rather than whatever is due.
     """
-    claimed = await claim(session_factory, settings)
+    claimed = await claim(session_factory, settings, asset_ids=asset_ids)
     for one in claimed:
         try:
             executed = await execute(
@@ -238,11 +243,16 @@ async def drain(
     storage: MediaStorage,
     settings: Settings,
     pool: ThreadPoolExecutor,
+    asset_ids: Sequence[UUID] | None = None,
 ) -> None:
     """The background task an upload schedules. Never raises into the server."""
     try:
         taken = await run_batch(
-            session_factory=session_factory, storage=storage, settings=settings, pool=pool
+            session_factory=session_factory,
+            storage=storage,
+            settings=settings,
+            pool=pool,
+            asset_ids=asset_ids,
         )
         if taken:
             log.info("indexing batch finished", jobs=taken)

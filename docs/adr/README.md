@@ -10,3 +10,4 @@ here.
 | [ADR-000](ADR-000-agent-workflow.md) | Agent workflow: Claude executes, Codex reviews at risk-tiered gates, user merges (process, precedes the series) |
 | [ADR-001](ADR-001-per-model-vector-index-layout.md) | One embeddings table with an untyped vector column, a CHECK carrying the model allowlist and each width, and one partial HNSW index per model over the dimension cast |
 | [ADR-003](ADR-003-queue-in-postgresql.md) | The indexing queue is the `indexing_jobs` table claimed with `FOR UPDATE SKIP LOCKED`, owned by a lease whose expiry is the claim's token, and made repeat-safe by the upsert — no broker |
+| [ADR-004](ADR-004-claims-restricted-to-named-assets.md) | A claim may name the assets whose work it wants, so a runner that created work can finish it; every other claim is unchanged, and the queue stays first due, first served |

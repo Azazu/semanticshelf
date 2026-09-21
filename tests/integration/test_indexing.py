@@ -587,3 +587,81 @@ async def test_a_job_naming_a_model_this_build_does_not_run_fails(
     row = await job_row(engine, asset.id)
     assert row.status == "failed", "it ends rather than waiting for a model that is not coming"
     assert row.last_error.startswith("ModelNotEnabled: model 'dinov2-large'")
+
+
+# --- claims a runner restricts to its own assets -------------------------------
+
+
+async def test_a_restricted_claim_takes_only_the_assets_it_names(
+    sessions: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    engine: AsyncEngine,
+) -> None:
+    """The queue may hold anything else, however much of it: a runner that
+    created work of its own finishes that, not whatever is due first."""
+    older = [await stored_asset(sessions, storage, settings, seed=seed) for seed in (1, 2, 3, 4)]
+    mine = await stored_asset(sessions, storage, settings, seed=5)
+
+    claimed = await indexing.claim(sessions, settings, asset_ids=[mine.id])
+
+    assert [one.job.asset_id for one in claimed] == [mine.id]
+    async with engine.connect() as connection:
+        untouched = (
+            await connection.execute(
+                sa.text("SELECT count(*) FROM indexing_jobs WHERE status = 'pending'")
+            )
+        ).scalar_one()
+    assert untouched == len(older), "everything else is still claimable by anyone"
+
+
+async def test_a_restricted_claim_that_finds_nothing_of_its_own_takes_nothing(
+    sessions: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    engine: AsyncEngine,
+) -> None:
+    other = await stored_asset(sessions, storage, settings, seed=1)
+    mine = await stored_asset(sessions, storage, settings, seed=2)
+    async with engine.begin() as connection:
+        await connection.execute(
+            sa.text("UPDATE indexing_jobs SET status = 'done' WHERE asset_id = :id"),
+            {"id": str(mine.id)},
+        )
+
+    assert await indexing.claim(sessions, settings, asset_ids=[mine.id]) == []
+
+    row = await job_row(engine, other.id)
+    assert (row.status, row.attempts) == ("pending", 0), "the other asset's work is untouched"
+
+
+async def test_two_restricted_claimers_never_take_the_same_job(
+    sessions: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    engine: AsyncEngine,
+) -> None:
+    asset = await stored_asset(sessions, storage, settings)
+
+    first, second = await asyncio.gather(
+        indexing.claim(sessions, settings, asset_ids=[asset.id]),
+        indexing.claim(sessions, settings, asset_ids=[asset.id]),
+    )
+
+    assert sorted([len(first), len(second)]) == [0, 1]
+    assert (await job_row(engine, asset.id)).attempts == 1, "one claim, one attempt"
+
+
+async def test_a_restricted_claim_still_leases_and_counts_its_attempt(
+    sessions: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    engine: AsyncEngine,
+) -> None:
+    asset = await stored_asset(sessions, storage, settings)
+
+    claimed = await indexing.claim(sessions, settings, asset_ids=[asset.id])
+
+    row = await job_row(engine, asset.id)
+    assert (row.status, row.attempts) == ("running", 1)
+    assert row.lease_expires_at == claimed[0].owned_until
