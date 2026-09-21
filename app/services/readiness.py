@@ -1,5 +1,6 @@
 """Readiness checks: the database answers, the schema is at the code's head,
-and the schema declares the models this build is configured to run.
+the schema declares the models this build is configured to run, and the media
+root can hold a picture.
 
 Each check returns a `CheckResult`. A failure reason names exception classes
 only — never a message, which for a database driver can carry the connection
@@ -11,6 +12,7 @@ downloaded a weight.
 """
 
 import asyncio
+import os
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -146,29 +148,68 @@ async def check_models(engine: AsyncEngine, timeout: float, enabled: Sequence[st
     return compare_declarations(enabled, schema_dimensions(definitions))
 
 
+def media_state(root: Path) -> str | None:
+    """What is wrong with the media root, or `None` when nothing is.
+
+    Blocking (three system calls); called in a thread. It asks the operating
+    system rather than writing a probe file: readiness is polled continuously,
+    and a health check should not have side effects. It therefore cannot catch
+    a mount that reports writable and then refuses the write — that surfaces at
+    the first upload, loudly.
+    """
+    if not root.exists():
+        return "the media root does not exist"
+    if not root.is_dir():
+        return "the media root is not a directory"
+    if not os.access(root, os.W_OK):
+        return "the media root is not writable"
+    return None
+
+
+async def check_media(root: Path, timeout: float) -> CheckResult:
+    """The media root, within `timeout` seconds.
+
+    Independent of the database, so it runs whatever the database is doing. The
+    reason never quotes the path: a readiness body is unauthenticated, and
+    where a deployment keeps its files is not a probe's news to publish.
+    """
+    try:
+        async with asyncio.timeout(timeout):
+            reason = await asyncio.to_thread(media_state, root)
+    except TimeoutError:
+        return CheckResult(False, _timeout_reason(timeout))
+    except Exception as exc:
+        return CheckResult(False, describe(exc))
+    return CheckResult(reason is None, reason)
+
+
 async def run_checks(
     engine: AsyncEngine,
     timeout: float,
-    enabled_models: Sequence[str] = (),
+    enabled_models: Sequence[str],
+    media_root: Path,
     script_dir: Path = ALEMBIC_DIR,
 ) -> dict[str, CheckResult]:
-    """All readiness checks; the later ones are skipped when the database is not answering.
+    """All readiness checks, in two rounds of one budget each.
 
-    The two checks that need a working database run concurrently rather than one
-    after the other. Each carries the same budget, and the probe as a whole must
-    answer within about twice the timeout — a bound that adding a third
-    sequential check would have broken, and that adding a fourth would break
-    again.
+    The database and the media root are independent of each other, so they run
+    together; the two checks that need a working database run together after
+    them, and are skipped when it failed. That keeps the whole probe within
+    about twice the timeout however many checks it grows — a bound a third
+    sequential check had already broken once.
     """
-    database = await check_database(engine, timeout)
+    database, media = await asyncio.gather(
+        check_database(engine, timeout),
+        check_media(media_root, timeout),
+    )
     if not database.ok:
         skipped = CheckResult(False, SKIPPED_AFTER_DATABASE_FAILURE)
-        return {"database": database, "migrations": skipped, "models": skipped}
+        return {"database": database, "migrations": skipped, "models": skipped, "media": media}
     migrations, models = await asyncio.gather(
         check_migrations(engine, timeout, script_dir),
         check_models(engine, timeout, enabled_models),
     )
-    return {"database": database, "migrations": migrations, "models": models}
+    return {"database": database, "migrations": migrations, "models": models, "media": media}
 
 
 def summarize(results: dict[str, CheckResult]) -> tuple[bool, dict[str, str]]:

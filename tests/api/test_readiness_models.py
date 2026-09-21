@@ -5,6 +5,7 @@ body it produces, and both must hold on a machine with no weights and no
 container. The integration suite runs the same check against a real schema.
 """
 
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -62,8 +63,10 @@ def empty_registry() -> None:
     registry.clear()
 
 
-async def probe(definition: str) -> httpx.Response:
-    settings = Settings(_env_file=None, database_url=UNREACHABLE_DATABASE_URL)
+async def probe(definition: str, media_root: Path) -> httpx.Response:
+    settings = Settings(
+        _env_file=None, database_url=UNREACHABLE_DATABASE_URL, media_root=media_root
+    )
     app = create_app(settings)
     async for client in make_client(app):
         app.state.engine = StubEngine(definition)
@@ -71,18 +74,18 @@ async def probe(definition: str) -> httpx.Response:
     raise AssertionError("the client fixture yielded nothing")
 
 
-async def test_a_schema_that_agrees_reports_ready_with_three_checks() -> None:
-    response = await probe(AGREEING)
+async def test_a_schema_that_agrees_reports_ready_with_every_check(tmp_path: Path) -> None:
+    response = await probe(AGREEING, tmp_path)
 
     assert response.status_code == 200
     assert response.json() == {
         "status": "ready",
-        "checks": {"database": "ok", "migrations": "ok", "models": "ok"},
+        "checks": {"database": "ok", "migrations": "ok", "models": "ok", "media": "ok"},
     }
 
 
-async def test_a_schema_of_another_width_answers_503_naming_both_widths() -> None:
-    response = await probe(NARROWER)
+async def test_a_schema_of_another_width_answers_503_naming_both_widths(tmp_path: Path) -> None:
+    response = await probe(NARROWER, tmp_path)
 
     assert response.status_code == 503
     body = response.json()
@@ -91,8 +94,18 @@ async def test_a_schema_of_another_width_answers_503_naming_both_widths() -> Non
     assert body["checks"]["models"] == f"{CLIP_VIT_L14}: code 768, schema 512"
 
 
-async def test_the_probe_loads_no_model() -> None:
-    await probe(NARROWER)
-    await probe(AGREEING)
+async def test_the_probe_loads_no_model(tmp_path: Path) -> None:
+    await probe(NARROWER, tmp_path)
+    await probe(AGREEING, tmp_path)
 
     assert registry.loaded_keys() == frozenset()
+
+
+async def test_a_missing_media_root_alone_makes_the_service_not_ready(tmp_path: Path) -> None:
+    response = await probe(AGREEING, tmp_path / "missing")
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["checks"]["database"] == "ok"
+    assert body["checks"]["media"] == "the media root does not exist"
+    assert str(tmp_path) not in response.text, "the body never carries the path"
