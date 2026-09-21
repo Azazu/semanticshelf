@@ -1,7 +1,7 @@
 # Handoff — add-folder-indexing-cli
 
 **Updated:** 2026-09-21 · claude
-**State:** awaiting-gate-2
+**State:** ready-to-merge
 **Branch:** change/add-folder-indexing-cli
 
 ## Done this session
@@ -33,24 +33,17 @@ complete, 47 of 51 tasks checked.
 
 ## Next step
 
-Confirmation 2 refused finding 1 again — the second failed confirmation on one
-finding, so the protocol's stop applied and the user arbitrated: fix it and go
-for a third confirmation.
+Gate 2 passed: Confirmation 3 of round 1 on `f91ae83` reads `confirmed`, both
+findings resolved.
 
-What was left: `_path_of` fell back to resolving the name when `/proc` was
-unavailable, and that fallback could name a directory the run was not holding —
-against a requirement written without a condition. The fallback now proves the
-name: the descriptor's device and inode against the resolved path's, and a name
-that no longer leads to the directory being held ends the run instead of being
-reported (`9f8ad9e` then this commit). The stale sentence in design decision 3
-went with it.
-
-Third confirmation of round 1: `/gate-review add-folder-indexing-cli 2
-confirm 1`.
+The branch has moved since the CI run that was green (`c1faee6`): three fixes,
+their tests, the probes and the artefacts. Push it again so CI runs on the head
+Gate 2 confirmed, then `/git:merge add-folder-indexing-cli`, then
+`/opsx:archive`.
 
 Local evidence: `env -u DATABASE_URL make check` green (275 tests);
-`make test-integration` green (149 tests); all 20 probes caught their removal,
-nothing left running.
+`make test-integration` green (149 tests); all 20 probes of group 6 caught
+their removal; nothing left running after any probe.
 
 ## Blockers
 
