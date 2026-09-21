@@ -6,8 +6,8 @@
 
 ## 2. Enqueue with the asset
 
-- [ ] 2.1 The upload creates one job per enabled model inside the transaction that stores the asset. Verify: an integration test asserts an uploaded asset has one job per enabled model, and that a failure storing the asset leaves neither the asset nor any job.
-- [ ] 2.2 An asset uploaded while no model is enabled gets no work and says so rather than failing. Verify: an integration test with an empty enabled set.
+- [x] 2.1 The upload creates one job per enabled model inside the transaction that stores the asset. Verify: an integration test asserts an uploaded asset has one job per enabled model, and that a failure storing the asset leaves neither the asset nor any job.
+- [x] 2.2 An asset uploaded while no model is enabled gets no work and says so rather than failing. Verify: an integration test with an empty enabled set.
 
 ## 3. Claim, execute, finish
 

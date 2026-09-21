@@ -143,14 +143,8 @@ async def test_an_asset_whose_file_is_gone_is_reported_and_its_work_failed(
 ) -> None:
     created = await upload(client)
     asset_id = str(created["id"])
-    async with engine.begin() as connection:
-        await connection.execute(
-            sa.text(
-                "INSERT INTO indexing_jobs (asset_id, model, status) "
-                "VALUES (:asset_id, 'clip-vit-l14', 'pending')"
-            ),
-            {"asset_id": asset_id},
-        )
+    # The upload queued the work itself now (change 6); this test needs one
+    # job for the asset, and that is exactly what it has.
     (storage.root / asset_id[:2] / f"{asset_id}.png").unlink()
 
     dry = await prune(prune_session, storage, min_age_seconds=0, apply=False)
