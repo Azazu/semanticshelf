@@ -52,9 +52,12 @@ rather than a mock.
   finishing statement therefore carries the token its claim handed out.
 - New settings: `JOB_LEASE_SECONDS`, `JOB_MAX_ATTEMPTS`, `WORKER_BATCH_SIZE`
   (the bound both runners drain in).
-- A failure's reason is built from the exception's class and message, bounded
-  to the two kilobytes the column allows and scrubbed of anything read from a
-  file.
+- A failure's reason names the exception's class, and carries its message only
+  when the service raised that exception itself; for a third-party failure the
+  class alone, because nothing can tell which parts of a library's message came
+  from the picture it was reading. Bounded to the two kilobytes the column
+  allows. FR-IDX-3 is amended to say this, since it asked for the message
+  unconditionally.
 - ADR-003 records why the queue is a table in PostgreSQL rather than a broker.
 
 ## Non-goals
@@ -97,7 +100,8 @@ rather than a mock.
   transitions), `app/services/assets.py` (enqueue inside the upload
   transaction, and the representation's `index_status`),
   `app/core/settings.py` (three settings), `app/schemas/assets.py`.
-- Amended: FR-IDX-6 in `docs/explanation/requirements.md`, as above.
+- Amended: FR-IDX-6 and FR-IDX-3 in `docs/explanation/requirements.md`, and the
+  deletion sentence of FR-AST-12 with them, as above.
 - Unchanged: the schema. Change 3 created `indexing_jobs` with the two indexes
   the claim and the status query need; no migration is written, and the claim's
   own token is the lease timestamp precisely so that none is needed.

@@ -140,8 +140,8 @@ NOT be attempted again on its own.
 
 #### Scenario: A reason says what happened, not how
 - **WHEN** work fails with an exception
-- **THEN** the recorded reason names the failure's class and message, and
-  contains no stack trace
+- **THEN** the recorded reason names the failure's class, carries a message
+  only under the rule above, and contains no stack trace
 
 #### Scenario: A failure the service did not raise
 - **WHEN** work fails with an exception from a library whose message holds
