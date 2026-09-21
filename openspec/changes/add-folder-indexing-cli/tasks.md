@@ -26,7 +26,9 @@
 - [ ] 4.1 Add an optional set of asset identifiers to `IndexingJobRepository.claim` and `claim_statement`, and pass it through `app/services/indexing.py::run_batch` and `drain`. A claim without it behaves exactly as before (design decision 8). Verify: an integration test claims with a restriction from a queue holding older due work for other assets and asserts it took only the named assets' work; the existing claim tests of change 6 stay green unchanged.
 - [ ] 4.2 The restricted claim keeps every property of an unrestricted one — one runner at a time, the lease, the attempt count, `SKIP LOCKED`. Verify: an integration test runs two restricted claimers over one asset's work concurrently and asserts exactly one of them took it, once.
 - [ ] 4.3 `app/services/folder.py` finishes the work it created: read the state of its own assets' work, stop when none is `pending` or `running`, otherwise claim and execute another restricted batch; stop and report when a pass claims nothing while its work is unfinished, and bound the number of passes (design decision 8). Verify: an integration test with a queue already holding more due work for other assets than one batch can take asserts the imported assets end with vectors and that the run did not report success while its own work was unfinished.
-- [ ] 4.4 The summary reports the work: how many assets were indexed, how many are still queued, how many failed and with what reason. A failed job does not fail the import. Verify: an integration test in which one imported picture's work fails every permitted attempt asserts the import succeeded, the asset exists, and the summary reports that work as failed with its reason.
+- [ ] 4.4 The import never waits out a backoff: work that failed an attempt while the queue permits another is reported as still queued with that reason, and the run ends (design decision 8). Verify: an integration test with the default attempt bound in which the model fails once asserts the command returned promptly, the asset exists, its work is `pending` and due later, and the summary counts it as still queued — not as failed and not as indexed.
+- [ ] 4.5 Work whose attempts are spent is reported as failed with the reason the queue recorded, and a failed job does not fail the import. Verify: an integration test with one permitted attempt in which the model fails asserts the import succeeded, the asset exists, the job is `failed`, and the summary reports it as failed with that reason.
+- [ ] 4.6 The summary reports the three states separately — indexed, still queued, failed — and never conflates them. Verify: an integration test over one import that produces all three asserts each count and each reason.
 
 ## 5. The command
 
@@ -60,6 +62,7 @@ code.
 | A claim restricted to assets takes only their work | 6.15 |
 | The import waits for its own work, not for any work | 6.16 |
 | The import's wait is bounded | 6.17 |
+| Still queued and failed are not conflated | 6.18 |
 
 - [ ] 6.1 Open without `O_NOFOLLOW`: the outside-symlink test fails, showing a file from beyond the tree stored.
 - [ ] 6.2 Open without `O_NONBLOCK`: the fifo test fails by hanging until its timeout.
@@ -78,6 +81,7 @@ code.
 - [ ] 6.15 Ignore the asset restriction in the claim: the restricted-claim test fails, showing another asset's work taken.
 - [ ] 6.16 Decide the import is finished by the number of batches rather than by the state of its own assets: the test of task 4.3 fails, showing a run that returned with its own work pending.
 - [ ] 6.17 Remove the "a pass that claimed nothing ends it" rule: the test that an import whose work is held by another runner still returns fails by hanging until its timeout.
+- [ ] 6.18 Report every unfinished job as failed: the test of task 4.4 fails, showing a retriable job counted as a terminal failure.
 
 ## 7. Documentation and the requirement amendments
 

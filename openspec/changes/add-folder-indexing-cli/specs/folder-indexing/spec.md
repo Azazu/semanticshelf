@@ -178,21 +178,25 @@ resolved, or cannot be read.
 
 Unless the run was asked to leave the work queued, the import SHALL carry out
 the work it created for the assets it created, and SHALL NOT be satisfied by
-carrying out unrelated work that happened to be waiting: when it returns, every
-asset it created SHALL either have its vectors or have work the queue still
-owns, and the summary SHALL say how many of each — indexed, still queued, or
-failed with the reason the queue recorded.
+carrying out unrelated work that happened to be waiting.
 
-Work that fails SHALL NOT fail the import. The import SHALL NOT wait
-indefinitely for work it cannot claim: when a pass claims nothing while work
-of its own assets is still unfinished, the run SHALL end and report that work
-as still queued.
+The import SHALL work through its own assets' queue until none of that work is
+claimable by it, and SHALL NOT wait for work it cannot claim now: work another
+runner holds, and work that failed an attempt and is waiting out the delay
+before its next one, are left in the queue that owns them. An import SHALL NOT
+sleep to outlast such a delay.
 
-#### Scenario: A folder is imported
-- **WHEN** a folder of pictures is imported without asking for the work to be
-  left queued
+When it returns, every asset it created SHALL therefore be in one of three
+states, and the summary SHALL say how many are in each and why: indexed, still
+queued — with the reason it was not carried out — or failed, with the reason
+the queue recorded, when the attempts the queue permits are spent. Work that
+fails SHALL NOT fail the import.
+
+#### Scenario: A folder whose work all succeeds
+- **WHEN** a folder of pictures whose work succeeds is imported without asking
+  for the work to be left queued
 - **THEN** the command returns only after every asset it created has its
-  vectors, and says how many it indexed
+  vectors, and reports all of them as indexed
 
 #### Scenario: A queue that already holds other work
 - **WHEN** a folder is imported while the queue already holds more due work for
@@ -200,11 +204,18 @@ as still queued.
 - **THEN** the imported assets still end with their vectors, and the run does
   not report success while its own work is unfinished
 
-#### Scenario: Work that cannot be done
-- **WHEN** a picture is imported whose work fails every attempt the queue
-  allows
+#### Scenario: Work that failed and will be attempted again
+- **WHEN** a picture is imported whose work fails an attempt while the queue
+  still permits another
+- **THEN** the import succeeds, the asset exists, the command does not wait out
+  the delay before the next attempt, and the summary reports that work as still
+  queued with that reason
+
+#### Scenario: Work whose attempts are spent
+- **WHEN** a picture is imported whose work fails the last attempt the queue
+  permits
 - **THEN** the import still succeeds, the asset exists, and the summary reports
-  that work as failed with its reason
+  that work as failed with the reason the queue recorded
 
 #### Scenario: The work is left for later
 - **WHEN** a folder is imported with the work left queued

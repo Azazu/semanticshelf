@@ -148,8 +148,21 @@ settings: the run is described entirely by its arguments.
    rule, and by a pass count derived from the number of jobs and the configured
    attempts. What the command guarantees is therefore precise: **when it
    returns, every asset it created has either a vector or a job the queue still
-   owns**, and the summary says which — indexed, still queued, or failed with
-   its reason. A job that fails does not fail the import; it is reported.
+   owns**, and the summary says which — indexed, still queued with the reason it
+   was not carried out, or failed with the reason the queue recorded. A job that
+   fails does not fail the import; it is reported.
+
+   **The import does not wait out a backoff.** This is the consequence the first
+   draft of this decision hid, and the reviewer was right to refuse it: a job
+   that fails an attempt while attempts remain becomes due again only after
+   `2^attempts × 10s`, so the very next targeted claim takes nothing and the run
+   ends with that job queued. Waiting for it would mean sleeping in a CLI for a
+   delay that doubles — a scheduler, which is a non-goal — and it would make
+   every test of the path a slow one. So a retriable failure is reported as
+   still queued, a terminal one (the attempts are spent) is reported as failed,
+   and the two are never conflated. The operator's answer to "still queued" is
+   the same as everywhere else in this service: run the queue again.
+
    `INDEXING_RUNNER` (FR-CLI-1) selects between this runner and the worker
    process; until change 13 there is no second runner to select, so `--no-index`
    stands in its place.
@@ -193,11 +206,13 @@ settings: the run is described entirely by its arguments.
   can take jobs ahead of older ones it did not create. Accepted: it is an
   operator command finishing what it started, it holds no lease longer than any
   other runner, and the queue's order is otherwise untouched.
-- **Work the import cannot finish** → a job in backoff, or one another runner
-  holds, leaves the command reporting "still queued" rather than waiting.
-  Stated in decision 8 and reported by the summary; the operator's answer is to
-  run the queue again, which is what the runner inside the API or the worker of
-  change 13 does anyway.
+- **Work the import cannot finish** → a job waiting out its backoff, or one
+  another runner holds, leaves the command reporting "still queued" with that
+  reason rather than waiting. An import of a folder whose pictures fail on the
+  first attempt therefore ends with nothing indexed and everything queued,
+  which the summary states plainly. The operator's answer is to run the queue
+  again — which is what the runner inside the API, and the worker of change 13,
+  do anyway.
 - **The dry run's verdicts can age** → decision 6; the summary says it was a
   dry run so nobody reads it as a receipt.
 - **`run_batch` in a CLI process loads a model** → the first imported picture

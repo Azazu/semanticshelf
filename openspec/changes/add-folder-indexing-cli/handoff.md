@@ -44,9 +44,24 @@ append-only record. `tasks.md` is 48 tasks now, 17 of them probes.
 
 ## Next step
 
-Confirmation of round 1: `/gate-review add-folder-indexing-cli 1 confirm 1`.
-After `confirmed`: `/opsx:apply add-folder-indexing-cli`, starting with the
-walk.
+Confirmation 1 of round 1 (`1f3d145`): five findings `confirmed`, finding 6
+still `changes-requested` — and right again. The requirement allowed a return
+with work queued, but its happy-path scenario still demanded vectors for every
+asset unconditionally, and task 4.4 demanded a terminal failure that the
+queue's own backoff makes unreachable without sleeping through it.
+
+Fixed by stating the policy instead of hiding it: **the import never waits out
+a backoff.** A failure with attempts left is reported as still queued with that
+reason; a failure with the attempts spent is reported as failed with the
+queue's reason; the two are never conflated. The happy-path scenario now says
+"a folder whose work all succeeds", and tasks 4.4, 4.5 and 4.6 cover the
+retriable path, the terminal path (one permitted attempt) and the summary that
+keeps them apart, with probe 6.18 for the conflation.
+
+Second confirmation of round 1: `/gate-review add-folder-indexing-cli 1
+confirm 1`. If it comes back `changes-requested` on finding 6 again, that is
+the second failed confirmation on one finding — the protocol says stop and ask
+you to arbitrate rather than loop.
 
 ## Blockers
 
