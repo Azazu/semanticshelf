@@ -15,11 +15,9 @@
 
 ## Next step
 
-`/opsx:propose add-asset-upload-and-storage`.
-
-Tier is high in the roadmap: file upload, path handling and deletion are all
-on the project's `high` trigger list, so Gate 1 reviews the artifacts before
-any code, and every new check needs a demonstrated failing input.
+`/gate-review add-asset-upload-and-storage 1` — tier high, so Codex reviews
+the artifacts before any code is written. After an approving verdict:
+`/opsx:apply add-asset-upload-and-storage`.
 
 ## Blockers
 

@@ -1,0 +1,141 @@
+# Design — add-asset-upload-and-storage
+
+## Context
+
+See `proposal.md` — Why. What exists: the `assets` table with its domains and
+its unique content hash (change 3), repositories that return domain objects,
+problem details for every error, request-id logging, and Pillow as a
+dependency (change 4). What does not exist: any router beyond the probes, any
+request or response schema, any file the service owns.
+
+Constraints that shape the approach: `make check` must stay green without a
+database and without weights, so the upload path has to be testable with a
+temporary directory and no container; the event loop must not block, and file
+I/O and image decoding are both blocking; and every path touching the
+filesystem is security-sensitive input handling, which is why this change is
+`high` tier.
+
+## Goals / Non-Goals
+
+**Goals:** a picture can be uploaded, read, listed, edited and deleted; the
+bytes on disk are reachable only through an identifier the service generated;
+a crash leaves at most removable orphan files; every limit is enforced before
+the work it bounds.
+
+**Non-Goals:** see `proposal.md` — Non-goals. At design level: no abstraction
+over the filesystem (no pluggable object store — the requirements name a
+directory, and an interface with one implementation is a guess about the
+future), and no background work of any kind.
+
+## Applicability
+
+| Question | Applies | How it is handled |
+|---|---|---|
+| Crash before/after an external effect | yes | The external effects are two file writes and one row. Order: both files renamed into place, then the row; a failed insert unlinks both. A crash between them leaves orphan files — the one residue the design permits — which `storage prune` finds. The reverse order (row first) is rejected: it would let a row point at a file that never arrived. |
+| Concurrent writers | yes | Two identical uploads race on the unique content hash. Both may pass the pre-check and write files under their own identifiers; the insert that loses the race raises a unique violation, is translated to 409, and unlinks its own files. Neither upload can remove the other's, because every path is derived from its own asset identifier. |
+| Money rounding | n/a | No money anywhere in the project. |
+| Empty/zero/null inputs | yes | An empty file part decodes as nothing → 415. Zero tags and absent metadata are normal. `meta: null` in a patch means "clear", an omitted field means "leave alone", distinguished through the fields actually present in the request rather than through the value. A zero-byte upload never reaches decoding, because the byte limit check reads and hashes what arrived. |
+| Authorization boundary | yes | There is none by design (single-tenant, unauthenticated), so the boundary that matters is the path: nothing a client sends may reach the filesystem. One module builds paths, from an identifier the service generated and a format it detected; the original filename is stored as text and never used to open anything. |
+| Deletion/expiry | yes | Deletion removes the row and everything derived from it in one transaction, then the files. A failed unlink is a warning, not a failed request, because the row is already gone and retrying the whole delete would answer 404. Prune reconciles. A second delete answers 404 deliberately. |
+| Idempotency of retries | yes | Upload is not idempotent and does not pretend to be: a retry of the same bytes answers 409 naming the existing asset, which is the honest answer and lets a client converge. Delete is not idempotent at the HTTP level either, by requirement. |
+
+## Decisions
+
+1. **One module builds paths: `app/storage.py`.** It takes an asset
+   identifier and a format and returns a path under the resolved media root;
+   it writes, removes and walks. Nothing else in the application joins a path
+   under that root, and a unit test asserts every derived path stays inside
+   the resolved root for adversarial identifiers and extensions.
+   Rejected: building paths inside the service layer, which is where this kind
+   of defect usually hides — a filename that reaches `Path()` once is enough.
+
+2. **The byte limit is enforced while reading, not after.** The upload part is
+   consumed in chunks; the running total and the content hash are computed in
+   the same pass, and the read aborts with 413 the moment the limit is passed.
+   `Content-Length` is a claim and is not trusted for the decision.
+   Rejected: reading the part into memory or to a spooled file and checking
+   its size afterwards, which pays the full cost of an oversized upload.
+
+3. **The pixel cap is enforced by the decoder, before allocation.** Pillow's
+   own bomb guard is configured from the setting at application start, and the
+   upload verifies the file, reopens it, and reads its size before any pixel
+   access. The guard is a process-global in Pillow, which is acceptable
+   because it is one setting for one process, and a unit test asserts the
+   application sets it.
+   Rejected: reading dimensions from the header ourselves — a second, weaker
+   implementation of what the library already does correctly.
+
+4. **Two files, one unit.** Each file is written to a temporary name in its
+   target directory, flushed, and renamed into place — a rename within a
+   directory is atomic, so no half-written file is ever visible under the name
+   the service serves. The row is inserted after both renames; any failure
+   from there unlinks both. Shard directories are created on demand; the media
+   root itself is never created by the service, so a mistyped root is reported
+   by readiness instead of being silently created next to the real one.
+
+5. **The thumbnail is re-encoded from decoded pixels.** That is what strips
+   every metadata block of the original — camera data, colour profile,
+   comments, and anything hidden in one — rather than an explicit strip list
+   that a new block type would slip past. Size and quality are constants of
+   the storage module, not settings: the requirements fix them, and a knob
+   that no deployment turns is a knob that rots.
+
+6. **Blocking work runs off the event loop.** Image decoding, thumbnailing and
+   file writes go through the threadpool, not the event loop. This is
+   Starlette's shared threadpool rather than the inference pool of change 4:
+   that pool is sized for model work and a burst of uploads must not stall
+   embedding.
+
+7. **Serving bytes is a file response with validators.** The framework's file
+   response streams from disk; the entity tag is the content hash, which the
+   service already stores, so revalidation costs no read. Existence is checked
+   before the response is built, so a missing file is a 404 with a warning
+   rather than an exception mid-stream.
+
+8. **`has_more` by fetching one extra row**, as the requirements state, rather
+   than a count query: the count would be a second query whose answer is stale
+   the moment it is read, and the API deliberately exposes no total.
+
+9. **Patch distinguishes absent from null through the request's own fields**,
+   not through a sentinel value in the schema, so the two cases the
+   requirement separates stay separate all the way to the repository.
+
+10. **The media readiness check does not touch the database and runs beside
+    it.** It asks the operating system whether the root exists, is a directory
+    and is writable, in a thread and under the same budget as the other
+    checks, so the probe's bound of about twice the timeout still holds. It
+    does not write a probe file: readiness is polled continuously, and writing
+    on every poll is a side effect a health check should not have. It
+    therefore cannot catch a mount that reports writable and then refuses the
+    write — that failure surfaces at the first upload, loudly, and the check's
+    description says so rather than claiming more.
+
+11. **The probe's reason never quotes the path.** A readiness body is
+    unauthenticated; the media root is deployment information. The reason says
+    what is wrong (missing, not a directory, not writable), not where.
+
+## Risks / Trade-offs
+
+- [A client uploads at the limit repeatedly] → each upload costs the limit in
+  I/O before it is refused; there is no authentication to rate-limit against,
+  which the requirements accept for a single-tenant service. The limit keeps
+  the cost bounded and constant.
+- [Pillow's bomb guard is a process-global] → set once from the setting at
+  application start; a unit test asserts it, and a probe demonstrates that
+  removing the line lets an oversized picture through.
+- [Orphan files after a crash] → the only residue the design permits, found
+  and removed by `storage prune`; the alternative (a row before its files)
+  trades a removable file for a broken asset.
+- [`os.access` is an approximation of "writable"] → decision 10; the first
+  upload is the real test, and it fails loudly.
+- [Deleting the row before the files can strand files] → deliberate: the
+  request succeeds, the warning is logged, prune reconciles. The reverse order
+  would risk deleting the files of an asset whose row survives.
+
+## Migration Plan
+
+No schema change: change 3 created the table this change fills. Deployment
+needs the media root to exist and be writable — `make init` creates the
+default, the documentation says so, and readiness reports it when it is
+missing. Rollback is removing the router: the stored files become orphans that
+`storage prune` lists.
