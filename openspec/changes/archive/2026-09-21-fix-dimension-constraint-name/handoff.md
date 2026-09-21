@@ -1,7 +1,7 @@
 # Handoff — fix-dimension-constraint-name
 
 **Updated:** 2026-09-21 · claude
-**State:** ready-to-merge
+**State:** merged
 **Branch:** change/fix-dimension-constraint-name
 
 ## Done this session
@@ -24,9 +24,9 @@ suites and `sh -n` over every script clean; no agent trailer on the branch.
 
 ## Next step
 
-Gate 2 approved on `09d46dd` with no findings. The user merges with
-`/git:merge fix-dimension-constraint-name`, then
-`/opsx:archive fix-dimension-constraint-name`.
+Merged into `main` as `81f80b6` and archived. The capability it introduced
+lives in `openspec/specs/database-schema/spec.md`, and its guard runs with
+every integration suite.
 
 ## Blockers
 
