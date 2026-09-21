@@ -19,6 +19,8 @@ LogLevel = Literal["debug", "info", "warning", "error"]
 
 DEFAULT_MODEL_CACHE = Path(".data/models")
 DEFAULT_CLIP_CHECKPOINT = "openai/clip-vit-large-patch14"
+DEFAULT_MEDIA_ROOT = Path(".data/media")
+MIB = 1024 * 1024
 
 
 class Settings(BaseSettings):
@@ -50,6 +52,20 @@ class Settings(BaseSettings):
     embed_batch_size: int = Field(default=8, gt=0)
     #: Threads that load models and run inference, away from the event loop.
     inference_workers: int = Field(default=2, gt=0)
+
+    # --- media ---------------------------------------------------------------
+    #: Where an asset's bytes live. Outside any directory served by path, and
+    #: never created by the service: a mistyped root is reported by readiness
+    #: rather than silently created beside the real one.
+    media_root: Path = DEFAULT_MEDIA_ROOT
+    #: The bound on a whole request body, enforced while it is read.
+    max_upload_bytes: int = Field(default=20 * MIB, gt=0)
+    #: Refused before any pixel is allocated, at exactly this number.
+    max_image_pixels: int = Field(default=40_000_000, gt=0)
+    min_image_side: int = Field(default=32, gt=0)
+    #: A margin for `storage prune` run against a store this service does not
+    #: write; the guarantee against deleting a live upload is the advisory lock.
+    prune_min_age_seconds: int = Field(default=3600, gt=0)
 
     @field_validator("database_url")
     @classmethod
