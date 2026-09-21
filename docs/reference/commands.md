@@ -30,6 +30,7 @@ Installed as the `semanticshelf` console script; run it with `uv run`.
 | Command | Purpose |
 |---|---|
 | `uv run semanticshelf models warm` | load every key in `ENABLED_MODELS`, downloading what is missing, and print each model's width and load time ([how-to](../how-to/models.md)) |
+| `uv run semanticshelf index-folder <dir> [--recursive] [--tags a,b] [--meta '{"k":"v"}'] [--dry-run] [--no-index]` | import a directory of pictures through the upload pipeline, then carry out the work it created; `--dry-run` reads and writes nothing, `--no-index` leaves the work queued. Exits non-zero only when the run could not start ([how-to](../how-to/indexing.md)) |
 | `uv run semanticshelf storage prune [--apply]` | report files no asset owns and assets whose files are gone; `--apply` removes and marks. Does nothing while an upload is in flight ([how-to](../how-to/uploading.md)) |
 
 ## Workflow scripts

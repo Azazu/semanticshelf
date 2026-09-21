@@ -35,7 +35,7 @@
 - [x] 5.1 Add `index-folder` to `app/cli.py`: the directory argument, `--recursive`, `--tags`, `--meta`, `--dry-run`, `--no-index`; it builds the settings, storage, session factory and inference pool, calls the service and prints the report through a `describe`-style renderer, as `storage prune` does. Verify: `uv run semanticshelf index-folder --help` pasted into the commit body, and a CLI test asserting the summary's lines for a fixture tree.
 - [x] 5.2 Exit status: 0 when the run completed, even with refusals; non-zero when it could not run at all (design decision 9). Verify: CLI tests asserting both, including the exit code for a missing directory.
 - [x] 5.3 `--no-index` leaves the work queued: the assets exist, their work is `pending`, no vector is written, and the summary says so. Verify: an integration test.
-- [ ] 5.4 Progress is shown for both phases with `click`'s progress bar, and no new dependency is added. Verify: the command run by hand with its output pasted into the how-to; `make lock-check` green.
+- [x] 5.4 Progress is shown for both phases with `click`'s progress bar, and no new dependency is added. Verify: the command run by hand with its output pasted into the how-to; `make lock-check` green.
 
 ## 6. Failing inputs (high tier: one per new check)
 
@@ -84,11 +84,11 @@ code.
 
 ## 7. Documentation and the requirement amendments
 
-- [ ] 7.1 Extend `docs/how-to/indexing.md` with the import: the command, its options, the summary, the dry run, what is skipped and why, and what "still queued" means. Verify: every command run in its exact form, output pasted from the run, the file re-read whole afterwards.
-- [ ] 7.2 Add the command to `docs/reference/commands.md`. Verify: the row matches `--help` word for word.
-- [ ] 7.3 Amend FR-CLI-1 in `docs/explanation/requirements.md`: the relative path is metadata and `original_filename` keeps its guarantee; `INDEXING_RUNNER` arrives with change 13 and `--no-index` stands in for it until then. Verify: `rg "original_filename" docs/ openspec/` shows no surviving claim that it holds a path.
-- [ ] 7.4 The tier correction of row 7 (made when this change was proposed) still holds at the end. Verify: `rg -n 'add-folder-indexing-cli' openspec/ROADMAP.md docs/explanation/requirements.md` shows `high` in both, and `proposal.md` agrees.
-- [ ] 7.5 Write `docs/adr/ADR-004-*.md`: a claim may be restricted to named assets, why an operator command needs it, what it costs (a runner can take its own work ahead of older work), and what it does not change (one runner at a time, the lease, the retries, the order among what a claim may take). It refines ADR-003's "first due, first served", which is why it is a record rather than an edit — ADR-003 is append-only. Verify: re-read whole; the ADR index lists it; `rg -n "first due" docs/` shows the sentence only in ADR-003, with ADR-004 naming the refinement.
+- [x] 7.1 Extend `docs/how-to/indexing.md` with the import: the command, its options, the summary, the dry run, what is skipped and why, and what "still queued" means. Verify: every command run in its exact form, output pasted from the run, the file re-read whole afterwards.
+- [x] 7.2 Add the command to `docs/reference/commands.md`. Verify: the row matches `--help` word for word.
+- [x] 7.3 Amend FR-CLI-1 in `docs/explanation/requirements.md`: the relative path is metadata and `original_filename` keeps its guarantee; `INDEXING_RUNNER` arrives with change 13 and `--no-index` stands in for it until then. Verify: `rg "original_filename" docs/ openspec/` shows no surviving claim that it holds a path.
+- [x] 7.4 The tier correction of row 7 (made when this change was proposed) still holds at the end. Verify: `rg -n 'add-folder-indexing-cli' openspec/ROADMAP.md docs/explanation/requirements.md` shows `high` in both, and `proposal.md` agrees.
+- [x] 7.5 Write `docs/adr/ADR-004-*.md`: a claim may be restricted to named assets, why an operator command needs it, what it costs (a runner can take its own work ahead of older work), and what it does not change (one runner at a time, the lease, the retries, the order among what a claim may take). It refines ADR-003's "first due, first served", which is why it is a record rather than an edit — ADR-003 is append-only. Verify: re-read whole; the ADR index lists it; `rg -n "first due" docs/` shows the sentence only in ADR-003, with ADR-004 naming the refinement.
 
 ## 8. Wrap-up
 

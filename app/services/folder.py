@@ -417,8 +417,9 @@ async def index_imported(
     """
     created = report.created_assets
     work = WorkReport()
+    report.work = work
     if not created:
-        return work
+        return work  # nothing was created, so there is nothing of ours to do
 
     passes = len(created) * settings.job_max_attempts + 1
     for _ in range(passes):
@@ -480,6 +481,9 @@ def describe(report: ImportReport) -> list[str]:
     work = report.work
     if work is None:
         lines.append("indexing: not run" if not report.dry_run else "indexing: nothing to run")
+        return lines
+    if not report.created_assets:
+        lines.append("indexing: nothing to do")
         return lines
     lines.append(f"indexed: {work.indexed}")
     lines.append(f"still queued: {len(work.queued)}")

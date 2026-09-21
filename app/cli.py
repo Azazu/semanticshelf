@@ -137,7 +137,7 @@ async def _run_import(
                     dry_run=dry_run,
                     on_file=lambda _: progress.update(1),
                 )
-        if index and not dry_run and report.created_assets:
+        if index and not dry_run:
             with typer.progressbar(label="index ", length=len(report.created_assets)) as indexing:
                 done = 0
 

@@ -229,11 +229,138 @@ $ curl -s -X POST http://127.0.0.1:8000/api/v1/assets/56a8ec8b-…/reindex \
  "detail":"unknown model: 'dinov2-xl'","instance":"urn:request:…"}
 ```
 
+## Import a whole folder
+
+`index-folder` puts a directory of pictures through the same pipeline an
+upload goes through — the same inspection from the bytes, the same storage
+rules, the same duplicate check, the same work queued per model — and then
+carries out the work it created.
+
+Rehearse it first; a dry run reads and inspects everything and writes nothing:
+
+```console
+$ uv run semanticshelf index-folder ~/photos --recursive --dry-run
+import
+folder: /home/you/photos (dry run)
+created: 3
+already stored: 0
+refused: 1
+skipped: 2
+  refused        broken.png — the file does not decode as an image
+  skipped        link.png — a symbolic link
+  skipped        notes.txt — not named like a picture
+indexing: nothing to run
+```
+
+Then the run itself:
+
+```console
+$ uv run semanticshelf index-folder ~/photos --recursive --tags handbook,demo
+import
+index
+folder: /home/you/photos
+created: 3
+already stored: 0
+refused: 1
+skipped: 2
+  refused        broken.png — the file does not decode as an image
+  skipped        link.png — a symbolic link
+  skipped        notes.txt — not named like a picture
+indexed: 3
+still queued: 0
+failed: 0
+```
+
+`import` and `index` are the two progress bars — a terminal draws them, a pipe
+gets the labels only, as above. The run ends with the vectors: it claims the
+work it created, and only that work, so a queue holding older jobs cannot
+starve it.
+
+Running it again over the same folder creates nothing, because identical bytes
+are one asset:
+
+```console
+$ uv run semanticshelf index-folder ~/photos --recursive
+folder: /home/you/photos
+created: 0
+already stored: 3
+refused: 1
+skipped: 2
+  …
+indexing: nothing to do
+```
+
+That is what makes an interrupted import safe to repeat: it picks up exactly
+what is missing.
+
+### What is stored for an imported picture
+
+The file's own name is the original filename, and its path relative to the
+imported directory is metadata — `original_filename` holds one name and never
+a path, wherever the picture came from:
+
+```console
+$ psql -c "SELECT original_filename, meta->>'source_path', status FROM assets
+           JOIN indexing_jobs USING (asset_id) ORDER BY 1"
+ original_filename |    source_path    | status
+-------------------+-------------------+---------
+ castle.jpeg       | castle.jpeg       | done
+ dragon.png        | dragon.png        | done
+ garden.png        | spring/garden.png | done
+ late.png          | late.png          | pending
+```
+
+`--tags` and `--meta` apply to every asset the run creates, through the same
+normalisation an upload uses, and neither can replace the recorded path.
+`source` is `folder` rather than `upload`; everything else about the asset is
+what an upload of the same bytes would store.
+
+### What it will not read
+
+Only regular files inside the directory, chosen by extension
+(`.jpg`, `.jpeg`, `.png`, `.webp`) and then accepted or refused on their
+bytes. A symbolic link is never read, wherever it points; a symlinked
+directory is never entered; a fifo, socket or device node is never opened. The
+open is what decides, not the name, so a file swapped for something else
+between being listed and being read cannot slip through.
+
+Everything it did not read is in the summary with its reason, and a file it
+refuses does not stop the run. The command exits non-zero only when it could
+not run at all:
+
+```console
+$ uv run semanticshelf index-folder ~/nowhere
+no such directory: /home/you/nowhere
+$ echo $?
+2
+```
+
+### Leaving the work for later
+
+`--no-index` stores the pictures and leaves their work queued:
+
+```console
+$ uv run semanticshelf index-folder ~/photos --recursive --no-index
+folder: /home/you/photos
+created: 1
+already stored: 3
+refused: 1
+skipped: 2
+  …
+indexing: not run
+```
+
+The queue then behaves as it always does: the next upload's runner, or a
+`reindex`, carries it out. With `--no-index` the command never loads a model,
+which is what you want when the import is a first step and the machine that
+indexes is another one.
+
 ## Who actually does the work
 
-In this stage, the API process: every upload — and every reset — schedules a
-background task that claims at most `WORKER_BATCH_SIZE` jobs, does them, and
-stops. A runner that drained while work remained would never end, so anything
+In this stage, the API process and the import command: every upload and every
+reset schedules a background task that claims at most `WORKER_BATCH_SIZE`
+jobs, does them, and stops; `index-folder` runs the same claim, restricted to
+the assets it created, until they are done or nothing of theirs is claimable. A runner that drained while work remained would never end, so anything
 left over waits for the next upload or reset. The separate `worker` process,
 which loops over the same claim, execute and finish functions, arrives with
 its own change.
