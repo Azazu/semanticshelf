@@ -55,6 +55,14 @@ EMBEDDING_MODELS: Final[Mapping[str, int]] = {
 IMPLEMENTED_MODELS: Final[frozenset[str]] = frozenset({CLIP_VIT_L14})
 
 
+class UnknownModelError(LookupError):
+    """A model key the application does not declare.
+
+    Raised wherever a key arrives from outside the code — configuration, a
+    request, a job row — so every layer reports the same failure for it.
+    """
+
+
 def vector_index_name(model: str) -> str:
     """The name of the vector index serving one model key."""
     return "ix_embeddings_" + model.replace("-", "_")

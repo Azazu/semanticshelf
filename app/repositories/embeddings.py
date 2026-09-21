@@ -15,14 +15,12 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain import Embedding, NeighbourHit, dimension_of
+from app.domain import Embedding, NeighbourHit, UnknownModelError, dimension_of
 from app.models import Embedding as EmbeddingRow
 
 UNIQUE_CONSTRAINT = "uq_embeddings_asset_model"
 
-
-class UnknownModelError(LookupError):
-    """A model key the application does not declare."""
+__all__ = ["UnknownModelError", "VectorDimensionError", "checked_dimension", "EmbeddingRepository"]
 
 
 class VectorDimensionError(ValueError):
