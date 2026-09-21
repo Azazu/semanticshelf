@@ -36,6 +36,7 @@ from app.core.settings import Settings
 from app.db.locks import hold_media_shared
 from app.domain import Asset
 from app.repositories.assets import AssetRepository
+from app.repositories.jobs import IndexingJobRepository
 from app.services import images
 from app.storage import MediaStorage
 
@@ -173,7 +174,7 @@ async def create_asset(
                 if existing is not None:
                     raise DuplicateAssetError(existing.id)
                 await run_in_threadpool(publish_files, storage, asset_id, received, facts)
-                return await repository.add(
+                asset = await repository.add(
                     asset_id=asset_id,
                     sha256=received.sha256,
                     content_type=facts.content_type,
@@ -186,6 +187,13 @@ async def create_asset(
                     tags=tags,
                     meta=meta,
                 )
+                # In the same transaction as the asset: an asset never exists
+                # without the work that will give it its vectors, and a failure
+                # that loses the asset loses that work with it.
+                await IndexingJobRepository(session).add_for_models(
+                    asset_id=asset.id, models=settings.enabled_models
+                )
+                return asset
         except BaseException as exc:
             await run_in_threadpool(storage.remove_any, asset_id)
             if isinstance(exc, IntegrityError):
@@ -220,12 +228,18 @@ async def list_assets(
     tags_all: Sequence[str] = (),
     tags_any: Sequence[str] = (),
     source: str | None = None,
+    index_status: tuple[str, str] | None = None,
     limit: int,
     offset: int,
 ) -> tuple[list[Asset], bool]:
     """A page of assets, newest first, and whether more exist after it."""
     return await AssetRepository(session).page(
-        tags_all=tags_all, tags_any=tags_any, source=source, limit=limit, offset=offset
+        tags_all=tags_all,
+        tags_any=tags_any,
+        source=source,
+        index_status=index_status,
+        limit=limit,
+        offset=offset,
     )
 
 

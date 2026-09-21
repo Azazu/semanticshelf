@@ -24,6 +24,9 @@ file next to `pyproject.toml` (the environment wins). Source of truth:
 | `MAX_IMAGE_PIXELS` | no | `40000000` | API | Width × height, refused above this from the picture's header before a pixel is allocated. |
 | `MIN_IMAGE_SIDE` | no | `32` | API | The shorter side a picture must have to be worth indexing. |
 | `PRUNE_MIN_AGE_SECONDS` | no | `3600` | CLI | `storage prune` ignores files younger than this. A margin, not the guarantee: an upload in flight is protected by an advisory lock. |
+| `JOB_LEASE_SECONDS` | no | `600` | API, worker | How long a claim on an indexing job is good for. Nothing refreshes it: a runner that dies releases its work when this expires, and another may then claim it. Raise it for a model slow enough that work would otherwise outlive the lease. |
+| `JOB_MAX_ATTEMPTS` | no | `3` | API, worker | How many attempts a job gets before it is `failed` for good. Between attempts it waits `2^attempts × 10 s`. A `failed` job runs again only through `POST /assets/{id}/reindex`. |
+| `WORKER_BATCH_SIZE` | no | `4` | API, worker | How many jobs one run of a runner claims. The runner inside the API process takes at most this many after a response and stops; a runner that drained while work remained would never end. |
 
 Template lines for the environment file (the template is `.env.example`,
 copied to `.env` on first run):
@@ -45,12 +48,17 @@ MAX_UPLOAD_BYTES=20971520
 MAX_IMAGE_PIXELS=40000000
 MIN_IMAGE_SIDE=32
 PRUNE_MIN_AGE_SECONDS=3600
+JOB_LEASE_SECONDS=600
+JOB_MAX_ATTEMPTS=3
+WORKER_BATCH_SIZE=4
 ```
 
 What the model settings mean in practice — the download, warm-up and
 running offline — is in [`../how-to/models.md`](../how-to/models.md); what the
 media settings mean when a picture arrives is in
-[`../how-to/uploading.md`](../how-to/uploading.md).
+[`../how-to/uploading.md`](../how-to/uploading.md); what the indexing
+settings mean once it is stored is in
+[`../how-to/indexing.md`](../how-to/indexing.md).
 
 `<DB_USER>`, `<DB_PASSWORD>` and `<DB_NAME>` are the values of the
 Compose variables in the same file. `APP_PORT` is read by `make run` only

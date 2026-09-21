@@ -13,25 +13,29 @@ $ curl -s -X POST http://127.0.0.1:8000/api/v1/assets \
     -F "tags=dragon,blue" \
     -F 'meta={"origin":"handbook"}'
 {
-    "id": "2632a112-bab4-499e-abc3-96c35bd0d040",
-    "created_at": "2026-09-21T10:59:22.779149Z",
+    "id": "20716b23-ee42-4a71-adb9-3e8822f2b82d",
+    "created_at": "2026-09-21T13:59:15.281316Z",
     "content_type": "image/png",
     "width": 800,
     "height": 600,
-    "size_bytes": 2791,
-    "sha256": "b6b786cef39234916d810ef603378716a92bb271131adfcf368189f2278faf1c",
+    "size_bytes": 4207,
+    "sha256": "c7d4df25cbdc7ee4a56c12cd13c459188c382b1f95fcf9de9af1d32d0a7e458b",
     "original_filename": "dragon.png",
     "source": "upload",
     "tags": ["dragon", "blue"],
     "meta": {"origin": "handbook"},
+    "index_status": {"clip-vit-l14": "pending"},
     "links": {
-        "file": "/api/v1/assets/2632a112-bab4-499e-abc3-96c35bd0d040/file",
-        "thumbnail": "/api/v1/assets/2632a112-bab4-499e-abc3-96c35bd0d040/thumbnail"
+        "file": "/api/v1/assets/20716b23-ee42-4a71-adb9-3e8822f2b82d/file",
+        "thumbnail": "/api/v1/assets/20716b23-ee42-4a71-adb9-3e8822f2b82d/thumbnail"
     }
 }
 ```
 
-The answer is 201 with a `Location` header. `tags` may be repeated
+The answer is 201 with a `Location` header. `index_status` says `pending`
+because the upload queued the work and did not wait for it: by the time you
+read the asset back it will say `done`, and
+[`indexing.md`](indexing.md) is the whole story. `tags` may be repeated
 (`-F tags=dragon -F tags=blue`) or comma-separated; both give the same set,
 normalised (trimmed, lower-cased, deduplicated). `meta` is a JSON object as a
 string.
@@ -111,7 +115,8 @@ which is honest; a count would be stale before it reached the client.
 ```console
 $ curl -s -X PATCH http://127.0.0.1:8000/api/v1/assets/<id> \
     -H 'content-type: application/json' -d '{"tags":["dragon","fog"]}'
-{"id": "933f14d6-8565-4c1f-b188-10545719156a", …, "tags": ["dragon", "fog"], "meta": {}}
+{"id": "20716b23-ee42-4a71-adb9-3e8822f2b82d", …, "tags": ["dragon", "fog"],
+ "meta": {"origin": "handbook"}, "index_status": {"clip-vit-l14": "done"}, "links": {…}}
 ```
 
 An omitted field is left alone; `"meta": null` clears the metadata. The

@@ -289,3 +289,65 @@ async def test_a_failed_write_of_the_original_leaves_nothing_behind(
     assert response.status_code == 500
     assert files_under(media_root) == [], "the partial file and the thumbnail are both gone"
     assert (await client.get(ASSETS)).json()["items"] == []
+
+
+async def test_an_upload_queues_one_job_per_enabled_model(
+    client: httpx.AsyncClient, engine: AsyncEngine
+) -> None:
+    response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+    assert response.status_code == 201
+    created = response.json()
+
+    async with engine.connect() as connection:
+        rows = (
+            await connection.execute(
+                sa.text("SELECT model, status, attempts FROM indexing_jobs WHERE asset_id = :id"),
+                {"id": created["id"]},
+            )
+        ).all()
+
+    # One row per enabled model is what the upload owes. What state the row is
+    # in a moment later belongs to the runner that drains the queue
+    # (`test_indexing_runner.py`), which in this process has already run.
+    assert [model for model, _, _ in rows] == ["clip-vit-l14"]
+
+
+async def test_a_failed_store_leaves_neither_the_asset_nor_its_work(
+    client: httpx.AsyncClient, engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.repositories.jobs import IndexingJobRepository
+
+    add_for_models = IndexingJobRepository.add_for_models
+
+    async def refuse(self: IndexingJobRepository, **kwargs: object) -> None:
+        await add_for_models(self, **kwargs)  # type: ignore[arg-type]
+        raise RuntimeError("the store gave up after the jobs were written")
+
+    monkeypatch.setattr(IndexingJobRepository, "add_for_models", refuse)
+
+    response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+
+    assert response.status_code == 500
+    async with engine.connect() as connection:
+        assets = (await connection.execute(sa.text("SELECT count(*) FROM assets"))).scalar_one()
+        jobs = (
+            await connection.execute(sa.text("SELECT count(*) FROM indexing_jobs"))
+        ).scalar_one()
+    assert (assets, jobs) == (0, 0), "the asset and its work were rolled back together"
+
+
+async def test_an_upload_with_no_model_enabled_stores_the_asset_and_no_work(
+    db_settings: Settings, media_root: Path, engine: AsyncEngine
+) -> None:
+    app = create_app(
+        db_settings.model_copy(update={"media_root": media_root, "enabled_models": ()})
+    )
+    async for client in make_client(app):
+        response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+
+    assert response.status_code == 201
+    async with engine.connect() as connection:
+        jobs = (
+            await connection.execute(sa.text("SELECT count(*) FROM indexing_jobs"))
+        ).scalar_one()
+    assert jobs == 0

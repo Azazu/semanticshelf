@@ -1,0 +1,90 @@
+# Review — add-background-indexing
+
+## Round 1 · Gate 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** 14012866ec3b85c20fe4613be89f3502ebbb3f74
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | blocker | `design.md` Applicability — Deletion/expiry; `proposal.md` What Changes 7; `specs/indexing-jobs/spec.md` “Work for an asset that is gone ends without retrying”; `tasks.md` 3.3 | The planned `asset-deleted` end state cannot exist with the unchanged schema. Deleting the asset cascades to its job row; a later embedding upsert can detect the missing parent, but there is then no job left to update to `failed`, so task 3.3 cannot both delete the asset and assert that job's persisted end state. Reconcile the contract and every sibling artifact: either deletion removes the job and the race has a non-persisted acknowledgement, or the schema/lifecycle must preserve a record capable of carrying `failed: asset-deleted` (which would also invalidate the proposal's “no migration” scope). | fixed |
+| 2 | blocker | `design.md` Decisions 3, 4 and 8; `specs/indexing-jobs/spec.md` claim, lease, finish and reset requirements; `tasks.md` 3.1, 5.2–5.4 and 6.4 | The design has no claim-generation/fencing rule for finishing work. Once A's lease expires, B may reclaim and commit a fresh `running` state while A is still executing; A can then finish late and overwrite B's state, or a late failure can return B's job to `pending`/`failed`. Reset creates the same race, and resetting `attempts` means that counter alone is not a safe generation token. The embedding upsert protects row cardinality only; it does not make job-state transitions idempotent. Specify a conditional finish/ownership mechanism, its behavior when ownership was lost, and real-PostgreSQL tests for stale success and stale failure after reclaim and reset. | fixed |
+| 3 | major | `docs/explanation/requirements.md` FR-IDX-7; `design.md` Decision 3; `specs/indexing-jobs/spec.md`; `tasks.md` 3.1 | The normative extraction boundary is absent from the change artifacts: a stored original must be reopened through the upload decoder, have the FR-AST-3 caps applied again, and be converted to RGB before inference so a replaced file cannot bypass input checks. The current design says only “reads a file and runs a model,” and no specification, implementation task, verification task, or failing-input probe covers this security-sensitive path. Add the mechanism and coverage, including a replaced-on-disk input that the upload-time validation cannot protect. | fixed |
+| 4 | major | `docs/explanation/requirements.md` FR-IDX-3 and schema §3.3; `specs/indexing-jobs/spec.md` failure requirement; `tasks.md` 3.2 and 7.11 | The failure contract loses enforceable requirements from the normative source. `last_error` is limited to 2 KB and must not disclose file contents, but the delta only says “short,” task 3.2 does not name the byte/character boundary or a sanitisation mechanism, and probe 7.11 removes only traceback exclusion. Specify how exception class/message are bounded and scrubbed, test the exact boundary and a message containing file content, and give each new guard its required one-guard failing-input demonstration. | fixed |
+| 5 | blocker | `tasks.md` §7, especially 1.1, 3.4 and 7.11 | The high-tier failing-input table is not “one per new guard” as it claims. It omits at least the new positive-value validators for all three settings, the disabled/unknown model terminal branch, and the file-content and 2 KB error guards; FR-IDX-7 will also require probes for the renewed decode/cap boundary. Ordinary positive/unit tests elsewhere do not satisfy the mandatory demonstration that the named test fails when each guard is removed. Make the inventory exhaustive and assign a feasible, single-guard probe to every new or changed check before implementation. | fixed |
+| 6 | major | `tasks.md` 5.1 and 7.2 | The proposed one-job/two-claimer test does not reliably prove `SKIP LOCKED`: without that clause, PostgreSQL may merely block the second claim until the first commits, re-evaluate the predicate, and still return exactly “one gets it, one gets nothing,” leaving the test green. “One blocks” is also not an assertion unless the plan defines a deterministic held lock and deadline. Exercise the skip behavior observably—for example, hold the first due row locked while a second claimant promptly takes another due row—and make the mutation probe remove only `SKIP LOCKED`. | fixed |
+| 7 | minor | `design.md` Migration Plan | The migration plan says the reset endpoint can create work for pre-existing assets with no jobs, while Decision 8 and task 6.4 define reset strictly as updating existing rows without delete/recreate. Remove that claim or explicitly design and verify job creation; as written, the stated operator path cannot work. | fixed |
+
+## Confirmation 1 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** 6ea573dfbba9820a5f43a745608a2150653cdaf0
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — `docs/explanation/requirements.md` still promises the impossible persisted state twice: FR-AST-12 says the worker acknowledges the deleted job as `failed` with `asset-deleted`, and the test inventory still says `delete-then-job race → failed asset-deleted`. These contradict the corrected FR-IDX-6 and leave the claim unreconciled across sibling artifacts. |
+| 2 | confirmed — the design now fences every success and failure finish with the claim's lease-timestamp token, invalidates outstanding ownership on reset, specifies a no-op/rollback when ownership is lost, and assigns real-PostgreSQL coverage for stale success, stale failure, reclaim, and reset. |
+| 3 | confirmed — proposal, design, delta spec, implementation task, integration coverage, and failing-input probes now require renewed format/cap inspection of the stored original and RGB conversion, including replaced invalid and oversized files. |
+| 4 | changes-requested — the byte bound and its boundary probe are now explicit, but the scrub remains unspecified. Decision 11 only says that a scrub is applied where the reason is built; it does not say how file bytes embedded in an arbitrary exception message are identified or removed. Task 3.4 and probe 7.19 therefore do not define a feasible mechanism whose security claim can be enforced. |
+| 5 | changes-requested — the inventory adds the guards named in Round 1, but it is still not exhaustive after adding the ownership fix. The token condition is required separately on `done`, retry-to-`pending`, and exhausted-to-`failed` finishing statements; probe 7.9 removes it only from a finishing statement and observes only late success. No single-guard probe demonstrates that removing the token from either failure transition makes the stale-failure test fail. |
+| 6 | confirmed — task 5.1 now holds one due row in an open transaction, requires a second claimer to take another due row within an enforced deadline, and probe 7.5 removes only `SKIP LOCKED`, making blocking observable. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** d02aee61ab3d62e9eea55cc9c475e47b6d458e95
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — FR-AST-12, FR-IDX-6, the proposal, design, delta spec, and tasks now consistently say that deletion cascades the job away; a late finish matches nothing, rolls back its vector, and ends quietly without recreating or retrying work. |
+| 2 | confirmed — every success and failure finish is fenced by the claim's lease-timestamp token, reset invalidates the token, and the plan covers stale success, stale retry, stale exhaustion, and reset with real-PostgreSQL tests and separate single-guard probes. |
+| 3 | confirmed — the proposal, design, delta spec, implementation task, integration coverage, and probes require the stored original to pass format, size, and minimum-side inspection again before decoding and to be converted to RGB, including replaced-file cases. |
+| 4 | changes-requested — decision 11 now gives a feasible non-disclosure mechanism and tasks 3.4, 7.18, 7.19, and 7.19a cover its guards, but the resulting contract is internally inconsistent. Normative FR-IDX-3 still requires `last_error` to contain the exception class and message, and the delta spec's broad “A reason says what happened, not how” scenario likewise requires class and message whenever work fails with an exception; both contradict the new rule and adjacent foreign-failure scenario that record only the class for third-party exceptions. Amend the normative requirement and narrow the broad scenario so the origin-based mechanism is the single enforceable contract. |
+| 5 | confirmed — the inventory now assigns independent probes to the token on done, retry, and exhausted transitions, reset invalidation, disabled-model handling, the byte bound, foreign-message suppression, controlled-message preservation, renewed file inspection, and RGB conversion. |
+| 6 | confirmed — the real-PostgreSQL test holds one due row locked while a second claimant must take another within an enforced deadline, and its probe removes only `SKIP LOCKED`, making blocking observable. |
+
+## Confirmation 3 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** aff810b90a8c83d9a32c7fdfe3c5cc22f49836ab
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — FR-AST-12, FR-IDX-6, the proposal, design, delta spec, implementation task, integration test, and mutation probe consistently define deletion as cascading the job away; a late finish matches nothing, rolls back its vector, and ends quietly without recreating or retrying work. |
+| 2 | confirmed — the lease-timestamp claim token fences the done, retry, and exhausted transitions, reset clears the token, a lost claim rolls back the whole finish transaction, and real-PostgreSQL tests plus separate mutation probes cover stale success, stale retry, stale exhaustion, and reset. |
+| 3 | confirmed — the proposal, design, normative requirement, delta spec, implementation task, integration coverage, and mutation probes require renewed format, pixel-cap, and minimum-side inspection of the stored original before decoding and conversion to three channels before inference, including replaced-file cases. |
+| 4 | confirmed — FR-IDX-3 and the delta spec now use one origin-based disclosure rule: every reason carries the class, only service-raised failures carry a controlled message, and foreign messages are dropped. The design specifies the mechanism, while tasks and probes cover the two-kilobyte boundary, visible truncation, traceback exclusion, foreign file-content suppression, and controlled-message preservation. |
+| 5 | confirmed — the high-tier inventory assigns a feasible single-guard probe to each guard implicated by the round: all three positive settings, every fenced finish and reset invalidation, disabled-model handling, error disclosure and size guards, renewed stored-file inspection, and three-channel conversion. |
+| 6 | confirmed — the PostgreSQL test holds one due row locked while a second claimant must promptly take another due row under an enforced deadline, and its mutation probe removes only `SKIP LOCKED`, so blocking is observably detected. |
+
+## Round 1 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** 000157e54d110996324ebf74aceb7bea6a33ea44
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `app/api/assets.py:493`; `app/repositories/jobs.py:230`; `app/schemas/jobs.py:50`; `docs/how-to/indexing.md:191` | An explicitly empty model selection resets every job. The request schema documents only an omitted or null `models` value as “all,” while the how-to says a supplied list selects work, but the endpoint collapses `[]` to `None` with `... or None`, and the repository also treats any empty sequence as an absent filter. Consequently `POST .../reindex` with `{"models": []}` unexpectedly resets and schedules all of the asset's work instead of selecting none (or rejecting an empty selection). Preserve the distinction or validate it at the edge, cover the HTTP case, and add the high-tier failing-input demonstration for the chosen guard. | fixed |
+| 2 | major | `app/schemas/jobs.py:16-41`; `openspec/changes/add-background-indexing/specs/indexing-jobs/spec.md:179-186`; `docs/explanation/requirements.md` FR-IDX-4 | The jobs endpoint omits `lease_expires_at`. The contract requires an asset's jobs to expose their timestamps, and this timestamp is the one that tells an operator when a `running` claim becomes reclaimable; it is present in the domain object but dropped by `IndexingJobRead.of`. Add it to the wire schema and mapping, verify running and at-rest values, and reconcile the recorded how-to output that currently demonstrates a running job without its lease expiry. | fixed |
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-21
+**Reviewed-Commit:** d24b2e0f171032d7e74aa61164f95d48062324b2
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the endpoint now preserves `[]` instead of collapsing it to `None`, and the repository applies a model filter for every non-`None` selection, so an empty selection matches and resets no rows while an omitted or null selection still resets all rows. The HTTP integration test asserts the response and unchanged failed-job state; the specification, request schema, endpoint description, how-to, and separate edge/repository mutation probes record the same distinction. |
+| 2 | confirmed — `IndexingJobRead` now exposes nullable `lease_expires_at` and `of` maps it from the domain object. The integration test verifies a non-null expiry for running work and null at rest, while the delta specification and re-recorded how-to show both wire states and explain when the claim becomes reclaimable. |

@@ -78,6 +78,12 @@ def inspect(path: Path, settings: "Settings") -> ImageFacts:
         with Image.open(path) as image:
             fmt = image.format or ""
             width, height = image.size
+    except FileNotFoundError:
+        # An absent file is not a picture the caller got wrong: at upload we
+        # wrote it ourselves a moment ago, and for a stored original the
+        # indexing service has its own answer. Both need it distinguishable,
+        # so it passes through rather than turning into "not an image".
+        raise
     except Image.DecompressionBombError as exc:
         raise ImageTooLargeError(str(exc)) from exc
     except OSError as exc:
@@ -106,6 +112,21 @@ def _verify(path: Path) -> None:
             image.verify()
     except Exception as exc:  # Pillow raises whatever the decoder raised
         raise UndecodableImageError("the file is not a readable image") from exc
+
+
+def open_for_inference(path: Path, settings: "Settings") -> Image.Image:
+    """The stored original, ready for a model — and checked again first.
+
+    A file on disk is not the file that was accepted: it may have been
+    replaced, truncated or swapped for something enormous since. So the same
+    inspection runs again before anything is decoded, and the pixels are
+    converted to three channels, which is what every model here expects
+    (FR-IDX-7).
+    """
+    inspect(path, settings)
+    with Image.open(path) as image:
+        image.load()
+        return image.convert("RGB")
 
 
 def thumbnail(path: Path) -> bytes:

@@ -67,11 +67,14 @@ async def upload(client: httpx.AsyncClient, **fields: object) -> dict[str, objec
 
 async def test_an_asset_is_read_by_its_identifier(client: httpx.AsyncClient) -> None:
     created = await upload(client)
+    assert created["index_status"] == {"clip-vit-l14": "pending"}, "as the upload answered"
 
     response = await client.get(f"{ASSETS}/{created['id']}")
 
     assert response.status_code == 200
-    assert response.json() == created
+    # Everything is as the upload reported it, except the state of the work:
+    # the runner the upload scheduled has finished it by now.
+    assert response.json() == created | {"index_status": {"clip-vit-l14": "done"}}
 
 
 async def test_an_identifier_that_is_not_stored_is_404(client: httpx.AsyncClient) -> None:

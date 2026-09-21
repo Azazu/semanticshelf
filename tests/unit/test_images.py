@@ -163,3 +163,12 @@ def test_a_picture_smaller_than_the_bound_keeps_its_own_size(tmp_path: Path) -> 
     with Image.open(io.BytesIO(data)) as thumb:
         assert thumb.size == (64, 48)
         assert thumb.format == "WEBP"
+
+
+def test_a_file_that_is_not_there_is_not_called_undecodable(
+    tmp_path: Path, settings: Settings
+) -> None:
+    """The indexing service tells a missing original from a broken one, and it
+    can only do that if the inspection keeps them apart."""
+    with pytest.raises(FileNotFoundError):
+        inspect(tmp_path / "gone.png", settings)

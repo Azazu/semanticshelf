@@ -358,15 +358,17 @@ app/
   repositories/      one per table; take a session, return domain objects,
                      never hand an ORM instance outwards
   schemas/           Pydantic request/response models — never the ORM classes
-  services/          use cases: indexing, search, assets
+  services/          use cases: assets.py (upload, read, edit, delete), images.py
+                     (inspection and thumbnails), indexing.py (the queue's policy
+                     and its three steps — claim, execute, finish — plus the drain
+                     both runners use), prune.py, readiness.py, tagging.py
   ml/                embedders behind one Protocol: base.py (protocol, normalisation,
                      the checkpoint guard), clip.py, fake.py (deterministic, no
                      weights), registry.py (lazy per-process cache), pool.py
                      (the threads loading and inference run on)
-  workers/           job claim/execute/finish over indexing_jobs (BackgroundTasks
-                     runner in stage 1, the `worker` CLI process from stage 3)
   cli.py             typer app: models warm and storage prune today; index-folder,
-                     worker and demo-dataset later
+                     worker and demo-dataset later (the `worker` process of stage 3
+                     calls the same functions in services/indexing.py)
 ui/                  Streamlit demo (own dependency group), HTTP client of the API
 alembic/             migrations
 tests/               unit/ (fake embedder, no DB), integration/ (pgvector, marked),
