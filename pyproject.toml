@@ -67,6 +67,11 @@ strict = true
 python_version = "3.12"
 packages = ["app"]
 warn_unreachable = true
+# The model runtime ships type hints, but several of its entry points
+# (`from_pretrained`, `eval`) are themselves untyped. Strict mode rejects a call
+# into an untyped function; these two names are the boundary of our code, and
+# everything the adapter hands back is annotated on our side.
+untyped_calls_exclude = ["transformers", "torch"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
