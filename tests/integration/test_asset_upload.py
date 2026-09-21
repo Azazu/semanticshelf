@@ -19,6 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.core.settings import Settings
 from app.main import create_app
+from app.repositories.assets import AssetRepository
+from app.services import assets as assets_service
 from app.storage import THUMBNAIL_SUFFIX
 from tests.conftest import make_client
 
@@ -166,3 +168,45 @@ async def test_two_identical_uploads_at_once_leave_one_asset(
         count = (await connection.execute(sa.text("SELECT count(*) FROM assets"))).scalar_one()
     assert count == 1
     assert len(files_under(media_root)) == 2, "the loser removed its own files"
+
+
+async def test_the_files_are_on_disk_before_the_row_is_written(
+    client: httpx.AsyncClient, media_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The order the invariant rests on. Both files must already be in place
+    when the row is written, so a commit can never produce an asset whose
+    bytes are not there."""
+    seen: list[int] = []
+    add = AssetRepository.add
+
+    async def counting_add(self: AssetRepository, **kwargs: object) -> object:
+        seen.append(len(files_under(media_root)))
+        return await add(self, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(AssetRepository, "add", counting_add)
+
+    response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+
+    assert response.status_code == 201
+    assert seen == [2], "both files were published before the row was written"
+
+
+async def test_a_duplicate_is_refused_before_anything_is_published(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data = picture_bytes()
+    assert (await client.post(ASSETS, files={"file": ("one.png", data)})).status_code == 201
+
+    published: list[object] = []
+    publish_files = assets_service.publish_files
+
+    def counting_publish(*args: object, **kwargs: object) -> None:
+        published.append(args)
+        publish_files(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(assets_service, "publish_files", counting_publish)
+
+    response = await client.post(ASSETS, files={"file": ("again.png", data)})
+
+    assert response.status_code == 409
+    assert published == [], "the duplicate was caught before a file was published"

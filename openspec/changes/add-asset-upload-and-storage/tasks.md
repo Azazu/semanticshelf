@@ -82,33 +82,33 @@ even though the other still refuses.
 | `has_more` from an extra row | 8.26 |
 | Missing file answering 404, not a server error | 8.27 |
 
-- [ ] 8.1 Remove the body-size middleware: the oversized-body tests fail, including the one made oversized by extra parts.
-- [ ] 8.2 Remove `max_part_size` from the endpoint's parser call, leaving the application's own metadata bound in place: the oversized-metadata test fails because the refusal now comes from the later check — the test asserts the parser-stage refusal specifically and that the metadata parser was never reached, so the two guards are told apart.
-- [ ] 8.3 Raise `max_files` beyond what the endpoint accepts: the test that a request with many file parts is refused at the parser fails.
-- [ ] 8.4 Raise `max_fields` beyond what the endpoint accepts: the many-fields test fails.
-- [ ] 8.5 Remove the check that exactly one file part is present: the no-file and two-file tests fail.
-- [ ] 8.6 Remove the format allowlist: the refused-format test fails.
-- [ ] 8.7 Remove the header pixel check, leaving Pillow's guard: the cap-plus-one test fails, which is the evidence that the library's guard alone does not enforce the cap.
-- [ ] 8.8 Remove the minimum-side check: the too-small test fails.
-- [ ] 8.9 Remove the tag pattern check: the invalid-tag test fails.
-- [ ] 8.10 Remove the tag count bound: the too-many-tags test fails.
-- [ ] 8.11 Remove the check that metadata is an object: the non-object test fails.
-- [ ] 8.12 Remove the application's metadata size bound, changing nothing else: its boundary unit test from task 2.1 fails, and so does the api test for a value between the two bounds.
-- [ ] 8.13 Remove the metadata depth bound: the over-deep test fails.
-- [ ] 8.14 Remove the last-segment step from the filename normalisation: the separator and parent-segment tests fail.
-- [ ] 8.15 Remove the control-character strip: that test fails.
-- [ ] 8.16 Remove the length trim: the overlong-filename test fails.
-- [ ] 8.17 Build the stored path from the uploaded filename instead of the identifier: the containment test of task 1.3 fails.
-- [ ] 8.18 Insert the row before the files: the write-order test fails, showing a row whose file is absent.
-- [ ] 8.19 Remove the cleanup after a failed insert: the test that nothing remains after a failed row fails, showing two orphan files.
-- [ ] 8.20 Copy the original into the thumbnail instead of re-encoding: the metadata test fails, showing the original's blocks in the thumbnail.
-- [ ] 8.21 Remove the duplicate pre-check, leaving the unique constraint: the test that a duplicate writes nothing fails, showing files written before the refusal.
-- [ ] 8.22 Remove the translation of the unique violation to 409: the duplicate test fails with a server error instead.
-- [ ] 8.23 Remove the advisory lock from prune: the concurrent test of task 7.6 fails, showing an upload that lost its files.
-- [ ] 8.24 Remove the grace filter from prune: the margin test fails, showing a young orphan removed.
-- [ ] 8.25 Report the path in the media check's reason: the test that the body carries no path fails.
-- [ ] 8.26 Remove the extra row from the listing query: the `has_more` test fails on the last page.
-- [ ] 8.27 Remove the existence check before the file response: the missing-file test fails with a server error instead of 404.
+- [x] 8.1 Remove the body-size middleware: the oversized-body tests fail, including the one made oversized by extra parts.
+- [x] 8.2 Remove `max_part_size` from the endpoint's parser call, leaving the application's own metadata bound in place: the oversized-metadata test fails because the refusal now comes from the later check — the test asserts the parser-stage refusal specifically and that the metadata parser was never reached, so the two guards are told apart.
+- [x] 8.3 Raise `max_files` beyond what the endpoint accepts: the test that a request with many file parts is refused at the parser fails.
+- [x] 8.4 Raise `max_fields` beyond what the endpoint accepts: the many-fields test fails.
+- [x] 8.5 Remove the check that exactly one file part is present: the no-file and two-file tests fail.
+- [x] 8.6 Remove the format allowlist: the refused-format test fails.
+- [x] 8.7 Remove the header pixel check, leaving Pillow's guard: the cap-plus-one test fails, which is the evidence that the library's guard alone does not enforce the cap.
+- [x] 8.8 Remove the minimum-side check: the too-small test fails.
+- [x] 8.9 Remove the tag pattern check: the invalid-tag test fails.
+- [x] 8.10 Remove the tag count bound: the too-many-tags test fails.
+- [x] 8.11 Remove the check that metadata is an object: the non-object test fails.
+- [x] 8.12 Remove the application's metadata size bound, changing nothing else: its boundary unit test from task 2.1 fails, and so does the api test for a value between the two bounds.
+- [x] 8.13 Remove the metadata depth bound: the over-deep test fails.
+- [x] 8.14 Remove the last-segment step from the filename normalisation: the separator and parent-segment tests fail.
+- [x] 8.15 Remove the control-character strip: that test fails.
+- [x] 8.16 Remove the length trim: the overlong-filename test fails.
+- [x] 8.17 Build the stored path from the uploaded filename instead of the identifier: the containment test of task 1.3 fails.
+- [x] 8.18 Insert the row before the files: the write-order test fails, showing a row whose file is absent.
+- [x] 8.19 Remove the cleanup after a failed insert: the test that nothing remains after a failed row fails, showing two orphan files.
+- [x] 8.20 Copy the original into the thumbnail instead of re-encoding: the metadata test fails, showing the original's blocks in the thumbnail.
+- [x] 8.21 Remove the duplicate pre-check, leaving the unique constraint: the test that a duplicate writes nothing fails, showing files written before the refusal.
+- [x] 8.22 Remove the translation of the unique violation to 409: the duplicate test fails with a server error instead.
+- [x] 8.23 Remove the advisory lock from prune: the concurrent test of task 7.6 fails, showing an upload that lost its files.
+- [x] 8.24 Remove the grace filter from prune: the margin test fails, showing a young orphan removed.
+- [x] 8.25 Report the path in the media check's reason: the test that the body carries no path fails.
+- [x] 8.26 Remove the extra row from the listing query: the `has_more` test fails on the last page.
+- [x] 8.27 Remove the existence check before the file response: the missing-file test fails with a server error instead of 404.
 
 ## 9. Documentation
 
