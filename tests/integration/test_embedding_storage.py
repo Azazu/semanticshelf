@@ -25,6 +25,12 @@ def plane_vector(dimension: int, x: float, y: float) -> list[float]:
     return values
 
 
+#: As PostgreSQL words it, with the quotes: matching the bare name would
+#: also match a constraint called `ck_embeddings_ck_embeddings_model_dimension`,
+#: which is how this assertion stayed green while the schema drifted (0003).
+DIMENSION_VIOLATION = 'constraint "ck_embeddings_model_dimension"'
+
+
 async def add_asset(repository: AssetRepository, sha: str) -> Asset:
     return await repository.add(
         sha256=sha,
@@ -84,7 +90,7 @@ async def test_the_store_rejects_a_wrong_width(session: AsyncSession) -> None:
     # Straight to the table: the repository would refuse first, and the point
     # here is that the database refuses too.
     asset = await add_asset(AssetRepository(session), "c" * 64)
-    with pytest.raises(IntegrityError, match="ck_embeddings_model_dimension"):
+    with pytest.raises(IntegrityError, match=DIMENSION_VIOLATION):
         async with session.begin_nested():
             await session.execute(
                 sa.insert(EmbeddingRow).values(
@@ -95,7 +101,7 @@ async def test_the_store_rejects_a_wrong_width(session: AsyncSession) -> None:
 
 async def test_the_store_rejects_an_unknown_model(session: AsyncSession) -> None:
     asset = await add_asset(AssetRepository(session), "d" * 64)
-    with pytest.raises(IntegrityError, match="ck_embeddings_model_dimension"):
+    with pytest.raises(IntegrityError, match=DIMENSION_VIOLATION):
         async with session.begin_nested():
             await session.execute(
                 sa.insert(EmbeddingRow).values(
