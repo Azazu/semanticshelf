@@ -1,9 +1,9 @@
 ## 1. The vector query grows a page and a threshold
 
-- [ ] 1.1 Extend `EmbeddingRepository.nearest_statement` and `nearest` with an offset and a maximum distance, as the one statement of design decision 4: an inner select ordered by distance and identifier with `LIMIT` and `OFFSET`, wrapped in an outer select that drops rows beyond the distance. The cast and the model predicate stay exactly as ADR-001 requires. Verify: `tests/integration/test_embedding_storage.py` gains tests for the offset (the tail of the unpaged answer, same order), for the maximum distance (nothing beyond it, and the count is not refilled), and for the two together.
-- [ ] 1.2 The plan of the new statement is still an index scan, not a sequential one. Verify: the existing plan-reading test is extended to the statement the endpoint runs — with an offset and a threshold — and asserts the model's index by name.
-- [ ] 1.3 Ties are broken by the asset identifier in SQL (design decision 7). Verify: an integration test with two assets at an identical distance asserts the same order over repeated queries.
-- [ ] 1.4 Add `HNSW_EF_SEARCH` to `app/core/settings.py` (default 40, positive, at most 1000). Verify: `tests/unit/test_settings_search.py` asserts the default by value, refuses zero and refuses a value above the maximum, and reads it from the environment.
+- [x] 1.1 Extend `EmbeddingRepository.nearest_statement` and `nearest` with an offset and a maximum distance, as the one statement of design decision 4: an inner select ordered by distance and identifier with `LIMIT` and `OFFSET`, wrapped in an outer select that drops rows beyond the distance. The cast and the model predicate stay exactly as ADR-001 requires. Verify: `tests/integration/test_embedding_storage.py` gains tests for the offset (the tail of the unpaged answer, same order), for the maximum distance (nothing beyond it, and the count is not refilled), and for the two together.
+- [x] 1.2 The plan of the new statement is still an index scan, not a sequential one. Verify: the existing plan-reading test is extended to the statement the endpoint runs — with an offset and a threshold — and asserts the model's index by name.
+- [x] 1.3 Ties are broken by the asset identifier in SQL (design decision 7). Verify: an integration test with two assets at an identical distance asserts the same order over repeated queries.
+- [x] 1.4 Add `HNSW_EF_SEARCH` to `app/core/settings.py` (default 40, positive, at most 1000). Verify: `tests/unit/test_settings_search.py` asserts the default by value, refuses zero and refuses a value above the maximum, and reads it from the environment.
 
 ## 2. The search itself
 

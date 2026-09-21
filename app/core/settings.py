@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     #: while work remained would never end.
     worker_batch_size: int = Field(default=4, gt=0)
 
+    # --- search --------------------------------------------------------------
+    #: How hard the vector index looks for each search. Raised per query to at
+    #: least the depth the page asks for (`limit + offset`), so a deep page does
+    #: not quietly get a worse ranking than a shallow one; 1000 is pgvector's
+    #: own maximum for `hnsw.ef_search`, and it bounds how deep a page may go.
+    hnsw_ef_search: int = Field(default=40, gt=0, le=1000)
+
     @field_validator("database_url")
     @classmethod
     def _require_asyncpg_scheme(cls, value: str) -> str:

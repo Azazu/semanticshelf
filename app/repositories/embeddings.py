@@ -92,23 +92,67 @@ class EmbeddingRepository:
         )
 
     def nearest_statement(
-        self, *, model: str, vector: Sequence[float], limit: int
+        self,
+        *,
+        model: str,
+        vector: Sequence[float],
+        limit: int,
+        offset: int = 0,
+        max_distance: float | None = None,
     ) -> sa.Select[Any]:
-        """The statement `nearest()` runs. Exposed so a test can read its plan."""
+        """The statement `nearest()` runs. Exposed so a test can read its plan.
+
+        Two selects, and each shape is deliberate.
+
+        The inner one is what the index answers: the cast ADR-001 requires, the
+        model predicate, `ORDER BY distance` — **one** key, because an HNSW
+        ordering takes exactly one and a second turns the index scan into a
+        sort over a bitmap scan, which the plan-reading test caught the moment
+        it was tried — and the page's own limit and offset.
+
+        The outer one works on the page the inner select returned, and does two
+        things the index cannot. It breaks ties by identifier, so two equally
+        near assets keep one order between requests. And it drops results
+        beyond a maximum distance, without refilling the page from further down
+        the ranking — which is what a threshold applied after ranking means; a
+        predicate on the distance *inside* the ordered select would instead
+        make this a filtered vector search, a different problem with a
+        different plan and a measurement of its own (change 12).
+        """
         dimension = checked_dimension(model, vector)
         distance = sa.cast(EmbeddingRow.vector, Vector(dimension)).cosine_distance(list(vector))
-        return (
+        page = (
             sa.select(EmbeddingRow.asset_id, distance.label("distance"))
             .where(EmbeddingRow.model == model)
             .order_by(distance)
             .limit(limit)
+            .offset(offset)
+            .subquery("page")
         )
+        ranked = sa.select(page.c.asset_id, page.c.distance).order_by(
+            page.c.distance, page.c.asset_id
+        )
+        if max_distance is None:
+            return ranked
+        return ranked.where(page.c.distance <= max_distance)
 
     async def nearest(
-        self, *, model: str, vector: Sequence[float], limit: int
+        self,
+        *,
+        model: str,
+        vector: Sequence[float],
+        limit: int,
+        offset: int = 0,
+        max_distance: float | None = None,
     ) -> list[NeighbourHit]:
         """The closest assets under one model, nearest first."""
         rows = await self._session.execute(
-            self.nearest_statement(model=model, vector=vector, limit=limit)
+            self.nearest_statement(
+                model=model,
+                vector=vector,
+                limit=limit,
+                offset=offset,
+                max_distance=max_distance,
+            )
         )
         return [NeighbourHit(asset_id=row.asset_id, distance=float(row.distance)) for row in rows]

@@ -76,10 +76,16 @@ names the one it used rather than taking a choice.
    reason about, and the model key beside it because the number means nothing
    without it.
 
-7. **Ties are broken by the identifier, in SQL.** `ORDER BY distance, asset_id`
-   — otherwise two assets at the same distance can swap places between two
-   requests for the same page, and a test of a page's contents becomes a test of
-   the planner's mood.
+7. **Ties are broken by the identifier — outside the ordered select, not in
+   it.** The first attempt was `ORDER BY distance, asset_id`, and the
+   plan-reading test refused it immediately: an HNSW ordering takes exactly one
+   key, and a second turns the index scan into a sort over a bitmap scan. So
+   the inner select orders by distance alone (the shape the index answers) and
+   the outer one orders the page it returned by distance and then identifier.
+   Two equally near assets therefore keep one order between requests for the
+   same page; a tie that straddles a page boundary is still the index's to
+   resolve, which is the same caveat pagination over an approximate index
+   carries anyway.
 
 8. **Three bounded queries per search, and no N+1.** The vector query returns
    the page's asset identifiers and their distances; one query fetches those
@@ -114,7 +120,8 @@ names the one it used rather than taking a choice.
 - **Losing the cast or the model predicate** → the plan-reading test of change 3
   covers the repository's statement, and this change extends it to the statement
   with an offset and a threshold, because that is the statement the endpoint
-  now runs.
+  now runs. It has already earned its keep here: it caught the tie-break of
+  decision 7 costing the index scan, before any of this reached a review.
 - **A deep page's recall** → stated in decision 3 and left to ADR-002. The
   endpoint refuses what pgvector cannot answer at all rather than pretending.
 - **`SET LOCAL` outside a transaction** silently does nothing. The search runs

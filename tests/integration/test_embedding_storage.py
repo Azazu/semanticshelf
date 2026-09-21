@@ -175,3 +175,109 @@ async def test_the_model_index_answers_the_lookup(session: AsyncSession) -> None
 
     assert vector_index_name(CLIP) in plan, plan
     assert "Seq Scan on embeddings" not in plan, plan
+
+
+# --- a page of results, and a threshold over it --------------------------------
+
+
+async def test_an_offset_returns_the_tail_of_the_same_ranking(session: AsyncSession) -> None:
+    a, b, c = await seed_two_models(session)
+    embeddings = EmbeddingRepository(session)
+    query = plane_vector(CLIP_DIM, 1.0, 0.0)
+
+    whole = await embeddings.nearest(model=CLIP, vector=query, limit=3)
+    tail = await embeddings.nearest(model=CLIP, vector=query, limit=3, offset=1)
+
+    assert [hit.asset_id for hit in tail] == [hit.asset_id for hit in whole][1:]
+    assert [hit.asset_id for hit in tail] == [b.id, c.id]
+    assert a.id not in [hit.asset_id for hit in tail]
+
+
+async def test_an_offset_past_the_end_is_an_empty_page(session: AsyncSession) -> None:
+    await seed_two_models(session)
+
+    hits = await EmbeddingRepository(session).nearest(
+        model=CLIP, vector=plane_vector(CLIP_DIM, 1.0, 0.0), limit=3, offset=10
+    )
+
+    assert hits == []
+
+
+async def test_a_maximum_distance_drops_results_without_refilling(
+    session: AsyncSession,
+) -> None:
+    """The threshold applies to the page the lookup was asked for: the third
+    asset is not pulled up to replace the one that was dropped."""
+    a, b, c = await seed_two_models(session)
+    embeddings = EmbeddingRepository(session)
+    query = plane_vector(CLIP_DIM, 1.0, 0.0)
+
+    page = await embeddings.nearest(model=CLIP, vector=query, limit=2, max_distance=0.2)
+
+    assert [hit.asset_id for hit in page] == [a.id], "b is 0.4 away, c is 1.0"
+    assert b.id not in [hit.asset_id for hit in page]
+    assert c.id not in [hit.asset_id for hit in page]
+
+
+async def test_a_maximum_distance_that_nothing_reaches_is_an_empty_page(
+    session: AsyncSession,
+) -> None:
+    await seed_two_models(session)
+
+    hits = await EmbeddingRepository(session).nearest(
+        model=CLIP, vector=plane_vector(CLIP_DIM, 1.0, 0.0), limit=3, max_distance=-0.5
+    )
+
+    assert hits == []
+
+
+async def test_an_offset_and_a_threshold_together(session: AsyncSession) -> None:
+    a, b, c = await seed_two_models(session)
+
+    page = await EmbeddingRepository(session).nearest(
+        model=CLIP, vector=plane_vector(CLIP_DIM, 1.0, 0.0), limit=2, offset=1, max_distance=0.5
+    )
+
+    assert [hit.asset_id for hit in page] == [b.id], "a is skipped, c is beyond the distance"
+    assert a.id not in [hit.asset_id for hit in page]
+    assert c.id not in [hit.asset_id for hit in page]
+
+
+async def test_two_assets_at_the_same_distance_keep_one_order(session: AsyncSession) -> None:
+    """Without a tie-break in SQL the two could swap between requests, and a
+    test of a page's contents would become a test of the planner's mood."""
+    assets = AssetRepository(session)
+    embeddings = EmbeddingRepository(session)
+    first = await add_asset(assets, "a" * 64)
+    second = await add_asset(assets, "b" * 64)
+    same = plane_vector(CLIP_DIM, 0.6, 0.8)
+    for asset in (first, second):
+        await embeddings.upsert(asset_id=asset.id, model=CLIP, vector=same)
+    await session.flush()
+    expected = sorted([first.id, second.id], key=str)
+
+    orders = [
+        [
+            hit.asset_id
+            for hit in await embeddings.nearest(
+                model=CLIP, vector=plane_vector(CLIP_DIM, 1.0, 0.0), limit=2
+            )
+        ]
+        for _ in range(3)
+    ]
+
+    assert orders == [expected, expected, expected]
+
+
+async def test_the_index_answers_a_page_with_a_threshold(session: AsyncSession) -> None:
+    """The statement the search endpoint runs, not merely the simplest one: an
+    offset and a threshold must not cost the index scan."""
+    await seed_two_models(session)
+    statement = EmbeddingRepository(session).nearest_statement(
+        model=CLIP, vector=plane_vector(CLIP_DIM, 1.0, 0.0), limit=3, offset=1, max_distance=0.9
+    )
+
+    plan = await explain(session, statement, no_seqscan=True)
+
+    assert vector_index_name(CLIP) in plan, plan
+    assert "Seq Scan on embeddings" not in plan, plan
