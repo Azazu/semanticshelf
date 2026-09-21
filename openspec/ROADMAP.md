@@ -16,7 +16,6 @@ carries the full scope, exit criteria and the declared tier.
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 5 | `add-asset-upload-and-storage` | asset CRUD, `/file`, `/thumbnail`, listing, tag/meta rules, storage layout, dedup, thumbnails, crash-safe writes, `storage prune` | high |
 | 6 | `add-background-indexing` | transactional job enqueue, `BackgroundTasks` runner over the shared claim/execute/finish functions, `index_status`, `/jobs`, `/reindex`, leases, retries, ADR-003 | high |
 | 7 | `add-folder-indexing-cli` | `typer` CLI, `index-folder` through the upload pipeline, summary, dry run | medium |
 

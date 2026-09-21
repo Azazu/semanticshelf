@@ -1,7 +1,7 @@
 # Handoff — add-asset-upload-and-storage
 
 **Updated:** 2026-09-21 · claude
-**State:** ready-to-merge
+**State:** merged
 **Branch:** change/add-asset-upload-and-storage
 
 ## Done this session
@@ -29,9 +29,10 @@ Evidence: `env -u DATABASE_URL make check` 207 passed; `make test-integration`
 
 ## Next step
 
-Gate 2 passed: Confirmation 4 on `6894619` reads `confirmed`, all four findings
-resolved. The user merges with `/git:merge add-asset-upload-and-storage`, then
-`/opsx:archive add-asset-upload-and-storage`.
+Merged into `main` as `31b0439` and archived. The capabilities it introduced
+live in `openspec/specs/asset-upload/spec.md` and
+`openspec/specs/asset-api/spec.md`; the readiness requirement it changed lives
+in `openspec/specs/health-probes/spec.md`.
 
 ## Blockers
 
