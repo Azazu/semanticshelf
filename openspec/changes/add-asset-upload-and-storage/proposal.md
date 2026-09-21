@@ -44,10 +44,16 @@ upload, path handling and deletion.
 - Tag and metadata rules (FR-TAG-1, FR-TAG-2) as one normalisation used by
   both upload and patch.
 - `semanticshelf storage prune [--apply]`: orphan files and assets whose files
-  are gone; it changes nothing without `--apply`.
+  are gone; it changes nothing without `--apply`, and it ignores files younger
+  than a grace period, because an upload between its writes and its row looks
+  exactly like an orphan.
 - Readiness gains its fourth check: the media root exists and is writable.
+- A middleware that bounds the whole request body, because the framework
+  parses a multipart request before the endpoint sees it: the limit has to be
+  enforced by something that watches the stream, not by code that runs after
+  the body has already been read.
 - New settings: `MEDIA_ROOT`, `MAX_UPLOAD_BYTES`, `MAX_IMAGE_PIXELS`,
-  `MIN_IMAGE_SIDE`.
+  `MIN_IMAGE_SIDE`, `PRUNE_MIN_AGE_SECONDS`.
 
 ### Deliberately not in this change, and why
 
@@ -96,9 +102,10 @@ upload, path handling and deletion.
 
 - New: `app/schemas/` (request and response models), `app/api/assets.py`,
   `app/services/assets.py`, `app/storage.py` (the only module that builds a
-  filesystem path), `app/media.py`-level image decoding inside the upload
-  service, `storage prune` in `app/cli.py`.
-- Changed: `app/core/settings.py` (four settings), `app/services/readiness.py`
+  filesystem path), the image inspection and the tag, metadata and filename
+  normalisation the upload and the patch share, a body-size middleware in
+  `app/core/`, and `storage prune` in `app/cli.py`.
+- Changed: `app/core/settings.py` (five settings), `app/services/readiness.py`
   and `app/api/health.py` (the fourth check), `app/main.py` (the router),
   `docs/reference/settings.md`, `docs/reference/commands.md`, a new how-to for
   uploading and storage, the AGENTS.md layout.

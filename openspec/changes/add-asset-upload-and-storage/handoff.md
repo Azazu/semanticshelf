@@ -1,7 +1,7 @@
 # Handoff — add-asset-upload-and-storage
 
 **Updated:** 2026-09-21 · claude
-**State:** proposing
+**State:** awaiting-gate-1
 **Branch:** change/add-asset-upload-and-storage
 
 ## Done this session
@@ -15,8 +15,9 @@
 
 ## Next step
 
-`/gate-review add-asset-upload-and-storage 1` — tier high, so Codex reviews
-the artifacts before any code is written. After an approving verdict:
+Gate 1 round 1 returned `changes-requested` with three blockers and three
+majors; all six are fixed in the artifacts and the confirmation of round 1 is
+requested next. After an approving verdict:
 `/opsx:apply add-asset-upload-and-storage`.
 
 ## Blockers

@@ -32,7 +32,7 @@ future), and no background work of any kind.
 | Question | Applies | How it is handled |
 |---|---|---|
 | Crash before/after an external effect | yes | The external effects are two file writes and one row. Order: both files renamed into place, then the row; a failed insert unlinks both. A crash between them leaves orphan files — the one residue the design permits — which `storage prune` finds. The reverse order (row first) is rejected: it would let a row point at a file that never arrived. |
-| Concurrent writers | yes | Two identical uploads race on the unique content hash. Both may pass the pre-check and write files under their own identifiers; the insert that loses the race raises a unique violation, is translated to 409, and unlinks its own files. Neither upload can remove the other's, because every path is derived from its own asset identifier. |
+| Concurrent writers | yes | Two races, not one. **Upload against upload:** two identical uploads race on the unique content hash; both may pass the pre-check and write files under their own identifiers, and the insert that loses raises a unique violation, is translated to 409 and unlinks its own files — neither can touch the other's, because every path derives from its own identifier. **Prune against upload:** between the renames and the commit, an upload's files look exactly like orphans. Prune therefore only considers files older than a grace period (decision 12), and an integration test holds an upload at that exact point while prune runs. |
 | Money rounding | n/a | No money anywhere in the project. |
 | Empty/zero/null inputs | yes | An empty file part decodes as nothing → 415. Zero tags and absent metadata are normal. `meta: null` in a patch means "clear", an omitted field means "leave alone", distinguished through the fields actually present in the request rather than through the value. A zero-byte upload never reaches decoding, because the byte limit check reads and hashes what arrived. |
 | Authorization boundary | yes | There is none by design (single-tenant, unauthenticated), so the boundary that matters is the path: nothing a client sends may reach the filesystem. One module builds paths, from an identifier the service generated and a format it detected; the original filename is stored as text and never used to open anything. |
@@ -49,21 +49,52 @@ future), and no background work of any kind.
    Rejected: building paths inside the service layer, which is where this kind
    of defect usually hides — a filename that reaches `Path()` once is enough.
 
-2. **The byte limit is enforced while reading, not after.** The upload part is
-   consumed in chunks; the running total and the content hash are computed in
-   the same pass, and the read aborts with 413 the moment the limit is passed.
-   `Content-Length` is a claim and is not trusted for the decision.
-   Rejected: reading the part into memory or to a spooled file and checking
-   its size afterwards, which pays the full cost of an oversized upload.
+2. **Two bounds, both enforced by something that sees the stream.** Verified
+   against the installed stack rather than assumed: FastAPI 0.141 parses the
+   whole multipart body before the endpoint runs (`await request.form()` in
+   its routing layer), so counting chunks inside the endpoint cannot bound
+   anything — by then the body has already been read and spooled. Worse, that
+   call uses Starlette's defaults, and `max_part_size` defaults to 1 MiB, so a
+   plain `UploadFile` parameter would reject an ordinary 5 MiB photograph with
+   a parser error.
 
-3. **The pixel cap is enforced by the decoder, before allocation.** Pillow's
-   own bomb guard is configured from the setting at application start, and the
-   upload verifies the file, reopens it, and reads its size before any pixel
-   access. The guard is a process-global in Pillow, which is acceptable
-   because it is one setting for one process, and a unit test asserts the
-   application sets it.
-   Rejected: reading dimensions from the header ourselves — a second, weaker
-   implementation of what the library already does correctly.
+   Therefore:
+   - **The whole body** is bounded by a small ASGI middleware that counts the
+     bytes of the request stream as they arrive and refuses at the configured
+     limit with 413 problem details. It works on a chunked request with no
+     `Content-Length`, because it counts what actually arrives rather than
+     trusting a header, and it covers every part and all multipart overhead,
+     which is what NFR-SEC-5 requires.
+   - **The file part** is bounded by the parser itself: the endpoint calls
+     `request.form(max_part_size=<the upload limit>, max_files=…,
+     max_fields=…)` explicitly instead of taking an `UploadFile` parameter,
+     and a `MultiPartException` becomes 413 problem details rather than the
+     parser's own 400.
+
+   The content hash is then computed by reading the part in chunks, which is
+   about not holding the file in memory, not about the limit.
+   Rejected: trusting `Content-Length` (absent or false on a chunked request);
+   relying on a reverse proxy (there is none in development, and the service
+   must be safe on its own); and leaving the parser at its defaults, which
+   would silently cap uploads at 1 MiB.
+
+3. **The pixel cap is our own check on the header, with the library's guard
+   behind it.** Read from the installed Pillow 12.3 rather than assumed: its
+   `_decompression_bomb_check` only *warns* above `MAX_IMAGE_PIXELS` and
+   raises above **twice** that value, so configuring it to the cap would let a
+   picture of `cap + 1` pixels through — and FR-AST-3 requires a refusal above
+   the cap exactly.
+
+   The upload therefore opens the file (which reads the header and allocates
+   no pixels), multiplies its declared dimensions, and refuses above the cap
+   with 422 before anything is decoded. Pillow's own guard stays configured at
+   the cap as a second line for code paths that do not go through this check,
+   and the boundary is evidence: a picture at exactly the cap is accepted, one
+   at the cap plus one pixel is refused.
+   Rejected: relying on the library's guard alone (it does not enforce the
+   number the requirement names); promoting its warning to an error with a
+   warnings filter (a process-global that any dependency can reset, and it
+   still fires only on the header path Pillow chooses to check).
 
 4. **Two files, one unit.** Each file is written to a temporary name in its
    target directory, flushed, and renamed into place — a rename within a
@@ -110,6 +141,38 @@ future), and no background work of any kind.
     write — that failure surfaces at the first upload, loudly, and the check's
     description says so rather than claiming more.
 
+12. **Prune ignores files younger than a grace period.** Between its renames
+    and its commit, an upload's two files are indistinguishable from orphans:
+    final names, no row. A prune running at that moment would delete them and
+    leave the invariant this design promises — no row without its files —
+    broken by the very command meant to repair it. Prune therefore only
+    considers a file whose last modification is older than
+    `PRUNE_MIN_AGE_SECONDS` (default one hour, far beyond any upload), and the
+    report says how many files it skipped as too young, so nothing disappears
+    silently from its view.
+    Rejected: a lock shared by every upload and the prune run (a global
+    serialisation point for an operation that should never touch a live
+    upload); writing files under a temporary prefix and renaming them only
+    after the commit (it moves the window rather than closing it, and it means
+    a row can exist before its files, which is the state the whole design
+    forbids).
+
+13. **The original filename is metadata and is normalised as text.** It is
+    never a path component (decision 1), but it is still attacker-controlled
+    text that goes into the store and into responses: it is
+    Unicode-normalised, stripped of control characters and of both path
+    separators, reduced to its last segment, trimmed to the column's bound,
+    and dropped entirely when nothing usable remains. One function owns this,
+    beside the tag normalisation, and its tests carry the adversarial cases.
+
+14. **The multipart contract is explicit.** Exactly one `file` part is
+    required; `tags` may arrive as repeated fields or as one comma-separated
+    field, and both forms produce the same normalised set; `meta` arrives as a
+    string holding a JSON object and its length is checked before it is
+    parsed, so an oversized value is refused without building the object.
+    Every deviation — no file part, several file parts, a `meta` that is not
+    an object — answers 422 naming what was wrong.
+
 11. **The probe's reason never quotes the path.** A readiness body is
     unauthenticated; the media root is deployment information. The reason says
     what is wrong (missing, not a directory, not writable), not where.
@@ -126,6 +189,12 @@ future), and no background work of any kind.
 - [Orphan files after a crash] → the only residue the design permits, found
   and removed by `storage prune`; the alternative (a row before its files)
   trades a removable file for a broken asset.
+- [Prune deleting the files of an upload in flight] → the grace period of
+  decision 12, with an integration test that holds an upload between its
+  renames and its commit while prune runs with the apply flag.
+- [The body-size middleware sees every request, not just uploads] → it counts
+  bytes and compares an integer; the cost is a few instructions per chunk, and
+  applying it to everything means no future endpoint can forget it.
 - [`os.access` is an approximation of "writable"] → decision 10; the first
   upload is the real test, and it fails loudly.
 - [Deleting the row before the files can strand files] → deliberate: the

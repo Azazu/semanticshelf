@@ -34,7 +34,10 @@ when the decoder recognised it.
 ### Requirement: Every limit is enforced before the work it bounds
 
 The service SHALL refuse an upload larger than the configured byte limit while
-reading the request, before the content is decoded, with 413. It SHALL refuse
+the request is being read, before its content is decoded, with 413. The bound
+SHALL apply to the whole request body — every part and the multipart framing
+around them — and not only to the file part, and it SHALL hold for a request
+that declares no length or declares a false one. It SHALL refuse
 a picture whose decoded pixel count exceeds the configured cap with 422, and
 the cap SHALL be applied before the pixels are allocated, so that a small file
 claiming enormous dimensions is refused rather than decoded. It SHALL refuse a
@@ -42,14 +45,30 @@ picture whose shorter side is below the configured minimum with 422. A refusal
 SHALL leave nothing on disk and no row in the store.
 
 #### Scenario: A file over the byte limit
-- **WHEN** an upload exceeds the configured byte limit
+- **WHEN** an upload whose file part exceeds the configured byte limit arrives
 - **THEN** the answer is 413 problem details, and the service never decoded
   the content
+
+#### Scenario: A body over the limit in several parts
+- **WHEN** a request whose parts are each under the limit but whose whole body
+  exceeds it arrives
+- **THEN** the answer is 413 problem details
+
+#### Scenario: A request that does not declare its length
+- **WHEN** an oversized body arrives without a declared length, or with one
+  that understates it
+- **THEN** it is still refused with 413, because the bound counts the bytes
+  that arrive rather than the number the client claims
 
 #### Scenario: A decompression bomb
 - **WHEN** a small file declaring dimensions beyond the pixel cap is uploaded
 - **THEN** the answer is 422 problem details, and the pixels were never
   allocated
+
+#### Scenario: The pixel cap is enforced at the number it names
+- **WHEN** a picture of exactly the configured pixel cap is uploaded, and
+  another of the cap plus one pixel
+- **THEN** the first is accepted and the second is refused with 422
 
 #### Scenario: A picture smaller than the minimum side
 - **WHEN** a picture whose shorter side is under the configured minimum is
@@ -119,6 +138,16 @@ under the media root SHALL be reachable by path from outside the service.
   asset identifier
 - **THEN** no endpoint serves it
 
+#### Scenario: A filename carrying control characters or beyond the bound
+- **WHEN** a file arrives with a name holding control characters, or longer
+  than the stored bound
+- **THEN** the recorded name holds no control character and is within the
+  bound, and the asset is otherwise stored normally
+
+#### Scenario: A filename with nothing usable left
+- **WHEN** a file arrives with a name that is empty after normalisation
+- **THEN** the asset records no original filename rather than an empty one
+
 ### Requirement: The thumbnail carries nothing over from the original
 
 The thumbnail SHALL be re-encoded from the decoded pixels rather than derived
@@ -136,6 +165,32 @@ ratio, and it SHALL be stored beside the original.
 - **WHEN** a picture wider than it is tall is uploaded
 - **THEN** the thumbnail's longest side is the configured size and its aspect
   ratio matches the original within rounding
+
+### Requirement: The upload request has one shape
+
+An upload SHALL carry exactly one file part; a request with none and a request
+with several SHALL both be refused with 422 naming the problem. Tags MAY
+arrive as repeated fields or as one comma-separated field, and both forms
+SHALL produce the same normalised set. Metadata SHALL arrive as a string
+holding a JSON object, whose length is checked before it is parsed, so an
+oversized value is refused without being built.
+
+#### Scenario: No file part
+- **WHEN** an upload carries no file part
+- **THEN** the answer is 422 problem details naming the missing part
+
+#### Scenario: Several file parts
+- **WHEN** an upload carries more than one file part
+- **THEN** the answer is 422 problem details and nothing is stored
+
+#### Scenario: Tags in either form
+- **WHEN** the same tags arrive once as repeated fields and once as one
+  comma-separated field
+- **THEN** both uploads produce the same set of tags on their assets
+
+#### Scenario: Metadata that is not a JSON object
+- **WHEN** metadata arrives as a string that is not a JSON object
+- **THEN** the answer is 422 problem details naming the field
 
 ### Requirement: Tags and metadata are normalised the same way everywhere
 
@@ -171,6 +226,12 @@ change nothing unless explicitly asked to act; when asked, it SHALL remove the
 orphan files and mark the indexing work of an asset whose files are gone as
 failed, with a reason naming the missing file.
 
+A file written by an upload that has not yet stored its row is
+indistinguishable from an orphan, so the command SHALL ignore files younger
+than a configured grace period and SHALL report how many it ignored for that
+reason. An upload in flight SHALL therefore never lose its files to a prune
+running beside it.
+
 #### Scenario: Files left by a crash
 - **WHEN** the command runs with files under the media root that no asset row
   refers to
@@ -184,3 +245,10 @@ failed, with a reason naming the missing file.
 #### Scenario: A dry run changes nothing
 - **WHEN** the command runs without being asked to act
 - **THEN** no file is removed and no row is changed
+
+#### Scenario: An upload in flight while the command runs
+- **WHEN** the command runs and is asked to act while an upload has written
+  its files but not yet stored its row
+- **THEN** those files are untouched, the command reports that it ignored
+  files younger than the grace period, and the upload completes with both its
+  files in place
