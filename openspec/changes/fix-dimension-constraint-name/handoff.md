@@ -18,7 +18,8 @@
 
 ## Next step
 
-`/opsx:propose fix-dimension-constraint-name`.
+`/opsx:apply fix-dimension-constraint-name`. Tier is medium, so there is no
+Gate 1: implementation may start, and Gate 2 follows the user's push.
 
 ## Blockers
 
