@@ -1,7 +1,7 @@
 # Handoff — add-demo-dataset
 
 **Updated:** 2026-09-22 · claude
-**State:** fixing-g1
+**State:** implementing
 **Branch:** change/add-demo-dataset
 
 ## Done this session
@@ -33,25 +33,21 @@ Two things the planning found by checking rather than assuming:
 
 ## Next step
 
-Confirmation 1 of Gate 1 confirmed four findings and refused the fifth, with a
-concrete interleaving: per-run staging names stop two runs from mixing bytes
-inside one file, but `sidecar A, sidecar B, picture B, picture A` still leaves
-one run's picture beside the other run's sidecar, and "both runs fetched the
-same bytes" was an assumption with no mechanism under it.
+**Gate 1 passed** (Confirmation 2 of round 1, commit `f03c61a`, all five
+findings confirmed). The contract is settled before a line of it exists:
 
-The mechanism is now the pair rather than the file: a picture and its sidecar
-are built in `<into>/.staging/<id>.<pid>-<random>/` and published by one
-`os.rename` of that directory to `<into>/pictures/<id>/`. A directory rename
-moves both files at once, so the mismatched pair is impossible rather than
-unlikely; a target that exists makes the rename fail, the staging directory is
-removed and the picture is reported as already present. The layout under
-`--into` is `pictures/`, `.staging/` and the archive, and `demo-dataset index`
-imports `pictures/` recursively, so neither the staging area nor the archive is
-ever a candidate for import. The concurrency test now serves **different** bytes
-and labels from the two runs, so it demonstrates the guarantee instead of
-assuming it.
+- three bounds, one per kind of object, with an archive failure fatal and a
+  picture failure counted;
+- the sidecar read through the descriptor the walk holds, never by path;
+- a label converted to a tag by this change's own rule, leaving the service's
+  normalisation alone;
+- a picture whose bytes are already stored left exactly as it is;
+- the picture and its sidecar published as one directory rename, so a
+  mismatched pair is impossible rather than unlikely.
 
-Run: `/gate-review add-demo-dataset 1 confirm 1`.
+Run: `/opsx:apply add-demo-dataset`. 26 tasks in seven groups; the first is the
+dependency move and the layering test, and nothing in the service may import
+the new module.
 
 ## Blockers
 
