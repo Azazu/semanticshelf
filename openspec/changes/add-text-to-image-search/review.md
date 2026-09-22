@@ -32,3 +32,14 @@
 | # | Resolution |
 |---|------------|
 | 1 | changes-requested — the implementation still cuts an index-selected `LIMIT offset + limit` window before applying the UUID tie-break, and the revised specification now permits the same cross-page repeats and omissions named in Round 1 instead of implementing the original global tie-break. That contract change is not coherent across the change artifacts: `proposal.md` still promises unconditionally that identifier tie-breaking makes a page stable while the index is unchanged, while the revised spec and how-to disclaim stable membership when a page edge cuts an equal-score group. Under the repository's fix-the-claim rule, the surviving scope claim means the finding is not resolved. |
+
+## Confirmation 3 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** 480276762e9a1316245f95ba4f207f1540a576ef
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — the implementation still applies `LIMIT offset + limit` before the UUID tie-break, so separate page windows may select different members of a tie and retain the Round 1 duplicate/omission defect. The artifacts are now textually consistent only because they weaken the requirement to permit that defect; this is a requirements/architecture change that does not implement the original global tie-break and would reopen Gate 1 under `AGENTS.md`. Its stated justification is also false: equal cosine scores do not require bit-identical vectors, because distinct vectors can have the same cosine distance from a query. The named finding is therefore not resolved. |
