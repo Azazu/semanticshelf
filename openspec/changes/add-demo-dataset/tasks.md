@@ -120,7 +120,10 @@ check is removed, and that failure is demonstrated before the task is ticked.
   each asserts the picture is refused with that reason, that nothing outside
   the folder was read, and that the run did not block. Demonstrated failing
   input: opening the sidecar with `open(path)` reads through the symbolic link,
-  which the first of those tests catches.
+  which the first of those tests catches. Gate 2 added the fourth case: a
+  sidecar that is *gone* by the time it is opened is a refusal too, because the
+  walk only looks for one it has already listed — importing the picture without
+  it would silently drop provenance the run had seen.
 - [x] 4.3 A sidecar that can be opened but not accepted — not an object, over
   the limits, an unacceptable tag — refuses its own picture with a reason
   naming the sidecar, and the run continues. Verify: an integration test with
@@ -128,8 +131,17 @@ check is removed, and that failure is demonstrated before the task is ticked.
   store. Demonstrated failing input: skipping the sidecar validation stores a
   tag the service would refuse at upload.
 - [x] 4.4 A sidecar is never a candidate picture: it is not imported, not
-  refused and not skipped-with-a-reason. Verify: the integration test above
-  asserts the counters name only the pictures.
+  refused and not skipped-with-a-reason, and the entry count the progress bar
+  is drawn from agrees with the walk about that (one rule, `_sidecars_in`).
+  Verify: the integration test above asserts the counters name only the
+  pictures, and another asserts `count_entries` equals what `walk` yields for a
+  folder holding a pair.
+- [x] 4.6 A dry run refuses what the real run refuses: the rehearsal combines
+  the run's tags with the sidecar's, as the real import does, so it cannot
+  promise an asset that the two together make impossible. Verify: an
+  integration test runs the same folder as a rehearsal and for real with 32 run
+  tags and one sidecar tag, and asserts both refuse. Demonstrated failing
+  input: rehearsing with no run tags makes the dry run report `created`.
 - [x] 4.5 `docs/how-to/indexing.md` documents the sidecar with a run whose
   output is captured from a real command.
 

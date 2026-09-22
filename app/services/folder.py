@@ -196,12 +196,18 @@ def _read_sidecar(name: str, dir_fd: int) -> tuple[bytes | None, str | None]:
     by `fstat` on what was opened: a sidecar swapped for a symbolic link between
     the walk listing its picture and this open is refused by the kernel, not by
     a name check that could be raced.
+
+    Called only for a name the walk has just listed, which is what makes every
+    failure here a refusal: a picture with no sidecar never reaches this
+    function, so "not there" can only mean "not there any more".
     """
     try:
         descriptor = _open_candidate(name, dir_fd)
-    except FileNotFoundError:
-        return None, None  # no sidecar is not a refusal; a picture may have none
     except OSError as error:
+        # This is only reached for a sidecar the walk just listed, so a name
+        # that is gone now is one that vanished between the two — not a picture
+        # without a sidecar. Losing that difference would import the picture
+        # without the provenance the run had already seen it carry.
         return None, _refusal(error)
     try:
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
@@ -228,6 +234,20 @@ def _refusal(error: OSError) -> str:
     return SKIP_UNREADABLE
 
 
+def _sidecars_in(files: Sequence[str]) -> set[str]:
+    """Which of these names belong to a picture beside them.
+
+    One rule, used by the counter and by the walk: the two must agree about
+    what an entry is, or a progress bar and a report count different things.
+    """
+    here = set(files)
+    return {
+        f"{Path(name).stem}{SIDECAR_SUFFIX}"
+        for name in here
+        if Path(name).suffix.lower() in CANDIDATE_SUFFIXES
+    } & here
+
+
 def count_entries(root: Root, *, recursive: bool = False) -> int:
     """How many entries a walk of this root would yield.
 
@@ -239,7 +259,9 @@ def count_entries(root: Root, *, recursive: bool = False) -> int:
     """
     entries = 0
     for _, directories, files, dir_fd in os.fwalk(".", dir_fd=root.fd, follow_symlinks=False):
-        entries += len(files)
+        # A sidecar is not an entry the walk reports — it belongs to its picture
+        # — so counting it here would leave the bar one short for every pair.
+        entries += len(set(files) - _sidecars_in(files))
         if recursive:
             entries += sum(
                 1 for name in directories if stat.S_ISLNK(os.lstat(name, dir_fd=dir_fd).st_mode)
@@ -269,12 +291,7 @@ def walk(root: Root, *, recursive: bool = False) -> Iterator[Candidate | Skipped
         else:
             directories.clear()
 
-        here_files = set(files)
-        sidecars = {
-            f"{Path(name).stem}{SIDECAR_SUFFIX}"
-            for name in here_files
-            if Path(name).suffix.lower() in CANDIDATE_SUFFIXES
-        } & here_files
+        sidecars = _sidecars_in(files)
         for name in sorted(files):
             relative = here / name
             if name in sidecars:
@@ -486,6 +503,7 @@ async def examine_one(
     session: AsyncSession,
     storage: MediaStorage,
     settings: Settings,
+    tags: Sequence[str] = (),
     meta: Mapping[str, Any],
     rehearsed: set[str] | None = None,
 ) -> FileOutcome:
@@ -505,7 +523,10 @@ async def examine_one(
     and a rehearsal that only ever asked the store would call both of them new.
     """
     try:
-        _, own_meta = combine(candidate, tags=(), meta=meta)
+        # The run's tags, not none of them: a sidecar's tags are added to them,
+        # and a rehearsal that left them out could call a picture created that
+        # the real run refuses for the two together.
+        _, own_meta = combine(candidate, tags=tags, meta=meta)
     except SidecarError as error:
         return FileOutcome(candidate.path, REFUSED, reason=f"its sidecar: {error}")
     try:
@@ -626,6 +647,7 @@ async def _import(
                 session=session,
                 storage=storage,
                 settings=settings,
+                tags=normalised,
                 meta=given,
                 rehearsed=rehearsed,
             )

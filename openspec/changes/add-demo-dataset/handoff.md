@@ -1,7 +1,7 @@
 # Handoff — add-demo-dataset
 
 **Updated:** 2026-09-22 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/add-demo-dataset
 
 ## Done this session
@@ -30,21 +30,30 @@ that matter (the layering, the manifest, the transfers, the sidecar).
 
 ## Next step
 
-**Gate 1 passed** (Confirmation 2 of round 1, commit `f03c61a`, all five
-findings confirmed). The contract is settled before a line of it exists:
+Gate 2 round 1 returned three findings — two majors and a minor — and all three
+were real defects in the sidecar work:
 
-- three bounds, one per kind of object, with an archive failure fatal and a
-  picture failure counted;
-- the sidecar read through the descriptor the walk holds, never by path;
-- a label converted to a tag by this change's own rule, leaving the service's
-  normalisation alone;
-- a picture whose bytes are already stored left exactly as it is;
-- the picture and its sidecar published as one directory rename, so a
-  mismatched pair is impossible rather than unlikely.
+1. A sidecar that **vanished** between the walk listing it and the open was
+   treated as "this picture has no sidecar", so the picture was imported
+   without the provenance the run had already seen it carry. `_read_sidecar` is
+   only ever called for a name the walk just listed, so every failure there is
+   a refusal now, and the spec gained the scenario.
+2. A **dry run** combined the sidecar's tags with none of the run's, while the
+   real import combines them with all of them: 32 run tags plus one sidecar tag
+   pass the rehearsal and are refused for real. The rehearsal now takes the
+   run's tags, and a test runs the same folder both ways.
+3. The **progress total** counted sidecars that the walk never reports, so a
+   bar ended one short per pair. The counter and the walk now share one rule
+   (`_sidecars_in`), and a test asserts they agree.
 
-Run: `/opsx:apply add-demo-dataset`. 26 tasks in seven groups; the first is the
-dependency move and the layering test, and nothing in the service may import
-the new module.
+Each fix has a demonstrated failing input: undo it and its test fails.
+
+Run: `/gate-review add-demo-dataset 2 confirm 1`. The user pushes first — the
+code changed.
+
+Local evidence, run the way CI runs it (`FORCE_COLOR=1 CI=true`, the difference
+that made the last push red): `make check` 406 green,
+`make test-integration` 198 green, `openspec validate --all --strict` 13/13.
 
 ## Blockers
 

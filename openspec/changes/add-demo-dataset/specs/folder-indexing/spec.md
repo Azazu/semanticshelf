@@ -103,6 +103,12 @@ in that directory; with it, the files of every directory beneath it.
 - **THEN** it is not read, nothing outside the folder is opened, and the
   picture is refused with that reason
 
+#### Scenario: A sidecar that is gone by the time it is read
+- **WHEN** a sidecar is removed after the picture beside it was listed and
+  before the sidecar is read
+- **THEN** the picture is refused with that reason rather than imported without
+  what its sidecar said
+
 #### Scenario: A sidecar replaced between being found and being read
 - **WHEN** a sidecar is replaced, after the picture beside it was listed and
   before the sidecar is read, by a symbolic link or by a file that is not

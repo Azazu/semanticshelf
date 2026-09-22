@@ -879,3 +879,78 @@ async def test_a_sidecar_in_a_subdirectory_is_read_the_same_way(
     assert list(row.tags) == ["cat"]
     assert row.meta["dataset_id"] == "7"
     assert row.meta[SOURCE_PATH_KEY] == "7/000000000007.png"
+
+
+async def test_a_sidecar_that_vanishes_after_being_listed_refuses_its_picture(
+    incoming: Path,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    engine: AsyncEngine,
+) -> None:
+    """The other side of the race: the sidecar was there when the directory was
+    listed and is gone when it is opened. Importing the picture anyway would
+    silently drop the provenance the run had already seen it carry, so it is a
+    refusal like any other unreadable sidecar."""
+    with_sidecar(incoming, "one", {"tags": ["cat"], "meta": {"dataset": "demo"}})
+    real_open = folder._open_candidate
+
+    def remove_then_open(name: str, dir_fd: int) -> int:
+        if name == "one.json":
+            os.unlink(incoming / "one.json")
+        return real_open(name, dir_fd)
+
+    monkeypatch.setattr(folder, "_open_candidate", remove_then_open)
+
+    report = await folder.import_folder(
+        incoming, session=session, storage=storage, settings=settings
+    )
+
+    (refused,) = [outcome for outcome in report.files if outcome.state == REFUSED]
+    assert refused.path.name == "one.png"
+    assert refused.reason is not None and "vanished" in refused.reason
+    assert await rows(engine) == [], "nothing is stored without the provenance it had"
+
+
+async def test_a_dry_run_refuses_what_the_real_run_refuses_for_the_tags_together(
+    incoming: Path,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+    engine: AsyncEngine,
+) -> None:
+    """The run's tags and the sidecar's are one set at the limit. A rehearsal
+    that looked only at the sidecar's would promise an asset the real run
+    refuses."""
+    with_sidecar(incoming, "one", {"tags": ["one-more"]})
+    run_tags = tuple(f"run-{index}" for index in range(32))
+
+    rehearsal = await folder.import_folder(
+        incoming,
+        session=session,
+        storage=storage,
+        settings=settings,
+        tags=run_tags,
+        dry_run=True,
+    )
+    real = await folder.import_folder(
+        incoming, session=session, storage=storage, settings=settings, tags=run_tags
+    )
+
+    assert [outcome.state for outcome in rehearsal.files] == [REFUSED]
+    assert [outcome.state for outcome in real.files] == [REFUSED], "and the two agree"
+    assert await rows(engine) == []
+
+
+async def test_the_progress_total_counts_what_the_walk_reports(incoming: Path) -> None:
+    """A sidecar is not an entry the walk reports, so counting it would leave
+    the bar one short for every pair."""
+    with_sidecar(incoming, "one", {"tags": ["cat"]})
+    (incoming / "notes.txt").write_text("not a picture")
+
+    with folder.opened_root(incoming) as root:
+        total = folder.count_entries(root)
+        reported = sum(1 for _ in folder.walk(root))
+
+    assert total == reported == 2, "the picture and the file that is not one"
