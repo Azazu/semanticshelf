@@ -18,13 +18,14 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 2. The manifest and what may be taken from it
 
-- [x] 2.1 `app/services/demo_dataset.py`: read `annotations/instances_val2017.json`
-  out of the annotation archive by exact name, refusing a missing member, a
+- [x] 2.1 `app/services/demo_dataset.py`: read the manifest member (named
+  "annotations/instances_val2017.json") out of the annotation archive by exact
+  name, refusing a missing member, a
   member whose declared uncompressed size **exceeds** `MEMBER_MAX_BYTES`, and
   any other member name; nothing is extracted to disk (design decision 4).
   Verify: `tests/unit/test_demo_manifest.py` builds zips in the test — the good
   one, one without the member, one whose member declares a size above the
-  bound, one whose member is named `../instances_val2017.json` — and asserts
+  bound, one whose member is named with a leading "../" — and asserts
   the first is read and the rest are refused with a message naming what was
   expected. Demonstrated failing input: dropping the exact-name check lets the
   `../` member through; dropping the size check reads a member above the bound.
@@ -73,7 +74,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
 - [x] 3.3 Every written name is built from the identifier the command validated
   and the extension it derived from the decoded bytes; nothing from the
   manifest builds a path. Verify: a unit test whose manifest entry has
-  `file_name` `../../../../etc/passwd.jpg` asserts the picture is written
+  a `file_name` of "../../../../etc/passwd.jpg" asserts the picture is written
   inside the target directory under the identifier-derived name and that
   nothing exists outside it. Demonstrated failing input: using `file_name` for
   the output path makes the test fail on a file outside the directory.
