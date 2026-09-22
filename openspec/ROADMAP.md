@@ -23,7 +23,6 @@ and gets its vectors in the background. The history is in git and in
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 8 | `add-text-to-image-search` | `GET /search/text`, scores, `min_score`, `limit`/`offset`/`has_more`, `ef_search` bound, model isolation, `/tags`, `/stats` | medium |
 | 9 | `add-demo-dataset` | `demo-dataset download/index`, licence check and notice, provenance meta, `make demo` | medium |
 | 10 | `add-demo-ui` | Streamlit Search, Browse, Upload, Status pages; own dependency group; `make ui` | low |
 

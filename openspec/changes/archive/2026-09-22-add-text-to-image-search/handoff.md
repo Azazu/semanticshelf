@@ -1,7 +1,7 @@
 # Handoff — add-text-to-image-search
 
 **Updated:** 2026-09-22 · claude
-**State:** ready-to-merge
+**State:** merged
 **Branch:** change/add-text-to-image-search
 
 ## Done this session
@@ -40,16 +40,13 @@ behavior changed.
 
 ## Next step
 
-**Gate 2 passed** (Confirmation 1 of round 2, commit `3107206`, both findings
-confirmed). Gate 1 passed earlier on the contract.
+Merged into `main` as `f2052df` (`--no-ff`, 34 commits) after the verifier
+passed, and archived with the four spec deltas synced into `openspec/specs/`:
+`text-search` and `service-stats` are new capabilities, `asset-api` gained the
+tag census and `embedding-storage`'s nearest-neighbour requirement gained the
+page, the threshold and the bounded tie rule.
 
-The user pushes `change/add-text-to-image-search` once more — the code changed
-after the last push — and reports the CI run. Then `/git:merge
-add-text-to-image-search`, and `/opsx:archive` after it.
-
-Local evidence: `make check` green (324 tests), `make test-integration` green
-(183 tests), `openspec validate --all --strict`, both `scripts/*_test.sh`,
-`sh -n` over `scripts/*.sh`.
+Next in the roadmap: change 9, `add-demo-dataset`.
 
 ## Blockers
 
