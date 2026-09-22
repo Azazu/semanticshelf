@@ -71,3 +71,17 @@
 | 2 | confirmed — the searchable page depth is now 999, search effort covers `limit + offset + 1`, and the specification, design, task, implementation, refusal tests, and boundary unit test all tie the accepted maximum to the required `has_more` sentinel. |
 | 3 | changes-requested — the detailed proposal scope, service-stats spec, design decision 10, tasks, schema, and endpoint documentation now define the metric as the sum of recorded original sizes and exclude thumbnails and filesystem reconciliation, but `proposal.md:91-93` still describes the `service-stats` capability as reporting "how much disk the pictures take." That surviving physical-usage claim is the same inconsistency named in Round 1, so the metric is not yet stated consistently throughout the proposal. |
 | 4 | confirmed — task 4.4 explicitly covers response examples for all three new operations and names schema-validating evidence; the diff supplies those examples to `/search/text`, `/tags`, and `/stats` and adds tests that locate each OpenAPI example and validate it with its response model. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** 7ba8202991e80801c26b9ed58293fa8503f84d2b
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the embedding-storage delta, text-search contract, design, and task all apply the same bounded offset-tail guarantee: exact tail order is promised only when no equal-distance group crosses the skip boundary, while a boundary-cutting tie leaves membership to the approximate index. |
+| 2 | confirmed — the accepted page depth remains capped at 999, search effort covers `limit + offset + 1` up to the 1000 ceiling, and the specification, design, tasks, implementation, refusal coverage, and exact-boundary unit coverage consistently reserve the extra candidate used for `has_more`. |
+| 3 | confirmed — the remaining capability summary in `proposal.md` now defines the value as the recorded sizes of stored originals added up and explicitly excludes thumbnails and unknown media-root files; the proposal, service-stats spec, design, task, schema, endpoint documentation, how-to, and FR-OPS-3 now use that same logical metric. |
+| 4 | confirmed — task 4.4 explicitly implements and verifies response examples for `GET /search/text`, `GET /tags`, and `GET /stats`; each operation exposes its example in OpenAPI and the focused test validates every example against its response model. The earlier-operation backfill remains explicitly out of scope and is tracked in roadmap change 16. |
