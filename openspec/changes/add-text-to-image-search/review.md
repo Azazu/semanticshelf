@@ -85,3 +85,15 @@
 | 2 | confirmed — the accepted page depth remains capped at 999, search effort covers `limit + offset + 1` up to the 1000 ceiling, and the specification, design, tasks, implementation, refusal coverage, and exact-boundary unit coverage consistently reserve the extra candidate used for `has_more`. |
 | 3 | confirmed — the remaining capability summary in `proposal.md` now defines the value as the recorded sizes of stored originals added up and explicitly excludes thumbnails and unknown media-root files; the proposal, service-stats spec, design, task, schema, endpoint documentation, how-to, and FR-OPS-3 now use that same logical metric. |
 | 4 | confirmed — task 4.4 explicitly implements and verifies response examples for `GET /search/text`, `GET /tags`, and `GET /stats`; each operation exposes its example in OpenAPI and the focused test validates every example against its response model. The earlier-operation backfill remains explicitly out of scope and is tracked in roadmap change 16. |
+
+## Round 2 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** e994824fae53eb2f653a22babc6a6a569f844e79
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `app/api/search.py:63-70`; `docs/explanation/requirements.md:101`; `tests/api/test_search_refusals.py:52-66` | The 256-character limit is enforced by FastAPI on the raw query parameter before the endpoint trims it. FR-TXT-2 defines the bound after trimming, so a valid query such as one leading space followed by 256 non-space characters is rejected with 422 even though its trimmed value is exactly at the allowed maximum. The boundary tests cover only unpadded strings and therefore preserve the mismatch. | open |
+| 2 | major | `app/api/search.py:42-58,84-85`; `docs/explanation/requirements.md:144`; `tests/api/test_search_refusals.py:117-142` | The endpoint returns a 503 problem response when the search model is unavailable, but its route declares only the 200 response example. The generated OpenAPI operation consequently contains 200, the application-wide 422/500 responses, and no 503 response at all, violating FR-OPS-4's requirement that problem-details responses be documented per status code. The existing OpenAPI assertion checks only the operation metadata and parameters, so it does not catch the missing 503 contract. | open |
