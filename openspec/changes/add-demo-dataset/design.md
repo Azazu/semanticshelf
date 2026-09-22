@@ -81,35 +81,64 @@ is already there".
    republishes the archive. Rejected: `flickr_url`, which is a third party's
    hotlink and rots.
 
-4. **The archive is read for one member, by exact name, under a bound.**
-   `annotations/instances_val2017.json` is extracted from the zip by exact
-   name; a missing member, a member whose declared size exceeds the bound, or a
-   member name that is not exactly that one, fails the command. Nothing is
-   extracted to disk from the archive except that one member, so a zip entry
+4. **Two bounds, because there are two kinds of object.** A picture is bounded
+   by `MAX_UPLOAD_BYTES` (20 MiB): that is what a picture may weigh. The
+   manifest archive cannot be — it is 241 MiB — so it carries its own
+   `ARCHIVE_MAX_BYTES`, set at 512 MiB, twice the size COCO publishes today and
+   still a bound rather than a hope. Gate 1 caught the first draft applying the
+   picture bound to "every request", which is impossible as written.
+   The archive transfer is streamed to a staging name in the target directory
+   and abandoned the moment it passes that bound; the staging file is removed
+   and the command fails naming the bound, because without the manifest there
+   is nothing to download. The same for its timeout and for a redirect: an
+   archive failure is fatal, a picture failure is counted.
+   Inside the archive, `annotations/instances_val2017.json` is read by exact
+   name; a missing member, a member declaring an uncompressed size above
+   `MEMBER_MAX_BYTES` (128 MiB, against a real member of ~46 MiB), or any other
+   name, fails the command. Nothing is extracted to disk from the archive
+   except that one member — read into memory, never written — so a zip entry
    named `../…` has nothing to escape into.
-   The archive itself is kept in the target directory, so a second run costs
-   nothing. 241 MiB is the price of a manifest that carries per-picture
+   The archive is kept in the target directory once complete, so a second run
+   costs nothing. 241 MiB is the price of a manifest that carries per-picture
    licences, and the documentation says so.
 
-5. **A picture is written only after it is whole and only under a name we
-   chose.** The bytes are streamed to a temporary name in the target directory,
-   abandoned if the response passes `MAX_UPLOAD_BYTES`, decoded through the
-   same inspection an upload uses, and only then renamed into place as
-   `<image id>.<extension of the detected format>`. The sidecar is written
-   before that rename, so a picture in the directory always has its sidecar.
+5. **A file appears whole or not at all, and every run stages under its own
+   name.** The bytes are streamed to `<final name>.<pid>-<random>.part` in the
+   target directory, abandoned if the response passes `MAX_UPLOAD_BYTES`,
+   decoded through the same inspection an upload uses, and only then renamed to
+   `<image id>.<extension of the detected format>`. The staging name carries
+   the process id and a random suffix, so two runs in one directory never write
+   the same staging file and a `rename` can never publish a mixture; the final
+   name may be clobbered, which is harmless because both runs fetched the same
+   bytes from the same identifier. The sidecar is published the same way, and
+   before the picture, so a picture in the directory always has its sidecar.
    The manifest's `file_name` is parsed for nothing but a sanity check that it
    matches the identifier; it never becomes a path.
+   What a killed run can leave, and why neither needs an operator: a `.part`
+   file, which no later run reads because every run stages under its own name
+   and which the operator may delete at any time; and a sidecar whose picture
+   never arrived, which nothing imports (only a picture is a candidate) and
+   which the next run for that picture overwrites. The applicability table says
+   the same in one line.
    Rejected: writing straight to the final name and deleting on failure — a
    crash between the two leaves a truncated file that the next run would see as
-   done.
+   done. Rejected: one staging name per file rather than per run — two
+   concurrent runs would then write the same staging file.
 
-6. **Tags are the object categories, normalised, and a label that cannot become
-   a tag is dropped.** COCO gives each picture zero or more annotations, each
-   naming a category ("traffic light", "sports ball"). The tag is that name
-   normalised by FR-TAG-1's rule; a category that cannot survive it is dropped
-   rather than failing the picture — a corpus without one tag is better than a
-   corpus without a picture. The count is capped at the 32 tags an asset may
-   carry.
+6. **A label is not a tag, so this change states the conversion.** COCO gives
+   each picture zero or more annotations, each naming a category ("traffic
+   light", "sports ball"). FR-TAG-1's normalisation is NFKC, trim and
+   lower-case followed by a pattern that **rejects** a space — it does not
+   slugify, and Gate 1 was right that the first draft claimed it did. So the
+   conversion is this capability's own and is written down: runs of whitespace
+   become `-`, and the result must then survive `normalise_tag` unchanged to be
+   used. `traffic light` becomes `traffic-light` by the conversion and passes
+   the normalisation; a label that still does not pass is dropped rather than
+   failing the picture — a corpus without one tag is better than a corpus
+   without a picture. The count is capped at the 32 tags an asset may carry.
+   Rejected: dropping every multi-word category, which is half of COCO's
+   eighty. Rejected: changing `normalise_tag` to slugify — it is the rule the
+   API enforces on clients, and loosening it here would loosen it there.
    Rejected: COCO's caption annotations. They are a human's sentence about the
    picture, and indexing them as tags would flatter the search: a text query
    would be matching a caption's words, not the picture.
@@ -127,6 +156,15 @@ is already there".
    format to validate and would make a partially downloaded corpus
    unimportable.
 
+   **The sidecar is opened exactly as a picture is**, which is the part Gate 1
+   caught missing: relative to the descriptor of the directory the walk holds,
+   with `O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC`, and judged by `fstat` on that
+   descriptor rather than by its path. A sidecar that is a symbolic link, a
+   fifo, a directory or anything else that is not a regular file refuses its
+   picture with that reason. This is not a new mechanism: it is the one change 7
+   paid three Gate 2 rounds for, and reading a sidecar by path would have
+   reopened every hole it closed.
+
 8. **`make demo` is download, then index.** The import already finishes the
    work it created (change 7), so there is nothing extra to wait for: when
    `demo-dataset index` returns, the corpus is searchable, and the target says
@@ -138,7 +176,19 @@ is already there".
    keyword arguments against a few dozen lines of `urllib.request` plumbing in
    a path that handles remote bytes.
 
-10. **The demo module is not part of the service.** It lives under
+10. **A picture already in the store keeps what it has.** The duplicate rule is
+    the content hash and it is global, so a corpus picture whose bytes are
+    already stored — uploaded by hand, imported from a folder — produces no
+    second asset, and the import does not rewrite the existing asset's tags or
+    metadata from the sidecar. The demo provenance is therefore recorded on the
+    assets this import creates, and nowhere else. Gate 1 caught the first draft
+    promising a demo asset and an imported asset side by side, which the
+    duplicate rule makes impossible.
+    Rejected: merging the sidecar's provenance into an existing asset. It would
+    make an import edit assets it did not create, which no import does today,
+    and the surprise would be worse than the gap.
+
+11. **The demo module is not part of the service.** It lives under
     `app/services/` with the rest of the use cases, but nothing the application
     factory imports reaches it, and a test asserts that: NFR-SEC-4's promise
     that the API and the worker make no outbound request is only worth
@@ -148,8 +198,8 @@ is already there".
 
 | Question | Answer |
 |---|---|
-| Crash around an external effect | A download writes to a temporary name in the target directory and renames into place after the bytes decoded; the sidecar is written before that rename. A crash therefore leaves either nothing or a complete pair, and the next run resumes by skipping what is there. The archive is written the same way. |
-| Concurrent writers | Two downloads into one directory duplicate work but cannot corrupt: each file appears by rename. Two indexing runs are safe because the store's duplicate rule is the content hash, and both see the same pictures. |
+| Crash around an external effect | Every file is streamed to `<name>.<pid>-<random>.part` and renamed into place only once complete, the sidecar before its picture. A crash therefore leaves no picture under a final name, and exactly two recoverable leftovers: a `.part` file no later run reads, and possibly a sidecar whose picture never arrived, which nothing imports and the next run overwrites. NOT guaranteed: that the directory is free of leftovers — only that no leftover is mistaken for a finished download. |
+| Concurrent writers | The staging name carries the writer's process id and a random suffix, so two downloads into one directory never write the same staging file and no final name can receive a mixture; a final name may be clobbered by the second writer with identical bytes, since both fetched the same identifier from the same host. Two indexing runs are safe because the duplicate rule is the content hash. NOT guaranteed: that concurrent runs do not duplicate work, or that a `.part` of a killed run is cleaned up by another run. |
 | Empty / zero / null inputs | `--count 0` writes nothing and still prints the notice; a manifest whose permissive pictures are fewer than the count writes what there is and says so; indexing an empty or missing directory reports it rather than failing. |
 | Deletion / expiry | The commands never delete: `--into` is written to, never cleaned. A picture that vanishes from the dataset is a per-picture failure, counted, and the run continues. |
 | Idempotent retries | A retried download skips every picture already present; a retried index creates no second asset because the pipeline dedupes on the content hash. Both are safe to run any number of times. |

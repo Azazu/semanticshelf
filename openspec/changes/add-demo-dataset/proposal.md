@@ -42,6 +42,13 @@ to render until this one exists.
 - **New command `demo-dataset index`**: runs the folder import over what was
   downloaded, so the demo corpus goes through exactly the pipeline an upload
   and `index-folder` go through — no second path into the store.
+- **A dataset's label becomes a tag by a rule this change states.** The
+  service's own normalisation (FR-TAG-1) lower-cases and trims and then refuses
+  a space, so `traffic light` is not a tag and half of COCO's eighty categories
+  would be lost to it. The command converts a label first — runs of whitespace
+  become `-` — and then requires the result to pass that same normalisation
+  unchanged; what still does not pass is dropped. The normalisation itself is
+  not touched: it is the rule the API enforces on clients.
 - **The folder import learns sidecars.** A file named after a picture beside it
   may carry that picture's tags and metadata; the run's own `--tags`/`--meta`
   still apply, and neither may overwrite the origin the import records. This is
@@ -113,5 +120,8 @@ to render until this one exists.
   `openspec/ROADMAP.md`, `docs/how-to/indexing.md` (the sidecar).
 - Unchanged: the schema, every migration, the API and the worker path. Nothing
   in `app/api/` or `app/main.py` gains an import from the new module.
-- Network: one archive from `images.cocodataset.org` and one request per
-  picture to the same host, all over HTTPS, all from an operator command.
+- Network: one archive and one request per picture, all to the COCO bucket's
+  path-style S3 endpoint (`s3.amazonaws.com/images.cocodataset.org`) because
+  the documented host serves no certificate for its own name, all over HTTPS
+  with a certificate that verifies, all from an operator command. Design
+  decision 3 carries the measurement.

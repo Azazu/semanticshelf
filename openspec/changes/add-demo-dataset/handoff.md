@@ -1,7 +1,7 @@
 # Handoff — add-demo-dataset
 
 **Updated:** 2026-09-22 · claude
-**State:** proposing
+**State:** fixing-g1
 **Branch:** change/add-demo-dataset
 
 ## Done this session
@@ -33,8 +33,34 @@ Two things the planning found by checking rather than assuming:
 
 ## Next step
 
-Gate 1, because the tier is `high`: `/gate-review add-demo-dataset 1`. The
-mechanical floor already passes.
+Gate 1 round 1 returned six findings — two blockers, three majors, one minor —
+and all six were real. Fixed:
+
+1. The 241 MiB archive was bounded by the picture's 20 MiB, which is
+   impossible. Two bounds now: `MAX_UPLOAD_BYTES` for a picture,
+   `ARCHIVE_MAX_BYTES` for the archive, `MEMBER_MAX_BYTES` for the member; an
+   archive failure is fatal where a picture failure is counted, and the
+   staging file is removed either way.
+2. The sidecar was to be read by path, which would have reopened every hole
+   change 7 closed. It is opened relative to the walk's directory descriptor
+   with `O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC` and judged by `fstat`, with
+   failing inputs for a symlink sidecar and one swapped after the picture was
+   listed.
+3. `traffic light` → `traffic-light` is not FR-TAG-1 normalisation — that rule
+   rejects a space rather than slugifying it. The conversion is now this
+   change's own, stated in the spec and the design, and the normalisation is
+   left alone.
+4. "A demo asset beside an imported one" cannot exist: the content hash makes
+   one asset. The spec now says what actually happens — the existing asset is
+   reported and left untouched, and the demo provenance lands only on assets
+   this import creates.
+5. The applicability table claimed more than the mechanism gave. It now names
+   the staging scheme (`<final>.<pid>-<random>.part`), the two recoverable
+   leftovers, and what is NOT guaranteed, with a concurrency test for the claim
+   that remains.
+6. Task 2.1 said "passes the bound" where the rule is "exceeds".
+
+Run: `/gate-review add-demo-dataset 1 confirm 1`.
 
 ## Blockers
 
