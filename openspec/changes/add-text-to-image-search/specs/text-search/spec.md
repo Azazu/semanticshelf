@@ -134,6 +134,12 @@ together reach beyond the depth the index can answer accurately SHALL be
 refused with 422 problem details naming that bound, rather than answered with a
 silently worse ranking.
 
+That depth SHALL leave room for the item beyond the page: the index produces a
+bounded number of candidates for one query, the item that decides whether more
+exist is one of them, and so the deepest page the service accepts SHALL end one
+item short of that ceiling. The service SHALL NOT accept a page whose answer it
+could only complete by guessing whether more exist.
+
 #### Scenario: More results exist
 - **WHEN** a page is requested and the ranking holds more results beyond it
 - **THEN** the answer says so, and carries no total count
@@ -152,13 +158,19 @@ silently worse ranking.
 - **THEN** the answer is 422 problem details naming that bound, and no search
   is run
 
+#### Scenario: The deepest page the service accepts
+- **WHEN** the deepest page within the bound is requested
+- **THEN** it is answered, and the search effort for it covers the page and the
+  item beyond it that says whether more exist
+
 ### Requirement: Search is answered from the index, at the depth it is asked for
 
 Every search SHALL be answered from the vector index of the search model rather
 than by reading every stored vector. The index's search effort SHALL be set for
-each query to at least the depth that query needs — the page's size plus its
-offset — so that a deeper page does not quietly return a worse ranking than a
-shallow one.
+each query to at least the depth that query needs — the page's size, its offset
+and the one item beyond the page that says whether more exist — so that a
+deeper page does not quietly return a worse ranking than a shallow one, and so
+that the answer about more items is read rather than assumed.
 
 #### Scenario: The index answers the query
 - **WHEN** the execution plan of a search is inspected
@@ -168,7 +180,7 @@ shallow one.
 #### Scenario: A deep page is searched as deeply as it is asked
 - **WHEN** a page deep in the ranking is requested
 - **THEN** the search effort for that query is at least the size and offset it
-  asks for
+  asks for, plus the item beyond them
 
 ### Requirement: An asset is searchable while it has a vector
 

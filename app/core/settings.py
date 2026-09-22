@@ -80,9 +80,11 @@ class Settings(BaseSettings):
 
     # --- search --------------------------------------------------------------
     #: How hard the vector index looks for each search. Raised per query to at
-    #: least the depth the page asks for (`limit + offset`), so a deep page does
-    #: not quietly get a worse ranking than a shallow one; 1000 is pgvector's
-    #: own maximum for `hnsw.ef_search`, and it bounds how deep a page may go.
+    #: least the depth the page asks for and the row beyond it that answers
+    #: `has_more` (`limit + offset + 1`), so a deep page does not quietly get a
+    #: worse ranking than a shallow one; 1000 is pgvector's own maximum for
+    #: `hnsw.ef_search` and the most candidates one scan yields, which is why
+    #: the deepest page ends at `limit + offset` = 999.
     hnsw_ef_search: int = Field(default=40, gt=0, le=1000)
 
     @field_validator("database_url")

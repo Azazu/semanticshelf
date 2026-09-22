@@ -1,5 +1,7 @@
 """The two read-only views the demo UI is built from."""
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from app.services.stats import Stats
@@ -56,3 +58,24 @@ class StatsRead(BaseModel):
             ],
             oldest_waiting_seconds=stats.oldest_waiting_seconds,
         )
+
+
+#: The answers of the run recorded in `docs/how-to/searching.md`, carried into
+#: the OpenAPI document as this operation's example (FR-OPS-4).
+TAG_LIST_EXAMPLE: dict[str, Any] = {
+    "items": [{"tag": "demo", "assets": 5}],
+    "limit": 100,
+}
+
+#: The same five assets, one of them still waiting: an example carrying `null`
+#: would be dropped from the document, and a waiting job is the shape an
+#: operator reads this view for anyway.
+STATS_EXAMPLE: dict[str, Any] = {
+    "assets": 5,
+    "stored_bytes": 11878,
+    "work": [
+        {"model": "clip-vit-l14", "status": "done", "jobs": 4},
+        {"model": "clip-vit-l14", "status": "pending", "jobs": 1},
+    ],
+    "oldest_waiting_seconds": 12.4,
+}

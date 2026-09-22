@@ -11,7 +11,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, FastAPI, Query
 
 from app.api.deps import SessionDep
-from app.schemas.stats import StatsRead, TagCount, TagList
+from app.schemas.stats import STATS_EXAMPLE, TAG_LIST_EXAMPLE, StatsRead, TagCount, TagList
 from app.services import stats
 
 PREFIX = "/api/v1"
@@ -30,6 +30,7 @@ MAX_TAG_LIMIT = 500
         "more is absent. `limit` defaults to 100 and is at most 500."
     ),
     response_model=TagList,
+    responses={HTTPStatus.OK: {"content": {"application/json": {"example": TAG_LIST_EXAMPLE}}}},
 )
 async def list_tags(
     session: SessionDep,
@@ -50,6 +51,7 @@ async def list_tags(
         "from the store."
     ),
     response_model=StatsRead,
+    responses={HTTPStatus.OK: {"content": {"application/json": {"example": STATS_EXAMPLE}}}},
     status_code=HTTPStatus.OK,
 )
 async def read_stats(session: SessionDep) -> Any:

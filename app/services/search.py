@@ -30,9 +30,15 @@ from app.services import indexing
 #: What a query may be. Fixed by the requirements rather than configured: a
 #: bound no deployment turns is not a setting.
 QUERY_MAX_LENGTH = 256
-#: pgvector's own maximum for `hnsw.ef_search`, and therefore how deep a page
-#: may go: past it the index cannot answer accurately at all.
-MAX_SEARCH_DEPTH = 1000
+#: pgvector's own maximum for `hnsw.ef_search`, which is also the most
+#: candidates one index scan will produce: past it the index cannot answer
+#: accurately at all.
+MAX_SEARCH_EFFORT = 1000
+#: How deep a page may reach. One of the candidates above is the row beyond the
+#: page, and that row is the whole of `has_more`; a page that used the last
+#: candidate for itself would leave the question to be guessed at, so the page
+#: stops one short of the index's ceiling.
+MAX_PAGE_DEPTH = MAX_SEARCH_EFFORT - 1
 
 
 class SearchUnavailableError(Exception):
@@ -67,9 +73,11 @@ def effort_for(*, settings: Settings, limit: int, offset: int) -> int:
 
     At least the configured effort, at least the depth the page reaches — the
     row beyond it included, since that row is what says whether more exist —
-    and never beyond what pgvector accepts.
+    and never beyond what pgvector accepts. `check_depth` keeps the two
+    compatible: the deepest page it allows still leaves a candidate for the row
+    beyond it.
     """
-    return min(MAX_SEARCH_DEPTH, max(settings.hnsw_ef_search, limit + offset + 1))
+    return min(MAX_SEARCH_EFFORT, max(settings.hnsw_ef_search, limit + offset + 1))
 
 
 def score_of(distance: float) -> float:
@@ -78,9 +86,15 @@ def score_of(distance: float) -> float:
 
 
 def check_depth(*, limit: int, offset: int) -> None:
-    if limit + offset > MAX_SEARCH_DEPTH:
+    """Refuse a page the index cannot answer, before anything is embedded.
+
+    The bound is one short of the index's ceiling on purpose: the row beyond
+    the page answers `has_more`, and it has to be one of the candidates the
+    index is willing to produce.
+    """
+    if limit + offset > MAX_PAGE_DEPTH:
         raise PageTooDeepError(
-            f"limit + offset must be at most {MAX_SEARCH_DEPTH}, got {limit + offset}"
+            f"limit + offset must be at most {MAX_PAGE_DEPTH}, got {limit + offset}"
         )
 
 

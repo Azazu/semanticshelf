@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from app.api.deps import PoolDep, SessionDep, SettingsDep
 from app.core.errors import problem, problem_response
 from app.schemas.assets import AssetRead
-from app.schemas.search import SearchHit, SearchPage
+from app.schemas.search import SEARCH_PAGE_EXAMPLE, SearchHit, SearchPage
 from app.services.search import (
     QUERY_MAX_LENGTH,
     PageTooDeepError,
@@ -46,13 +46,15 @@ def _refuse(status: HTTPStatus, type_: str, detail: str) -> JSONResponse:
         "Embeds the query with the CLIP text tower and ranks the stored image vectors of "
         "`clip-vit-l14` by cosine similarity. `q` is required and at most 256 characters; the "
         "answer says when the model had to cut it. `limit` defaults to 20 and is at most 100, "
-        "and `limit + offset` may not exceed 1000 — beyond that the index cannot answer "
-        "accurately, so the request is refused rather than answered worse. `min_score` drops "
+        "and `limit + offset` may not exceed 999 — the index answers at most 1000 candidates "
+        "for one query and the last of them is the row that says whether more exist, so a "
+        "deeper page is refused rather than answered worse. `min_score` drops "
         "results below it after ranking, which makes a page shorter rather than reaching "
         "further down. Scores are comparable only within one model, which the answer names. "
         "The query is English: the model was trained on English captions."
     ),
     response_model=SearchPage,
+    responses={HTTPStatus.OK: {"content": {"application/json": {"example": SEARCH_PAGE_EXAMPLE}}}},
 )
 async def search_by_text(
     session: SessionDep,

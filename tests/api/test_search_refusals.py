@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from app.core.errors import PROBLEM_MEDIA_TYPE
 from app.core.settings import Settings
 from app.main import create_app
-from app.services.search import QUERY_MAX_LENGTH
+from app.services.search import MAX_PAGE_DEPTH, QUERY_MAX_LENGTH
 from tests.conftest import make_client
 
 SEARCH = "/api/v1/search/text"
@@ -85,18 +85,22 @@ async def test_a_page_too_deep_is_refused_before_anything_is_searched(
 ) -> None:
     """The database is unreachable, so a 422 rather than a 500 is the evidence
     that the refusal came first."""
-    response = await client.get(SEARCH, params={"q": "dragon", "limit": 100, "offset": 901})
+    response = await client.get(
+        SEARCH, params={"q": "dragon", "limit": 100, "offset": MAX_PAGE_DEPTH - 99}
+    )
 
     assert response.status_code == 422
     body = response.json()
     assert body["type"] == "/errors/page-too-deep"
-    assert "1000" in body["detail"]
+    assert str(MAX_PAGE_DEPTH) in body["detail"]
 
 
 async def test_the_deepest_allowed_page_is_not_refused_for_its_depth(
     client: httpx.AsyncClient,
 ) -> None:
-    response = await client.get(SEARCH, params={"q": "dragon", "limit": 100, "offset": 900})
+    response = await client.get(
+        SEARCH, params={"q": "dragon", "limit": 100, "offset": MAX_PAGE_DEPTH - 100}
+    )
 
     assert response.status_code != 422
 

@@ -34,15 +34,21 @@ ranked by the cosine similarity the index was built for.
   page may be shorter than `limit` and the next page still starts where this
   one ended. Nothing backfills.
 - Every search sets `hnsw.ef_search` for its transaction to
-  `max(HNSW_EF_SEARCH, limit + offset)` so a deep page does not silently lose
-  recall, and a page beyond 1 000 is refused with 422 `page-too-deep` — the
-  bound pgvector itself has. New setting `HNSW_EF_SEARCH` (default 40).
+  `max(HNSW_EF_SEARCH, limit + offset + 1)` so a deep page does not silently
+  lose recall, and a page whose `limit + offset` passes 999 is refused with 422
+  `page-too-deep`. 1000 is the bound pgvector itself has on the effort, and so
+  on the candidates one scan yields; the `+ 1` is the row that answers
+  `has_more`, which leaves 999 for the page. New setting `HNSW_EF_SEARCH`
+  (default 40). FR-FLT-5 is amended to both, because it named `limit + offset`
+  for the effort and 1000 for the page, which cannot hold together.
 - The vector query keeps the cast and the model predicate ADR-001 requires, now
   with an offset; a plan-reading test keeps it honest, because losing either
   turns an index scan into a sequential one with no other symptom.
 - `GET /api/v1/tags` (tag counts, ordered by count then name) and
   `GET /api/v1/stats` (assets, work per model and state, the age of the oldest
-  waiting job, bytes under the media root): the two read-only views the demo UI
+  waiting job, and the recorded sizes of the originals added up — the assets'
+  own numbers, not a walk of the media root, so thumbnails are outside it): the
+  two read-only views the demo UI
   of change 10 needs, and the fastest way for an operator to see whether
   indexing is keeping up.
 - FR-TXT-3 says only assets whose CLIP job is `done` may appear. What the store
@@ -69,6 +75,11 @@ ranked by the cosine similarity the index was built for.
   English (FR-TXT-5).
 - Measuring recall or latency. ADR-002 and `tune-vector-indexes` (change 14)
   own that; this change states what it does not know.
+- Backfilling OpenAPI examples for the operations of earlier changes. FR-OPS-4
+  asks for one per operation and none of the existing ones has it; the three
+  operations added here carry theirs, and the backfill belongs to
+  `harden-quality-and-docs` (change 16) with the rest of the documentation
+  sweep rather than to a search change.
 
 ## Capabilities
 

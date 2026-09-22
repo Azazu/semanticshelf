@@ -9,7 +9,8 @@ import pytest
 
 from app.core.settings import Settings
 from app.services.search import (
-    MAX_SEARCH_DEPTH,
+    MAX_PAGE_DEPTH,
+    MAX_SEARCH_EFFORT,
     QUERY_MAX_LENGTH,
     PageTooDeepError,
     check_depth,
@@ -45,9 +46,22 @@ def test_the_effort_covers_the_page_and_the_row_beyond_it() -> None:
 
 
 def test_the_effort_never_exceeds_what_pgvector_accepts() -> None:
-    at_the_bound = effort_for(settings=settings(), limit=100, offset=900)
+    at_the_bound = effort_for(settings=settings(), limit=100, offset=MAX_PAGE_DEPTH - 100)
 
-    assert at_the_bound == MAX_SEARCH_DEPTH, "1000 + 1 would be refused by the index"
+    assert at_the_bound == MAX_SEARCH_EFFORT, "anything above it the index would refuse"
+
+
+def test_the_deepest_page_the_service_answers_still_has_its_sentinel() -> None:
+    """The one that ties the two bounds together: `has_more` is the row beyond
+    the page, so the deepest allowed page must still leave the index a
+    candidate to produce it with. Raise `MAX_PAGE_DEPTH` to the index's own
+    ceiling and this fails — the page would need candidate 1001 of 1000.
+    """
+    limit, offset = 100, MAX_PAGE_DEPTH - 100
+
+    check_depth(limit=limit, offset=offset)
+
+    assert effort_for(settings=settings(), limit=limit, offset=offset) >= limit + offset + 1
 
 
 def test_a_configured_effort_above_the_page_wins() -> None:
@@ -55,12 +69,12 @@ def test_a_configured_effort_above_the_page_wins() -> None:
 
 
 def test_a_page_within_the_depth_is_allowed() -> None:
-    check_depth(limit=100, offset=900)  # exactly at the bound
+    check_depth(limit=100, offset=MAX_PAGE_DEPTH - 100)  # exactly at the bound
 
 
 def test_a_page_one_item_too_deep_is_refused() -> None:
-    with pytest.raises(PageTooDeepError, match=str(MAX_SEARCH_DEPTH)):
-        check_depth(limit=101, offset=900)
+    with pytest.raises(PageTooDeepError, match=str(MAX_PAGE_DEPTH)):
+        check_depth(limit=101, offset=MAX_PAGE_DEPTH - 100)
 
 
 def test_the_query_bound_is_the_one_the_requirements_fix() -> None:

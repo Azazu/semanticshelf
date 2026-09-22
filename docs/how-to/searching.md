@@ -89,13 +89,16 @@ real model and a real corpus, and the answer when it happens is to ask for a
 page large enough to hold the group — an approximate index may not return the
 whole group at all, whatever page you ask for.
 
-`limit + offset` may not exceed 1000. Beyond that the index cannot answer
-accurately at all, so the request is refused rather than answered worse:
+`limit + offset` may not exceed 999. The index answers at most 1000 candidates
+for one query — pgvector's own ceiling on `hnsw.ef_search` — and the last of
+them is the row that tells `has_more` whether anything follows the page. A
+deeper page could only be answered by guessing at that, so it is refused
+instead:
 
 ```console
-$ curl -s "http://127.0.0.1:8000/api/v1/search/text?q=dragon&limit=100&offset=901"
+$ curl -s "http://127.0.0.1:8000/api/v1/search/text?q=dragon&limit=100&offset=900"
 {"type":"/errors/page-too-deep","title":"Unprocessable Entity","status":422,
- "detail":"limit + offset must be at most 1000, got 1001","instance":"urn:request:…"}
+ "detail":"limit + offset must be at most 999, got 1000","instance":"urn:request:…"}
 ```
 
 ## Cut off the tail
@@ -125,7 +128,7 @@ Start without it, look at the scores you actually get, then choose.
 |---|---|
 | 422 `/errors/invalid-query` | `q` is missing, empty, or only whitespace |
 | 422 `/errors/validation` | `q` is longer than 256 characters, `limit` is outside 1–100, `offset` is negative, or `min_score` is outside [−1, 1] |
-| 422 `/errors/page-too-deep` | `limit + offset` is beyond 1000 |
+| 422 `/errors/page-too-deep` | `limit + offset` is beyond 999 |
 | 503 `/errors/model-unavailable` | this build does not run the search model, so nothing can embed the query |
 
 ```console
@@ -174,7 +177,7 @@ thumbnails are not counted, and nothing walks the media root to produce it.
   languages degrade towards a random ranking. The service does not translate,
   and says so rather than pretending.
 - **A promise about recall.** A deep page is *searched* as deeply as it asks —
-  `hnsw.ef_search` is raised per query to `limit + offset` — but how close an
+  `hnsw.ef_search` is raised per query to `limit + offset + 1` — but how close an
   approximate ranking is to an exact one is measured in its own change, not
   asserted here.
 

@@ -47,9 +47,22 @@ names the one it used rather than taking a choice.
    `SET LOCAL hnsw.ef_search = :effort` applies to the transaction, so the
    search runs inside `async with session.begin():` — set, query, commit — and
    the endpoint does no read before it. The effort is
-   `max(HNSW_EF_SEARCH, limit + offset)`, never above the 1 000 pgvector
-   allows, and a page whose `limit + offset` exceeds that is refused before
-   anything runs.
+   `max(HNSW_EF_SEARCH, limit + offset + 1)`, never above the 1000 pgvector
+   allows, and a page is refused before anything runs when `limit + offset`
+   passes **999**.
+
+   That odd-looking bound is the whole point of the `+ 1`. An HNSW scan yields
+   at most `ef_search` rows — measured, not assumed: at `ef_search = 40` a
+   query asking for a thousand rows got exactly forty. One of those rows is the
+   sentinel that answers `has_more` (decision 5), so a page reaching depth 1000
+   would need candidate 1001 of 1000 and could only guess. Gate 1 caught this:
+   the first draft bounded the page at 1000 and set the effort to
+   `limit + offset`, which under-provisions the sentinel on every deep page and
+   makes it unobtainable at the boundary. `MAX_PAGE_DEPTH = MAX_SEARCH_EFFORT -
+   1` ties the two together, and the unit test
+   `test_the_deepest_page_the_service_answers_still_has_its_sentinel` fails if
+   the page bound is raised back to the index's ceiling.
+
    What this does NOT guarantee: a deep page is *searched* as deeply as it asks,
    not that its ranking equals an exact scan's. What recall that buys is
    ADR-002's question, and this change says so rather than implying an answer.
