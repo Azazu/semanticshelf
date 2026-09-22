@@ -101,7 +101,17 @@ names the one it used rather than taking a choice.
    rows enter the window at all is the index's choice. Measured on five assets
    sharing one vector, paged two at a time, the three pages repeated one member
    and skipped another — while each page on its own answered identically five
-   times over. So the guarantee is per page, not across them.
+   times over.
+
+   That last observation is where the confirmation caught the specification
+   overreaching: this engine answers a tie-cutting page the same way every time,
+   but nothing makes it do so, and a specification may not promise what only
+   happens to be true. So the promise is now conditional — a page across which
+   no group of identical scores falls repeats exactly; a page whose edge cuts
+   such a group carries whichever members it got, in identifier order, and the
+   service says nothing about which. The test that observes the repetition
+   remains, labelled as a record of what this engine does rather than as a
+   contract.
    Closing that too would mean taking the whole searchable depth as the window
    for every query, which was measured on 10 000 vectors before the choice was
    made: **0.2 ms for a page-sized window against 18.3 ms for a full window at

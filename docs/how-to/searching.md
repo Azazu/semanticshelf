@@ -78,12 +78,14 @@ $ curl -s "http://127.0.0.1:8000/api/v1/search/text?q=a+blue+circle+on+a+white+b
 ```
 
 Results with the same score are ordered by the asset's identifier, so a page is
-fully determined and asking for it again gives the same items in the same
-order. A group of *identical* scores that does not fit on one page is the one
-exception: which of its members each page holds is the index's choice, so
-paging through such a group can repeat or skip one. It takes two different
-pictures whose vectors match to the last bit, which a real model does not
-produce — and the answer is to ask for a page large enough to hold the group.
+never ambiguous about its own arrangement, and asking again for a page whose
+edges do not cut through equal scores gives the same items. A group of
+*identical* scores that does not fit on one page is the exception: which of its
+members a page holds is the index's choice, so paging through such a group can
+repeat or skip one, and repeating the request is not promised to give the same
+members either. It takes two different pictures whose vectors match to the last
+bit, which a real model does not produce — and the answer is to ask for a page
+large enough to hold the group.
 
 `limit + offset` may not exceed 1000. Beyond that the index cannot answer
 accurately at all, so the request is refused rather than answered worse:

@@ -306,13 +306,19 @@ async def test_a_page_holding_a_whole_tie_orders_it_by_identifier(
     assert pages == [by_identifier] * 3
 
 
-async def test_a_page_that_cuts_through_a_tie_is_ordered_and_repeatable(
+async def test_a_page_that_cuts_through_a_tie_is_ordered_and_stable_here(
     session: AsyncSession,
 ) -> None:
     """What is promised when a group of identical scores does not fit on one
-    page: the page is in identifier order and answers the same way every time.
-    Which members of the group reach it is the index's choice — the
-    specification says so, and this holds it to exactly what it says."""
+    page: the page holds whichever members it got, in identifier order. Which
+    ones those are is the index's choice.
+
+    The repetition below is not part of that promise. This engine happens to
+    answer such a page the same way every time, and the assertion records that
+    — a change in it would be worth knowing about — but the specification
+    deliberately does not require it, because nothing makes an approximate
+    index choose the same members twice.
+    """
     assets = AssetRepository(session)
     embeddings = EmbeddingRepository(session)
     same = plane_vector(CLIP_DIM, 0.6, 0.8)
@@ -330,6 +336,6 @@ async def test_a_page_that_cuts_through_a_tie_is_ordered_and_repeatable(
         for _ in range(5)
     ]
 
-    assert pages == [pages[0]] * 5, "the same page answers the same way"
-    assert pages[0] == sorted(pages[0], key=str), "and holds its rows in identifier order"
+    assert pages[0] == sorted(pages[0], key=str), "the contract: identifier order"
     assert set(pages[0]) <= {asset.id for asset in tied}
+    assert pages == [pages[0]] * 5, "this engine, today: the same members each time"

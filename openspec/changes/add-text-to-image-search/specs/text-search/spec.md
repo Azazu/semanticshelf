@@ -64,19 +64,22 @@ query and that asset's vector, where a larger score means a closer match. The
 score SHALL be in the range that cosine similarity allows.
 
 Results SHALL be ordered by score, highest first, and results of equal score
-SHALL be ordered by the asset's identifier, so that a page is fully determined
-and two requests for the same page of an unchanged store return the same items
-in the same order.
+SHALL be ordered by the asset's identifier. Every page the service returns SHALL
+carry that order, so what a page contains is never ambiguous about how it is
+arranged.
 
-A group of results with **identical** scores that does not fit on one page MAY
-be divided between pages arbitrarily: which of them each page holds is the
-index's choice, so paging through such a group MAY show one of its members
-twice or not at all. Each page SHALL still be repeatable — the same page of the
-same query over an unchanged store answers the same way — and a caller who
-needs such a group whole asks for a page large enough to hold it. Identical
-scores mean two different pictures whose vectors match to the last bit, which
-the content hash makes impossible for identical bytes and a real model does not
-otherwise produce.
+Which results a page contains is a different question, and the answer is bounded
+by what an approximate index can promise. For a store that has not changed and
+a page across which no group of identical scores falls, two requests for that
+page SHALL return the same items. Where a group of identical scores does fall
+across a page's boundary, the service SHALL NOT promise which of that group's
+members the page holds: they MAY differ between requests, and paging through
+such a group MAY show one of its members twice or not at all. A caller who needs
+such a group whole asks for a page large enough to hold it.
+
+Identical scores mean two different pictures whose vectors match to the last
+bit — which the content hash makes impossible for identical bytes, and which a
+real model does not otherwise produce.
 
 #### Scenario: What an item says
 - **WHEN** a search returns an asset
@@ -88,9 +91,15 @@ otherwise produce.
   every request for that page
 
 #### Scenario: The same page asked for twice
-- **WHEN** the same page of the same query is requested twice over an unchanged
-  store
+- **WHEN** a page across which no group of identical scores falls is requested
+  twice over an unchanged store
 - **THEN** it holds the same items in the same order
+
+#### Scenario: A page whose edge cuts a group of identical scores
+- **WHEN** a page's boundary falls inside a group of results with identical
+  scores
+- **THEN** whichever of that group the page holds are in identifier order, and
+  the service promises nothing about which of them those are
 
 ### Requirement: A threshold filters the page it is applied to
 
