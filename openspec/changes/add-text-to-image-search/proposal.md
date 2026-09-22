@@ -89,8 +89,10 @@ ranked by the cosine similarity the index was built for.
   ranked and scored, what the envelope says, how a threshold and a page
   interact, and what makes a page too deep.
 - `service-stats`: the operational view of the store — how much is indexed,
-  how much is waiting, how old the oldest waiting work is, and how much disk
-  the pictures take.
+  how much is waiting, how old the oldest waiting work is, and how many bytes
+  the stored originals add up to by the assets' own records (not a measurement
+  of the media root: thumbnails and anything the store does not know about are
+  outside the number).
 
 ### Modified Capabilities
 
