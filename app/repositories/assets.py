@@ -104,6 +104,40 @@ class AssetRepository:
         ).scalar_one_or_none()
         return to_domain(row) if row is not None else None
 
+    async def tag_counts(self, *, limit: int) -> list[tuple[str, int]]:
+        """Every tag in use with the number of assets carrying it.
+
+        One aggregate rather than a walk in Python: the tags live in an array
+        column, so unnesting them is the store's job. Ordered by count, then by
+        the tag itself, so that two tags used equally often keep one order.
+        """
+        tag = sa.func.unnest(AssetRow.tags).label("tag")
+        counted = sa.select(tag, sa.func.count().label("assets")).group_by(tag).subquery()
+        statement = (
+            sa.select(counted.c.tag, counted.c.assets)
+            .order_by(counted.c.assets.desc(), counted.c.tag)
+            .limit(limit)
+        )
+        rows = await self._session.execute(statement)
+        return [(row.tag, int(row.assets)) for row in rows]
+
+    async def summary(self) -> tuple[int, int]:
+        """How many assets are stored, and how many bytes their originals take.
+
+        The bytes are the sizes the assets record, not a walk of the media root:
+        the store knows what it stored, and a directory walk would answer a
+        different question slowly.
+        """
+        row = (
+            await self._session.execute(
+                sa.select(
+                    sa.func.count(AssetRow.id),
+                    sa.func.coalesce(sa.func.sum(AssetRow.size_bytes), 0),
+                )
+            )
+        ).one()
+        return int(row[0]), int(row[1])
+
     async def stored_files(self) -> list[tuple[UUID, str]]:
         """Every asset with the format of its original: what should be on disk."""
         rows = await self._session.execute(sa.select(AssetRow.id, AssetRow.file_ext))

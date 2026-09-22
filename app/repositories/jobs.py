@@ -250,6 +250,32 @@ class IndexingJobRepository:
 
     # --- what the API shows ---------------------------------------------------
 
+    async def counts_by_model_and_status(self) -> list[tuple[str, str, int]]:
+        """How much work exists, per model and state. Derived, never stored."""
+        statement = (
+            sa.select(
+                IndexingJobRow.model,
+                IndexingJobRow.status,
+                sa.func.count().label("jobs"),
+            )
+            .group_by(IndexingJobRow.model, IndexingJobRow.status)
+            .order_by(IndexingJobRow.model, IndexingJobRow.status)
+        )
+        rows = await self._session.execute(statement)
+        return [(model, status, int(jobs)) for model, status, jobs in rows]
+
+    async def oldest_waiting(self) -> datetime | None:
+        """When the oldest piece of work still waiting was created, or nothing.
+
+        "Waiting" is work that has not finished: `pending` because it has not
+        run or is between attempts, and `running` because a runner may have
+        died holding it. Both are work the service still owes.
+        """
+        statement = sa.select(sa.func.min(IndexingJobRow.created_at)).where(
+            IndexingJobRow.status.in_(("pending", "running"))
+        )
+        return (await self._session.execute(statement)).scalar_one_or_none()
+
     async def latest_status(self, asset_id: UUID) -> Mapping[str, str]:
         """The state of the newest job per model: `index_status`, derived."""
         return (await self.latest_status_for([asset_id])).get(asset_id, {})

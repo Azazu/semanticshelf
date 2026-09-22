@@ -24,15 +24,15 @@
 
 ## 4. The two views the UI needs
 
-- [ ] 4.1 `GET /api/v1/tags`: tags in use with their counts, ordered by count then tag, `limit` default 100 and at most 500, 422 beyond it. Verify: integration tests for the order, for a tie broken by the tag, for a tag that disappears when its last asset is deleted, and for the bound.
-- [ ] 4.2 `GET /api/v1/stats`: asset count, work per model and state, the age of the oldest waiting job (absent when nothing waits), and the total stored bytes of the originals (design decision 10). Verify: integration tests for a store with work in every state and for an empty store.
-- [ ] 4.3 Both endpoints are documented in the OpenAPI document with a summary and a description, and `/stats` says in its description that the byte total counts the originals and not the thumbnails. Verify: an api test reads the document.
+- [x] 4.1 `GET /api/v1/tags`: tags in use with their counts, ordered by count then tag, `limit` default 100 and at most 500, 422 beyond it. Verify: integration tests for the order, for a tie broken by the tag, for a tag that disappears when its last asset is deleted, and for the bound.
+- [x] 4.2 `GET /api/v1/stats`: asset count, work per model and state, the age of the oldest waiting job (absent when nothing waits), and the total stored bytes of the originals (design decision 10). Verify: integration tests for a store with work in every state and for an empty store.
+- [x] 4.3 Both endpoints are documented in the OpenAPI document with a summary and a description, and `/stats` says in its description that the byte total counts the originals and not the thumbnails. Verify: an api test reads the document.
 
 ## 5. Evidence that the ranking is right
 
 - [x] 5.1 The order a search returns is asserted exactly, not approximately: with the fake embedder's deterministic vectors, a fixture of assets has one known correct ranking. Verify: an integration test asserts the full order of a page, and the next page's.
 - [x] 5.2 Model isolation at the endpoint: an asset with a vector under another model only does not appear. Verify: an integration test with vectors under two models.
-- [ ] 5.3 A real-model smoke test (`-m models`, never in CI): a handful of pictures indexed with real CLIP, and a query in words that describes one of them ranks it first. Verify: `uv run pytest -m models` output recorded in the commit body.
+- [x] 5.3 A real-model smoke test (`-m models`, never in CI): a handful of pictures indexed with real CLIP, and a query in words that describes one of them ranks it first. Verify: `uv run pytest -m models` output recorded in the commit body.
 - [x] 5.4 `SET LOCAL hnsw.ef_search` is in effect for the query rather than merely sent. Verify: an integration test reads `current_setting('hnsw.ef_search')` inside the search's transaction and asserts the value the request implies.
 
 ## 6. Documentation
