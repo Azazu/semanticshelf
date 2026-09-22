@@ -99,7 +99,7 @@ Requirement ids (`FR-<AREA>-<n>`) are stable references for specs, tasks and tes
 
 - **FR-TXT-1** `GET /api/v1/search/text?q=<text>&limit&offset&min_score&tags_all&tags_any` embeds `q` with the CLIP text tower and returns the nearest assets by cosine similarity of the `clip-vit-l14` image embeddings.
 - **FR-TXT-2** `q` is required, 1–256 characters after trimming; CLIP truncates at its context length (77 tokens) and the response states `query_truncated: true` when that happened.
-- **FR-TXT-3** Result item: `{asset: <FR-AST-8>, score: float}` with `score = 1 − cosine_distance` ∈ [−1, 1]; items are ordered by score desc, `asset.id` asc for ties. Only assets whose `clip-vit-l14` job is `done` can appear.
+- **FR-TXT-3** Result item: `{asset: <FR-AST-8>, score: float}` with `score = 1 − cosine_distance` ∈ [−1, 1]; items are ordered by score desc, `asset.id` asc for ties. Only assets that have a `clip-vit-l14` vector can appear — corrected in change 8 from "whose job is `done`", because a `reindex` puts the work back while the vector stays, and hiding the asset until that work runs would take it out of search for no gain; the vector it has answers until a new one replaces it.
 - **FR-TXT-4** The response is `{items, limit, offset, has_more, model: "clip-vit-l14", query_truncated}`; `has_more` is computed by fetching `limit + 1` candidates. No total (§4).
 - **FR-TXT-5** The query is English: CLIP ViT-L/14 was trained on English captions and other languages degrade to near-random ranking. The API does not translate; the README says so; a multilingual encoder is a stretch change (§9, D13).
 

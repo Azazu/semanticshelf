@@ -24,6 +24,7 @@ file next to `pyproject.toml` (the environment wins). Source of truth:
 | `MAX_IMAGE_PIXELS` | no | `40000000` | API | Width × height, refused above this from the picture's header before a pixel is allocated. |
 | `MIN_IMAGE_SIDE` | no | `32` | API | The shorter side a picture must have to be worth indexing. |
 | `PRUNE_MIN_AGE_SECONDS` | no | `3600` | CLI | `storage prune` ignores files younger than this. A margin, not the guarantee: an upload in flight is protected by an advisory lock. |
+| `HNSW_EF_SEARCH` | no | `40` | API | How hard the vector index looks for each search. Every search raises it for its own transaction to at least the depth the page asks for (`limit + offset`), so a deep page is not quietly ranked worse than a shallow one; 1000 is pgvector's own maximum and therefore the deepest page the service will answer. |
 | `JOB_LEASE_SECONDS` | no | `600` | API, worker | How long a claim on an indexing job is good for. Nothing refreshes it: a runner that dies releases its work when this expires, and another may then claim it. Raise it for a model slow enough that work would otherwise outlive the lease. |
 | `JOB_MAX_ATTEMPTS` | no | `3` | API, worker | How many attempts a job gets before it is `failed` for good. Between attempts it waits `2^attempts × 10 s`. A `failed` job runs again only through `POST /assets/{id}/reindex`. |
 | `WORKER_BATCH_SIZE` | no | `4` | API, worker | How many jobs one run of a runner claims. The runner inside the API process takes at most this many after a response and stops; a runner that drained while work remained would never end. |
@@ -51,6 +52,7 @@ PRUNE_MIN_AGE_SECONDS=3600
 JOB_LEASE_SECONDS=600
 JOB_MAX_ATTEMPTS=3
 WORKER_BATCH_SIZE=4
+HNSW_EF_SEARCH=40
 ```
 
 What the model settings mean in practice — the download, warm-up and
@@ -58,7 +60,8 @@ running offline — is in [`../how-to/models.md`](../how-to/models.md); what the
 media settings mean when a picture arrives is in
 [`../how-to/uploading.md`](../how-to/uploading.md); what the indexing
 settings mean once it is stored is in
-[`../how-to/indexing.md`](../how-to/indexing.md).
+[`../how-to/indexing.md`](../how-to/indexing.md); what the search setting means
+when a query arrives is in [`../how-to/searching.md`](../how-to/searching.md).
 
 `<DB_USER>`, `<DB_PASSWORD>` and `<DB_NAME>` are the values of the
 Compose variables in the same file. `APP_PORT` is read by `make run` only

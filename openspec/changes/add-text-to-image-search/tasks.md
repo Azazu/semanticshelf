@@ -37,10 +37,10 @@
 
 ## 6. Documentation
 
-- [ ] 6.1 Write `docs/how-to/searching.md`: the query, the envelope, the score and what it means, `min_score`, paging and the depth bound, what is not yet filterable (change 12), and the English-only caveat of FR-TXT-5. Verify: every command run in its exact form, output pasted from the run, the file re-read whole afterwards.
-- [ ] 6.2 Extend `docs/reference/settings.md` with `HNSW_EF_SEARCH` and `docs/reference/commands.md` if the endpoints add any. Verify: both re-read whole.
-- [ ] 6.3 Amend FR-TXT-3 in `docs/explanation/requirements.md`: an asset is searchable while it has a vector, not while its job reads `done`, because a reset leaves the vector in place (proposal). Verify: `rg "job is \`done\`" docs/` shows no surviving claim to the contrary.
-- [ ] 6.4 The docs index lists the new how-to, and `docs/README.md` is re-read whole. Verify: the link resolves.
+- [x] 6.1 Write `docs/how-to/searching.md`: the query, the envelope, the score and what it means, `min_score`, paging and the depth bound, what is not yet filterable (change 12), and the English-only caveat of FR-TXT-5. Verify: every command run in its exact form, output pasted from the run, the file re-read whole afterwards.
+- [x] 6.2 Extend `docs/reference/settings.md` with `HNSW_EF_SEARCH` and `docs/reference/commands.md` if the endpoints add any. Verify: both re-read whole.
+- [x] 6.3 Amend FR-TXT-3 in `docs/explanation/requirements.md`: an asset is searchable while it has a vector, not while its job reads `done`, because a reset leaves the vector in place (proposal). Verify: `rg "job is \`done\`" docs/` shows no surviving claim to the contrary.
+- [x] 6.4 The docs index lists the new how-to, and `docs/README.md` is re-read whole. Verify: the link resolves.
 
 ## 7. Wrap-up
 
