@@ -40,32 +40,27 @@ behavior changed.
 
 ## Next step
 
-Gate 1 again, on the contract rather than on the code. Confirmation 3 refused
-round 1 a third time and made two points: the rarity argument was false
-(distinct vectors can share a cosine distance exactly — demonstrated), and the
-revised promise is a requirements change that belongs at Gate 1. The first is
-fixed in `ec44d6a`; the second the user arbitrated on 2026-09-22 — reopen
-Gate 1.
+Gate 1 round 1 returned two blockers and two majors, all fixed in `28feebe`:
+the storage delta now carries the same bounded tie guarantee as the search
+contract; the page bound and the `has_more` sentinel are one rule
+(`MAX_PAGE_DEPTH = MAX_SEARCH_EFFORT - 1`, so a page reaches 999) with a unit
+test that fails when the bound is raised back; `/stats` is described one way
+everywhere (the recorded sizes of the originals); and all three new operations
+carry an OpenAPI example that the suite parses with its own model. FR-FLT-4,
+FR-FLT-5 and the roadmap were amended with them.
 
-What Gate 1 now reviews: `specs/text-search/spec.md` promises a total order on
-every page and no more, and design decision 7 carries the measurement behind
-it. On a probe of 10 000 random unit vectors plus five distinct unit vectors at
-one exact distance, forced onto the index and asked for a thousand rows, HNSW
-returned 1 of the 5 tied rows at `ef_search = 40` and all 5 at 100 and 1000.
-The search effort decides which equally distant rows exist to be ordered, the
-window cannot, and `ef_search` is a heuristic — so a global tie-break on the
-identifier is not available short of an exact scan.
+Run: `/gate-review add-text-to-image-search 1 confirm 1`. After Gate 1 settles,
+Gate 2 needs a fresh round rather than a confirmation of its round 1 — the code
+changed here (the depth bound, three examples), so the user pushes and reports
+CI first.
 
-Run: `/gate-review add-text-to-image-search 1`. Gate 2 confirmation of round 1
-follows once Gate 1 settles the contract.
-
-Local evidence: `make check` green (307 tests), `openspec validate --all
---strict`, both `scripts/*_test.sh`, `sh -n` over `scripts/*.sh`.
+Local evidence: `make check` green (314 tests), `openspec validate --all
+--strict`, both `scripts/*_test.sh`, `sh -n` over `scripts/*.sh`. The how-to's
+refusal example was re-captured from a running service.
 
 ## Blockers
 
 The repository-root settings file the integration suite reads is absent on this
 machine (only the example beside it remains), so `make test-integration` skips
-all 183 tests instead of running them. It was present earlier in this change —
-its last green run covered the statement this round only documents. Restoring
-it is the user's action; nothing in this round touches SQL.
+all 183 tests instead of running them. The container is up on port 5434. This
+round changed no SQL, but the suite has to run green before Gate 2.
