@@ -1,7 +1,7 @@
 # Handoff — add-text-to-image-search
 
 **Updated:** 2026-09-22 · claude
-**State:** awaiting-gate-2
+**State:** awaiting-gate-1
 **Branch:** change/add-text-to-image-search
 
 ## Done this session
@@ -40,9 +40,24 @@ behavior changed.
 
 ## Next step
 
-Third confirmation of round 1: `/gate-review add-text-to-image-search 2
-confirm 1`. The user arbitrated after the second failure (protocol: stop, do
-not loop) and chose the fix plus one more confirmation.
+Gate 1 again, on the contract rather than on the code. Confirmation 3 refused
+round 1 a third time and made two points: the rarity argument was false
+(distinct vectors can share a cosine distance exactly — demonstrated), and the
+revised promise is a requirements change that belongs at Gate 1. The first is
+fixed in `ec44d6a`; the second the user arbitrated on 2026-09-22 — reopen
+Gate 1.
+
+What Gate 1 now reviews: `specs/text-search/spec.md` promises a total order on
+every page and no more, and design decision 7 carries the measurement behind
+it. On a probe of 10 000 random unit vectors plus five distinct unit vectors at
+one exact distance, forced onto the index and asked for a thousand rows, HNSW
+returned 1 of the 5 tied rows at `ef_search = 40` and all 5 at 100 and 1000.
+The search effort decides which equally distant rows exist to be ordered, the
+window cannot, and `ef_search` is a heuristic — so a global tie-break on the
+identifier is not available short of an exact scan.
+
+Run: `/gate-review add-text-to-image-search 1`. Gate 2 confirmation of round 1
+follows once Gate 1 settles the contract.
 
 Local evidence: `make check` green (307 tests), `openspec validate --all
 --strict`, both `scripts/*_test.sh`, `sh -n` over `scripts/*.sh`.
