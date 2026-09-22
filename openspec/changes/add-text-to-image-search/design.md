@@ -81,16 +81,36 @@ names the one it used rather than taking a choice.
    reason about, and the model key beside it because the number means nothing
    without it.
 
-7. **Ties are broken by the identifier — outside the ordered select, not in
-   it.** The first attempt was `ORDER BY distance, asset_id`, and the
-   plan-reading test refused it immediately: an HNSW ordering takes exactly one
-   key, and a second turns the index scan into a sort over a bitmap scan. So
-   the inner select orders by distance alone (the shape the index answers) and
-   the outer one orders the page it returned by distance and then identifier.
-   Two equally near assets therefore keep one order between requests for the
-   same page; a tie that straddles a page boundary is still the index's to
-   resolve, which is the same caveat pagination over an approximate index
-   carries anyway.
+7. **The page is cut after the order is total, and the window is the page's
+   own size.** This decision took three shapes, and the last two are worth
+   keeping written down.
+
+   `ORDER BY distance, asset_id` inside the ordered select was the first, and
+   the plan-reading test refused it at once: an HNSW ordering takes exactly one
+   key, and a second turns the index scan into a sort over a bitmap scan.
+
+   Cutting the page in that select and ordering afterwards was the second, and
+   Gate 2 refused it: the index then chooses which of several equally distant
+   rows the page contains, and the identifier can only sort what it was handed.
+   So there are three layers now — a window the index answers (`ORDER BY
+   distance`, `LIMIT offset + limit`), the page cut from it once the order is
+   total (`ORDER BY distance, asset_id`, then `OFFSET`/`LIMIT`), and the
+   threshold outside that.
+
+   What remains, and is now stated rather than implied: which equally distant
+   rows enter the window at all is the index's choice. Measured on five assets
+   sharing one vector, paged two at a time, the three pages repeated one member
+   and skipped another — while each page on its own answered identically five
+   times over. So the guarantee is per page, not across them.
+   Closing that too would mean taking the whole searchable depth as the window
+   for every query, which was measured on 10 000 vectors before the choice was
+   made: **0.2 ms for a page-sized window against 18.3 ms for a full window at
+   `ef_search = 1000`**, ninety times the cost on every search including the
+   first page of twenty. The cost is permanent; the case it buys needs two
+   *different* pictures whose vectors match to the last bit, which the content
+   hash makes impossible for identical bytes and a real model does not produce
+   otherwise. So: the page is exact and repeatable, its edge belongs to the
+   index, and the specification says so.
 
 8. **Three bounded queries per search, and no N+1.** The vector query returns
    the page's asset identifiers and their distances; one query fetches those

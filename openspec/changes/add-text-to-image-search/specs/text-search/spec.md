@@ -63,18 +63,34 @@ endpoint returns it, and a score derived from the cosine distance between the
 query and that asset's vector, where a larger score means a closer match. The
 score SHALL be in the range that cosine similarity allows.
 
-Results SHALL be ordered by score, highest first, and ties SHALL be broken by
-the asset's identifier, so that two requests for the same page of an unchanged
-store return the same items in the same order.
+Results SHALL be ordered by score, highest first, and results of equal score
+SHALL be ordered by the asset's identifier, so that a page is fully determined
+and two requests for the same page of an unchanged store return the same items
+in the same order.
+
+A group of results with **identical** scores that does not fit on one page MAY
+be divided between pages arbitrarily: which of them each page holds is the
+index's choice, so paging through such a group MAY show one of its members
+twice or not at all. Each page SHALL still be repeatable — the same page of the
+same query over an unchanged store answers the same way — and a caller who
+needs such a group whole asks for a page large enough to hold it. Identical
+scores mean two different pictures whose vectors match to the last bit, which
+the content hash makes impossible for identical bytes and a real model does not
+otherwise produce.
 
 #### Scenario: What an item says
 - **WHEN** a search returns an asset
 - **THEN** the item carries that asset's representation and its score
 
 #### Scenario: Two assets with the same score
-- **WHEN** two assets are equally near the query
+- **WHEN** two assets are equally near the query and both fall on one page
 - **THEN** their order is decided by their identifiers, and is the same in
   every request for that page
+
+#### Scenario: The same page asked for twice
+- **WHEN** the same page of the same query is requested twice over an unchanged
+  store
+- **THEN** it holds the same items in the same order
 
 ### Requirement: A threshold filters the page it is applied to
 

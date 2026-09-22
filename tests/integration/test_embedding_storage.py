@@ -281,3 +281,55 @@ async def test_the_index_answers_a_page_with_a_threshold(session: AsyncSession) 
 
     assert vector_index_name(CLIP) in plan, plan
     assert "Seq Scan on embeddings" not in plan, plan
+
+
+async def test_a_page_holding_a_whole_tie_orders_it_by_identifier(
+    session: AsyncSession,
+) -> None:
+    """What the page guarantees: once the equally distant rows are on it, the
+    identifier decides their order, and the same page answers the same way."""
+    assets = AssetRepository(session)
+    embeddings = EmbeddingRepository(session)
+    same = plane_vector(CLIP_DIM, 0.6, 0.8)
+    tied = [await add_asset(assets, f"{letter * 64}") for letter in "abc"]
+    for asset in tied:
+        await embeddings.upsert(asset_id=asset.id, model=CLIP, vector=same)
+    await session.flush()
+    by_identifier = sorted([asset.id for asset in tied], key=str)
+    query = plane_vector(CLIP_DIM, 1.0, 0.0)
+
+    pages = [
+        [hit.asset_id for hit in await embeddings.nearest(model=CLIP, vector=query, limit=3)]
+        for _ in range(3)
+    ]
+
+    assert pages == [by_identifier] * 3
+
+
+async def test_a_page_that_cuts_through_a_tie_is_ordered_and_repeatable(
+    session: AsyncSession,
+) -> None:
+    """What is promised when a group of identical scores does not fit on one
+    page: the page is in identifier order and answers the same way every time.
+    Which members of the group reach it is the index's choice — the
+    specification says so, and this holds it to exactly what it says."""
+    assets = AssetRepository(session)
+    embeddings = EmbeddingRepository(session)
+    same = plane_vector(CLIP_DIM, 0.6, 0.8)
+    tied = [await add_asset(assets, f"{letter * 64}") for letter in "abcde"]
+    for asset in tied:
+        await embeddings.upsert(asset_id=asset.id, model=CLIP, vector=same)
+    await session.flush()
+    query = plane_vector(CLIP_DIM, 1.0, 0.0)
+
+    pages = [
+        [
+            hit.asset_id
+            for hit in await embeddings.nearest(model=CLIP, vector=query, limit=2, offset=2)
+        ]
+        for _ in range(5)
+    ]
+
+    assert pages == [pages[0]] * 5, "the same page answers the same way"
+    assert pages[0] == sorted(pages[0], key=str), "and holds its rows in identifier order"
+    assert set(pages[0]) <= {asset.id for asset in tied}

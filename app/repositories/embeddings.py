@@ -102,29 +102,42 @@ class EmbeddingRepository:
     ) -> sa.Select[Any]:
         """The statement `nearest()` runs. Exposed so a test can read its plan.
 
-        Two selects, and each shape is deliberate.
+        Three selects, and each layer exists for a reason.
 
-        The inner one is what the index answers: the cast ADR-001 requires, the
-        model predicate, `ORDER BY distance` — **one** key, because an HNSW
-        ordering takes exactly one and a second turns the index scan into a
-        sort over a bitmap scan, which the plan-reading test caught the moment
-        it was tried — and the page's own limit and offset.
+        **The window** is what the index answers: the cast ADR-001 requires, the
+        model predicate, and `ORDER BY distance` — **one** key, because an HNSW
+        ordering takes exactly one and a second turns the index scan into a sort
+        over a bitmap scan. It takes everything up to the end of the page that
+        was asked for, not the page itself.
 
-        The outer one works on the page the inner select returned, and does two
-        things the index cannot. It breaks ties by identifier, so two equally
-        near assets keep one order between requests. And it drops results
-        beyond a maximum distance, without refilling the page from further down
-        the ranking — which is what a threshold applied after ranking means; a
-        predicate on the distance *inside* the ordered select would instead
-        make this a filtered vector search, a different problem with a
-        different plan and a measurement of its own (change 12).
+        **The page** is cut from that window *after* the order is total:
+        `ORDER BY distance, asset_id`, then the offset and the limit. Cutting
+        first and ordering afterwards — which is what this did until Gate 2 —
+        lets the index choose arbitrarily among equally distant rows, so a tie
+        that straddles a page boundary can swap, duplicate or lose assets
+        between two requests. Ordering first makes the identifier the tie-break
+        for the whole ranking rather than for whatever happened to land on one
+        page.
+
+        **The threshold** is outside the page, so it removes results the page
+        already holds instead of reaching further down for replacements — which
+        is what a threshold applied after ranking means. A predicate on the
+        distance inside the window would instead make this a filtered vector
+        search: a different problem, with a different plan and a measurement of
+        its own (change 12).
         """
         dimension = checked_dimension(model, vector)
         distance = sa.cast(EmbeddingRow.vector, Vector(dimension)).cosine_distance(list(vector))
-        page = (
+        window = (
             sa.select(EmbeddingRow.asset_id, distance.label("distance"))
             .where(EmbeddingRow.model == model)
             .order_by(distance)
+            .limit(limit + offset)
+            .subquery("window")
+        )
+        page = (
+            sa.select(window.c.asset_id, window.c.distance)
+            .order_by(window.c.distance, window.c.asset_id)
             .limit(limit)
             .offset(offset)
             .subquery("page")
