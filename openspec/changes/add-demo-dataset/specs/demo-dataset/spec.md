@@ -165,32 +165,37 @@ the operator named.
 - **THEN** no file is written outside the target directory, and the picture is
   stored under a name the command derived itself
 
-### Requirement: A file appears whole, or does not appear
+### Requirement: A picture and its sidecar appear together or not at all
 
-Every file the commands write — the archive, a picture, a picture's sidecar —
-SHALL be written under a name unique to the run that is writing it and SHALL be
-moved into its final name only once it is complete. A run that dies SHALL NOT
-be able to leave a file under a final name that a later run would treat as
-finished.
+A picture and the sidecar describing it SHALL be published as one unit: both
+SHALL be written where no other run can see them, and SHALL become visible in
+the corpus in a single step that either succeeds for both or changes nothing. A
+picture SHALL NOT be able to appear in the corpus beside a sidecar written by a
+different run, and neither SHALL appear without the other.
 
-What a dead run may leave SHALL be exactly two things, and both SHALL be
-recoverable without operator action: a staging file, which no later run reads
-because every run stages under its own name; and a sidecar whose picture never
-arrived, which nothing imports because only a picture is a candidate for
-import, and which the next run for that picture overwrites.
+A run that dies SHALL NOT be able to leave either of them in the corpus. What it
+may leave is its own unpublished staging, which no other run reads, because
+every run stages where only it writes; removing such leftovers SHALL be safe at
+any time and SHALL NOT be required for a later run to succeed.
 
-Two runs writing into one directory SHALL NOT be able to produce a file that is
-part of one run and part of another: each stages under its own name, and the
-final name receives one complete file or another, never a mixture.
+Where a picture is already published, a second run SHALL leave the published
+pair exactly as it is and SHALL report the picture as already present, rather
+than replacing either half of it.
+
+The archive SHALL be published the same way: staged where no other run reads it
+and moved into place only once complete.
 
 #### Scenario: A run that dies while fetching
 - **WHEN** a download is killed while a picture is being fetched
-- **THEN** no picture exists under a final name for it, and a later run fetches
-  that picture and writes both its files
+- **THEN** neither that picture nor its sidecar is in the corpus, and a later
+  run fetches that picture and publishes both
 
-#### Scenario: Two runs into one directory
-- **WHEN** two downloads run into the same directory at the same time
-- **THEN** every picture that appears is complete and matches its sidecar, and
+#### Scenario: Two runs racing on one picture
+- **WHEN** two downloads fetch the same picture into the same directory at the
+  same time, and the two runs would write different bytes and different
+  sidecars for it
+- **THEN** the corpus holds one picture with the sidecar of the run that
+  published it — never one run's picture beside the other run's sidecar — and
   neither run fails because of the other
 
 ### Requirement: Both commands may be run again

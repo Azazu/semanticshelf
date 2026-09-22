@@ -102,28 +102,46 @@ is already there".
    costs nothing. 241 MiB is the price of a manifest that carries per-picture
    licences, and the documentation says so.
 
-5. **A file appears whole or not at all, and every run stages under its own
-   name.** The bytes are streamed to `<final name>.<pid>-<random>.part` in the
-   target directory, abandoned if the response passes `MAX_UPLOAD_BYTES`,
-   decoded through the same inspection an upload uses, and only then renamed to
-   `<image id>.<extension of the detected format>`. The staging name carries
-   the process id and a random suffix, so two runs in one directory never write
-   the same staging file and a `rename` can never publish a mixture; the final
-   name may be clobbered, which is harmless because both runs fetched the same
-   bytes from the same identifier. The sidecar is published the same way, and
-   before the picture, so a picture in the directory always has its sidecar.
+5. **The unit of publication is the pair, and the pair is published by one
+   rename of a directory.** The first confirmation of Gate 1 killed the earlier
+   scheme: per-run staging names stop two runs from mixing bytes inside one
+   file, but they do not stop `sidecar A, sidecar B, picture B, picture A` from
+   leaving picture A beside sidecar B, and "both runs fetched the same bytes"
+   was an assumption with no mechanism under it.
+
+   So a picture and its sidecar are written into a staging directory
+   `<into>/.staging/<id>.<pid>-<random>/` as `<id>.<ext>` and `<id>.json`, and
+   published by `os.rename` of that directory to `<into>/pictures/<id>/`. A
+   directory rename is atomic and moves both files at once, so the corpus never
+   holds one run's picture beside another run's sidecar. If the target already
+   exists the rename fails (`ENOTEMPTY`), the staging directory is removed, and
+   the picture is counted as already present: the first publisher wins and its
+   pair stays intact.
+
+   The layout under `--into` is therefore three things: `pictures/` — the
+   corpus, one directory per picture; `.staging/` — where runs build pairs; and
+   the archive beside them. `demo-dataset index` imports `pictures/`
+   recursively, so neither a staging directory nor the archive is ever a
+   candidate for import, and the sidecar rule is unchanged: the sidecar lies
+   beside its picture.
+
+   A picture is streamed to `<staging dir>/<id>.<ext>.part`, abandoned if the
+   response passes `MAX_UPLOAD_BYTES`, decoded through the same inspection an
+   upload uses, and renamed inside its own staging directory; nothing of it is
+   ever visible in the corpus until the directory rename. The archive is
+   staged and renamed the same way, as a file.
+   What a killed run leaves is exactly one thing: its own staging directory,
+   which no other run reads, which no later run needs removed, and which the
+   operator may delete at any time.
    The manifest's `file_name` is parsed for nothing but a sanity check that it
    matches the identifier; it never becomes a path.
-   What a killed run can leave, and why neither needs an operator: a `.part`
-   file, which no later run reads because every run stages under its own name
-   and which the operator may delete at any time; and a sidecar whose picture
-   never arrived, which nothing imports (only a picture is a candidate) and
-   which the next run for that picture overwrites. The applicability table says
-   the same in one line.
-   Rejected: writing straight to the final name and deleting on failure — a
-   crash between the two leaves a truncated file that the next run would see as
-   done. Rejected: one staging name per file rather than per run — two
-   concurrent runs would then write the same staging file.
+
+   Rejected: flat `<into>/<id>.jpg` plus `<into>/<id>.json` with per-run
+   staging names — the interleaving above. Rejected: making the sidecar carry
+   the picture's content hash and having the import verify it — that would put
+   a demo corpus's rule into the general folder import, which any folder with
+   sidecars would then have to satisfy. Rejected: a lock file — a rename is
+   already atomic, and a lock adds a failure mode of its own.
 
 6. **A label is not a tag, so this change states the conversion.** COCO gives
    each picture zero or more annotations, each naming a category ("traffic
@@ -198,8 +216,8 @@ is already there".
 
 | Question | Answer |
 |---|---|
-| Crash around an external effect | Every file is streamed to `<name>.<pid>-<random>.part` and renamed into place only once complete, the sidecar before its picture. A crash therefore leaves no picture under a final name, and exactly two recoverable leftovers: a `.part` file no later run reads, and possibly a sidecar whose picture never arrived, which nothing imports and the next run overwrites. NOT guaranteed: that the directory is free of leftovers — only that no leftover is mistaken for a finished download. |
-| Concurrent writers | The staging name carries the writer's process id and a random suffix, so two downloads into one directory never write the same staging file and no final name can receive a mixture; a final name may be clobbered by the second writer with identical bytes, since both fetched the same identifier from the same host. Two indexing runs are safe because the duplicate rule is the content hash. NOT guaranteed: that concurrent runs do not duplicate work, or that a `.part` of a killed run is cleaned up by another run. |
+| Crash around an external effect | A picture and its sidecar are built inside a staging directory only that run writes, and enter the corpus by one `rename` of that directory. A crash therefore adds nothing to the corpus and leaves exactly one leftover: that staging directory, which no other run reads and no later run needs removed. NOT guaranteed: that the staging area is empty after a crash — only that nothing half-finished is ever in the corpus. |
+| Concurrent writers | Two downloads publish by renaming their own directories: the corpus receives one run's pair whole, and the second rename fails on the existing directory, is counted as already present, and leaves the published pair untouched. A picture beside another run's sidecar is therefore impossible rather than unlikely. Two indexing runs are safe because the duplicate rule is the content hash. NOT guaranteed: that concurrent runs do not fetch the same picture twice, or that a dead run's staging directory is cleaned up by another run. |
 | Empty / zero / null inputs | `--count 0` writes nothing and still prints the notice; a manifest whose permissive pictures are fewer than the count writes what there is and says so; indexing an empty or missing directory reports it rather than failing. |
 | Deletion / expiry | The commands never delete: `--into` is written to, never cleaned. A picture that vanishes from the dataset is a per-picture failure, counted, and the run continues. |
 | Idempotent retries | A retried download skips every picture already present; a retried index creates no second asset because the pipeline dedupes on the content hash. Both are safe to run any number of times. |

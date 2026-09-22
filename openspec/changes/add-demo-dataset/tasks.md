@@ -77,19 +77,25 @@ check is removed, and that failure is demonstrated before the task is ticked.
   inside the target directory under the identifier-derived name and that
   nothing exists outside it. Demonstrated failing input: using `file_name` for
   the output path makes the test fail on a file outside the directory.
-- [ ] 3.4 Staging and publication: every file is written as
-  `<final>.<pid>-<random>.part` and renamed once complete, the sidecar before
-  its picture (design decision 5). Verify: unit tests assert the staging name
-  carries the process id, that a failure between the two steps leaves no
-  picture under a final name, and that a second run then writes both files.
-  Demonstrated failing input: writing straight to the final name leaves a
-  truncated picture that the skip rule would treat as finished.
-- [ ] 3.5 The concurrency claim of the applicability table, tested rather than
-  asserted: two downloads writing the same pictures into one directory. Verify:
-  a unit test runs two downloads against the same target with a transport that
-  serves the same bytes, and asserts every final file is complete, every
-  picture has its sidecar, neither run raised, and no `.part` file is left
-  behind by a run that finished.
+- [ ] 3.4 Publication is one rename of a directory: the picture and its sidecar
+  are built in `<into>/.staging/<id>.<pid>-<random>/` and the whole directory is
+  renamed to `<into>/pictures/<id>/`; a target that already exists makes the
+  rename fail,
+  the staging directory is removed and the picture is counted as already
+  present (design decision 5). Verify: unit tests assert that nothing is in the
+  corpus before the rename, that a failure anywhere before it leaves the corpus
+  untouched and only a staging directory behind, and that publishing over an
+  existing directory leaves that directory byte-identical.
+- [ ] 3.5 The concurrency claim, demonstrated with **distinguishable** runs
+  rather than assumed: two downloads fetch the same picture into one directory
+  through transports that serve different bytes and different labels for it.
+  Verify: a unit test interleaves the two runs' publications and asserts the
+  corpus holds exactly one pair, that the picture and the sidecar come from the
+  same run (the sidecar's tags match the bytes that run served), that neither
+  run raised, and that the loser reported the picture as already present.
+  Demonstrated failing input: publishing the two files separately, sidecar
+  first, makes this test pair one run's picture with the other's sidecar — the
+  interleaving the first Gate 1 confirmation named.
 - [ ] 3.6 Bounds and repetition: `--count` honoured and defaulted to 500,
   `--count 0` writing nothing but still printing the notice, a picture already
   present skipped without a request, and a per-picture failure counted without
@@ -135,10 +141,13 @@ check is removed, and that failure is demonstrated before the task is ticked.
   `uv run semanticshelf demo-dataset download --help` shows the options in the
   form the documentation uses.
 - [ ] 5.2 `demo-dataset index [--into .data/demo]`: runs the folder import over
-  the directory, so the corpus enters the store through the ordinary pipeline
-  and its queued work is finished when the command returns. Verify: an
-  integration test imports a small prepared directory with sidecars and asserts
-  the assets, their provenance and that no job is left waiting.
+  `<into>/pictures` **with the recursive option**, because the corpus is one
+  directory per picture (design decision 5), so the corpus enters the store
+  through the ordinary pipeline and its queued work is finished when the
+  command returns. Verify: an integration test imports a small prepared corpus
+  of per-picture directories with sidecars and asserts the assets, their
+  provenance, that the staging area is not imported, and that no job is left
+  waiting.
 - [ ] 5.3 A corpus picture whose bytes are already stored creates no second
   asset and changes nothing on the existing one (design decision 10). Verify:
   an integration test stores a picture first — once by upload and once by an
@@ -153,7 +162,8 @@ check is removed, and that failure is demonstrated before the task is ticked.
 - [ ] 6.1 `docs/reference/demo-dataset.md`: the dataset, the eight licences and
   which four are accepted, why NoDerivs is not, the label-to-tag conversion,
   the provenance keys written per asset, how attribution is given, the download
-  sizes and bounds, and the exact commands. Verify: every command in it was run
+  sizes and bounds, the layout the corpus has on disk (one directory per
+  picture, and why), and the exact commands. Verify: every command in it was run
   in the form shown and its output pasted from that run.
 - [ ] 6.2 `docs/explanation/requirements.md`: FR-CLI-3 records the chosen
   dataset and the licence filter; §7's row 9 carries the tier this change

@@ -33,32 +33,23 @@ Two things the planning found by checking rather than assuming:
 
 ## Next step
 
-Gate 1 round 1 returned six findings — two blockers, three majors, one minor —
-and all six were real. Fixed:
+Confirmation 1 of Gate 1 confirmed four findings and refused the fifth, with a
+concrete interleaving: per-run staging names stop two runs from mixing bytes
+inside one file, but `sidecar A, sidecar B, picture B, picture A` still leaves
+one run's picture beside the other run's sidecar, and "both runs fetched the
+same bytes" was an assumption with no mechanism under it.
 
-1. The 241 MiB archive was bounded by the picture's 20 MiB, which is
-   impossible. Two bounds now: `MAX_UPLOAD_BYTES` for a picture,
-   `ARCHIVE_MAX_BYTES` for the archive, `MEMBER_MAX_BYTES` for the member; an
-   archive failure is fatal where a picture failure is counted, and the
-   staging file is removed either way.
-2. The sidecar was to be read by path, which would have reopened every hole
-   change 7 closed. It is opened relative to the walk's directory descriptor
-   with `O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC` and judged by `fstat`, with
-   failing inputs for a symlink sidecar and one swapped after the picture was
-   listed.
-3. `traffic light` → `traffic-light` is not FR-TAG-1 normalisation — that rule
-   rejects a space rather than slugifying it. The conversion is now this
-   change's own, stated in the spec and the design, and the normalisation is
-   left alone.
-4. "A demo asset beside an imported one" cannot exist: the content hash makes
-   one asset. The spec now says what actually happens — the existing asset is
-   reported and left untouched, and the demo provenance lands only on assets
-   this import creates.
-5. The applicability table claimed more than the mechanism gave. It now names
-   the staging scheme (`<final>.<pid>-<random>.part`), the two recoverable
-   leftovers, and what is NOT guaranteed, with a concurrency test for the claim
-   that remains.
-6. Task 2.1 said "passes the bound" where the rule is "exceeds".
+The mechanism is now the pair rather than the file: a picture and its sidecar
+are built in `<into>/.staging/<id>.<pid>-<random>/` and published by one
+`os.rename` of that directory to `<into>/pictures/<id>/`. A directory rename
+moves both files at once, so the mismatched pair is impossible rather than
+unlikely; a target that exists makes the rename fail, the staging directory is
+removed and the picture is reported as already present. The layout under
+`--into` is `pictures/`, `.staging/` and the archive, and `demo-dataset index`
+imports `pictures/` recursively, so neither the staging area nor the archive is
+ever a candidate for import. The concurrency test now serves **different** bytes
+and labels from the two runs, so it demonstrates the guarantee instead of
+assuming it.
 
 Run: `/gate-review add-demo-dataset 1 confirm 1`.
 
