@@ -49,7 +49,7 @@ everywhere (the recorded sizes of the originals); and all three new operations
 carry an OpenAPI example that the suite parses with its own model. FR-FLT-4,
 FR-FLT-5 and the roadmap were amended with them.
 
-Run: `/gate-review add-text-to-image-search 1 confirm 1`. After Gate 1 settles,
+Run: `/gate-review add-text-to-image-search 1 confirm 1` (second confirmation: the first confirmed findings 1, 2 and 4 and kept 3 open on one surviving phrase in the capability list, fixed in the commit above). After Gate 1 settles,
 Gate 2 needs a fresh round rather than a confirmation of its round 1 — the code
 changed here (the depth bound, three examples), so the user pushes and reports
 CI first.
