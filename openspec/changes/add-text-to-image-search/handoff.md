@@ -31,19 +31,17 @@ Three things the work corrected, each in the commit body that carries it:
 
 ## Next step
 
-Gate 2 round 1 found one `major`, and it was right: the page was cut before the
-order was total, so the index chose which equally distant rows it held. Fixed
-on `90eb37b` — three layers now, with the page cut from the window once the
-order is total.
+Confirmation 1 refused the fix, and the refusal was right one layer deeper:
+per-page repeatability was observed rather than guaranteed, and a specification
+may not promise what merely happens to be true of one engine. The promise is
+now conditional (`fff9826`): the order is always score then identifier, a page
+whose edges do not cut a group of identical scores repeats exactly, and a page
+whose edge does cut one holds whichever members it got with nothing promised
+about which.
 
-What could not be fixed for free is which equally distant rows reach the window
-at all; the alternative was measured (0.2 ms against 18.3 ms per search on
-10 000 vectors) and the user chose the cheap mechanism with an honest
-specification. The spec, the design and the how-to now say that a page is
-ordered and repeatable while a group of identical scores spanning pages may be
-divided arbitrarily.
-
-Confirmation of round 1: `/gate-review add-text-to-image-search 2 confirm 1`.
+Second confirmation of round 1: `/gate-review add-text-to-image-search 2
+confirm 1`. If it refuses again, that is the second failed confirmation on one
+finding and the protocol says stop and ask the user to arbitrate.
 
 Local evidence: `env -u DATABASE_URL make check` green (307 tests);
 `make test-integration` green (183 tests).
