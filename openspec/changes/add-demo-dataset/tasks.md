@@ -134,13 +134,13 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 5. The commands and `make demo`
 
-- [ ] 5.1 `demo-dataset download [--count 500] [--into .data/demo]` in
+- [x] 5.1 `demo-dataset download [--count 500] [--into .data/demo]` in
   `app/cli.py`: prints the licence notice on every run, and a summary of
   written, already present, refused for licence and failed. Verify: a CLI test
   with a stubbed transport asserts the notice and each counter, and
   `uv run semanticshelf demo-dataset download --help` shows the options in the
   form the documentation uses.
-- [ ] 5.2 `demo-dataset index [--into .data/demo]`: runs the folder import over
+- [x] 5.2 `demo-dataset index [--into .data/demo]`: runs the folder import over
   `<into>/pictures` **with the recursive option**, because the corpus is one
   directory per picture (design decision 5), so the corpus enters the store
   through the ordinary pipeline and its queued work is finished when the
@@ -148,13 +148,13 @@ check is removed, and that failure is demonstrated before the task is ticked.
   of per-picture directories with sidecars and asserts the assets, their
   provenance, that the staging area is not imported, and that no job is left
   waiting.
-- [ ] 5.3 A corpus picture whose bytes are already stored creates no second
+- [x] 5.3 A corpus picture whose bytes are already stored creates no second
   asset and changes nothing on the existing one (design decision 10). Verify:
   an integration test stores a picture first — once by upload and once by an
   ordinary folder import with its own tags — then runs the demo import over a
   directory holding the same bytes with a sidecar, and asserts one asset, its
   tags and metadata unchanged, and the run reporting it as already stored.
-- [ ] 5.4 `make demo` runs the two commands in order. Verify: `make -n demo`
+- [x] 5.4 `make demo` runs the two commands in order. Verify: `make -n demo`
   shows exactly those commands, and the target appears in `make help`.
 
 ## 6. Documentation and the amendments this change owes

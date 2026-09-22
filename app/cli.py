@@ -21,6 +21,8 @@ models_app = typer.Typer(help="Embedding models.", no_args_is_help=True)
 app.add_typer(models_app, name="models")
 storage_app = typer.Typer(help="The media root.", no_args_is_help=True)
 app.add_typer(storage_app, name="storage")
+demo_app = typer.Typer(help="The demo corpus.", no_args_is_help=True)
+app.add_typer(demo_app, name="demo-dataset")
 
 
 @models_app.command("warm")
@@ -163,6 +165,58 @@ async def _run_import(
     finally:
         pool.shutdown(wait=True)
         await engine.dispose()
+
+
+@demo_app.command("download")
+def demo_download(
+    count: Annotated[int, typer.Option("--count", min=0, help="How many pictures to fetch.")] = 500,
+    into: Annotated[Path, typer.Option("--into", help="Where the corpus is built.")] = Path(
+        ".data/demo"
+    ),
+) -> None:
+    """Fetch a bounded sample of the demo dataset, with its licences checked.
+
+    The manifest is fetched once and kept; only the pictures whose licence the
+    dataset itself declares as permissive are taken; each one is written with a
+    sidecar carrying its tags and where it came from. Nothing is stored in the
+    service by this command — `demo-dataset index` does that.
+    """
+    from app.services import demo_dataset
+
+    # Values come from the environment; mypy cannot see that the required field is read there.
+    settings = Settings()  # type: ignore[call-arg]
+    typer.echo(demo_dataset.licence_notice())
+    try:
+        with demo_dataset.client() as client:
+            report = demo_dataset.download(client, into=into, count=count, settings=settings)
+    except (demo_dataset.DownloadError, demo_dataset.ManifestError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+    for line in demo_dataset.describe(report):
+        typer.echo(line)
+
+
+@demo_app.command("index")
+def demo_index(
+    into: Annotated[
+        Path, typer.Option("--into", help="The corpus built by `demo-dataset download`.")
+    ] = Path(".data/demo"),
+) -> None:
+    """Import the downloaded corpus through the ordinary folder import.
+
+    The pictures are one directory each, so the import runs recursively over
+    `<into>/pictures` — never over the staging area or the archive beside it —
+    and finishes the work it created, exactly as `index-folder` does.
+    """
+    from app.services import demo_dataset
+
+    corpus = demo_dataset.corpus_of(into)
+    if not corpus.is_dir():
+        typer.echo(f"nothing to index: {corpus} does not exist", err=True)
+        raise typer.Exit(code=2)
+    index_folder(
+        directory=corpus, recursive=True, tags=None, meta=None, dry_run=False, no_index=False
+    )
 
 
 @storage_app.command("prune")
