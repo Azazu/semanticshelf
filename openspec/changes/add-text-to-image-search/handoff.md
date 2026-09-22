@@ -1,7 +1,7 @@
 # Handoff — add-text-to-image-search
 
 **Updated:** 2026-09-22 · claude
-**State:** awaiting-gate-2
+**State:** fixing-g2
 **Branch:** change/add-text-to-image-search
 
 ## Done this session
@@ -31,15 +31,22 @@ Three things the work corrected, each in the commit body that carries it:
 
 ## Next step
 
-The branch is pushed and its CI run is green (reported by the user), so all 30
-tasks are checked. Gate 2 requested with `/gate-review add-text-to-image-search
-2`; the verdict and its findings are recorded in `review.md` by the runner.
+Gate 2 round 1 found one `major`, and it was right: the page was cut before the
+order was total, so the index chose which equally distant rows it held. Fixed
+on `90eb37b` — three layers now, with the page cut from the window once the
+order is total.
 
-Local evidence, every check CI runs: `openspec validate --all --strict` (11
-items), every `scripts/*_test.sh`, `sh -n scripts/*.sh`,
-`env -u DATABASE_URL make check` (307 tests) and `make test-integration`
-(181 tests) — all green. `make test-models` (12 tests, real CLIP) green too,
-which is where the ranking is shown to mean something.
+What could not be fixed for free is which equally distant rows reach the window
+at all; the alternative was measured (0.2 ms against 18.3 ms per search on
+10 000 vectors) and the user chose the cheap mechanism with an honest
+specification. The spec, the design and the how-to now say that a page is
+ordered and repeatable while a group of identical scores spanning pages may be
+divided arbitrarily.
+
+Confirmation of round 1: `/gate-review add-text-to-image-search 2 confirm 1`.
+
+Local evidence: `env -u DATABASE_URL make check` green (307 tests);
+`make test-integration` green (183 tests).
 
 ## Blockers
 
