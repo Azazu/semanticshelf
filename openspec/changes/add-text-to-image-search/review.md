@@ -1,0 +1,111 @@
+# Review — add-text-to-image-search
+
+## Round 1 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** e61bb8eab2e2c31308871ce70adbb1a20c45dda1
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `app/repositories/embeddings.py:124`; `openspec/changes/add-text-to-image-search/design.md:84` | Pagination is applied in the inner query before the UUID tie-break: `ORDER BY distance LIMIT/OFFSET` chooses an arbitrary subset of an equal-distance group, and the outer `ORDER BY distance, asset_id` can only sort that already-chosen subset. When a tie straddles a page boundary, repeated requests or adjacent pages can therefore swap, duplicate, or omit tied assets instead of using the identifier as the global tie-break required by `specs/text-search/spec.md`. Design decision 7 explicitly accepts this case, so it is a known contract violation rather than merely a missing test; the existing tie tests keep both tied rows on one page and cannot expose it. | wont-fix — a global identifier tie-break is not implementable over an approximate index: measured on 10 005 vectors, at the default `ef_search = 40` the index returns 1 of 5 exactly-tied rows, so no window and no `FETCH FIRST … WITH TIES` can order rows that are not in the candidate set (design decision 7). The requirement was corrected to what the index can promise and goes back through Gate 1; the user arbitrated on 2026-09-22 after the third confirmation. |
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** 6a292f27cfa9fc716234aa1fdbf2f471937735da
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — the new window still executes `ORDER BY distance LIMIT offset + limit` without the UUID tie-break, so it may choose a different subset of an equal-distance group before the outer query orders and cuts the page. This preserves the named swap/duplicate/omission defect and also cannot guarantee the revised specification's unconditional promise that repeated requests for one page return the same items. The added tests only observe one PostgreSQL plan returning the same arbitrary subset several times; they do not enforce a total order before the window limit. The specification's new permission for arbitrary division across pages therefore does not resolve the finding, and the retained per-page repeatability claim remains unsupported. |
+
+## Confirmation 2 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** 3b42d089a6e369a488e591cb714239dbe70b6caa
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — the implementation still cuts an index-selected `LIMIT offset + limit` window before applying the UUID tie-break, and the revised specification now permits the same cross-page repeats and omissions named in Round 1 instead of implementing the original global tie-break. That contract change is not coherent across the change artifacts: `proposal.md` still promises unconditionally that identifier tie-breaking makes a page stable while the index is unchanged, while the revised spec and how-to disclaim stable membership when a page edge cuts an equal-score group. Under the repository's fix-the-claim rule, the surviving scope claim means the finding is not resolved. |
+
+## Confirmation 3 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** 480276762e9a1316245f95ba4f207f1540a576ef
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — the implementation still applies `LIMIT offset + limit` before the UUID tie-break, so separate page windows may select different members of a tie and retain the Round 1 duplicate/omission defect. The artifacts are now textually consistent only because they weaken the requirement to permit that defect; this is a requirements/architecture change that does not implement the original global tie-break and would reopen Gate 1 under `AGENTS.md`. Its stated justification is also false: equal cosine scores do not require bit-identical vectors, because distinct vectors can have the same cosine distance from a query. The named finding is therefore not resolved. |
+
+## Round 1 · Gate 1
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** 38de0bf0b59eb2c902bacefd0837ce31769dbbef
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | blocker | `specs/embedding-storage/spec.md:6,20-22`; `specs/text-search/spec.md:71-85`; `design.md:95-115` | The revised tie contract was not propagated to the embedding-storage delta. That delta still requires an offset lookup to be the tail of the unpaged answer with unchanged order, while the text-search spec and design explicitly permit the index-selected windows for adjacent pages to repeat or omit members when an equal-distance group crosses a boundary. The planned statement therefore cannot satisfy both requirements. The storage requirement and its verification task must carry the same bounded guarantee as the search contract, or the architecture must provide the unconditional tail behavior they currently require. | fixed |
+| 2 | blocker | `specs/text-search/spec.md:125-170`; `design.md:46-76`; `tasks.md:10,20-21` | `has_more` requires looking one candidate beyond the page, and decision 4 says the index window grows for that extra candidate, but search effort is only `max(HNSW_EF_SEARCH, limit + offset)` and is capped at 1000. Once the requested depth controls the effort, the statement needs `limit + offset + 1` candidates while the index is provisioned for only `limit + offset`; at the explicitly accepted depth of 1000, the required sentinel is at depth 1001, which the design says cannot be requested. Thus the artifacts do not define an implementable `has_more` guarantee at the boundary (and under-provision its sentinel on other deep pages). Reconcile the searchable bound, effort calculation, and `has_more` semantics, with verification at the exact boundary. | fixed |
+| 3 | major | `proposal.md:43-47`; `specs/service-stats/spec.md:3-15`; `design.md` decision 10; `tasks.md:27-29` | The proposal promises “bytes under the media root” and the capability spec describes disk occupied by pictures, but the design and tasks sum recorded `size_bytes` for originals and explicitly exclude thumbnails and any filesystem reconciliation. Those are different metrics when thumbnails exist, files are missing, or orphan files remain. Choose whether `/stats` reports physical media-root usage or logical original-byte totals, then use that meaning consistently in the proposal, spec, design, task, and endpoint documentation. | fixed |
+| 4 | major | `docs/explanation/requirements.md` FR-OPS-4; `tasks.md:18,27-29` | FR-OPS-4 requires every operation to have an OpenAPI example, but the tasks for the three new operations verify only response shape, summary, and description. There is no implementation task or verification task for examples on `/search/text`, `/tags`, or `/stats`, so the Gate 1 definition of ready is not met for this inherited mandatory requirement. Add explicit task coverage and evidence for the examples. | fixed (for this change's three operations; the backfill for earlier ones is a stated non-goal and is on change 16 in the roadmap) |
+
+## Confirmation 1 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** 5c3fe6ca1b70ec1dfa168f3361dc1ba45485562d
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the embedding-storage delta now gives the offset-tail guarantee only when no equal-distance group crosses the skip boundary, adds the corresponding bounded tie scenario, and the task uses the same qualification. This matches the revised text-search contract and design. |
+| 2 | confirmed — the searchable page depth is now 999, search effort covers `limit + offset + 1`, and the specification, design, task, implementation, refusal tests, and boundary unit test all tie the accepted maximum to the required `has_more` sentinel. |
+| 3 | changes-requested — the detailed proposal scope, service-stats spec, design decision 10, tasks, schema, and endpoint documentation now define the metric as the sum of recorded original sizes and exclude thumbnails and filesystem reconciliation, but `proposal.md:91-93` still describes the `service-stats` capability as reporting "how much disk the pictures take." That surviving physical-usage claim is the same inconsistency named in Round 1, so the metric is not yet stated consistently throughout the proposal. |
+| 4 | confirmed — task 4.4 explicitly covers response examples for all three new operations and names schema-validating evidence; the diff supplies those examples to `/search/text`, `/tags`, and `/stats` and adds tests that locate each OpenAPI example and validate it with its response model. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** 7ba8202991e80801c26b9ed58293fa8503f84d2b
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the embedding-storage delta, text-search contract, design, and task all apply the same bounded offset-tail guarantee: exact tail order is promised only when no equal-distance group crosses the skip boundary, while a boundary-cutting tie leaves membership to the approximate index. |
+| 2 | confirmed — the accepted page depth remains capped at 999, search effort covers `limit + offset + 1` up to the 1000 ceiling, and the specification, design, tasks, implementation, refusal coverage, and exact-boundary unit coverage consistently reserve the extra candidate used for `has_more`. |
+| 3 | confirmed — the remaining capability summary in `proposal.md` now defines the value as the recorded sizes of stored originals added up and explicitly excludes thumbnails and unknown media-root files; the proposal, service-stats spec, design, task, schema, endpoint documentation, how-to, and FR-OPS-3 now use that same logical metric. |
+| 4 | confirmed — task 4.4 explicitly implements and verifies response examples for `GET /search/text`, `GET /tags`, and `GET /stats`; each operation exposes its example in OpenAPI and the focused test validates every example against its response model. The earlier-operation backfill remains explicitly out of scope and is tracked in roadmap change 16. |
+
+## Round 2 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** e994824fae53eb2f653a22babc6a6a569f844e79
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `app/api/search.py:63-70`; `docs/explanation/requirements.md:101`; `tests/api/test_search_refusals.py:52-66` | The 256-character limit is enforced by FastAPI on the raw query parameter before the endpoint trims it. FR-TXT-2 defines the bound after trimming, so a valid query such as one leading space followed by 256 non-space characters is rejected with 422 even though its trimmed value is exactly at the allowed maximum. The boundary tests cover only unpadded strings and therefore preserve the mismatch. | fixed |
+| 2 | major | `app/api/search.py:42-58,84-85`; `docs/explanation/requirements.md:144`; `tests/api/test_search_refusals.py:117-142` | The endpoint returns a 503 problem response when the search model is unavailable, but its route declares only the 200 response example. The generated OpenAPI operation consequently contains 200, the application-wide 422/500 responses, and no 503 response at all, violating FR-OPS-4's requirement that problem-details responses be documented per status code. The existing OpenAPI assertion checks only the operation metadata and parameters, so it does not catch the missing 503 contract. | fixed |
+
+## Confirmation 1 · Gate 2 · Round 2
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** 31072061344437afb0bcf07c73e3bfb05083de6c
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the route now permits a bounded raw parameter of up to 1024 characters and delegates the contractual 256-character check to `normalised_query`, which trims first. The padded 256-character boundary case is therefore accepted, while empty and overlong trimmed values are refused; the service and API tests cover those boundaries and the raw padding guard. The specification, design, tasks, requirements, and how-to use the same two-bound rule. |
+| 2 | confirmed — the search route now declares its operation-specific 503 through `problem_responses`, and the generated OpenAPI operation contains 200, the application-wide 422/500 responses, and 503 under `application/problem+json`. The focused API test asserts both the status entry and its media type, while the existing unavailable-model test verifies the runtime 503 response. |

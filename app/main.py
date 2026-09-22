@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app import __version__
-from app.api import assets, health
+from app.api import assets, catalogue, health, search
 from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.errors import problem_responses, register_exception_handlers
 from app.core.logging import configure_logging
@@ -79,5 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
     app.include_router(health.router)
     assets.install(app)
+    catalogue.install(app)
+    search.install(app)
     install_problem_media_type(app)
     return app

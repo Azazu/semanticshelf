@@ -92,23 +92,86 @@ class EmbeddingRepository:
         )
 
     def nearest_statement(
-        self, *, model: str, vector: Sequence[float], limit: int
+        self,
+        *,
+        model: str,
+        vector: Sequence[float],
+        limit: int,
+        offset: int = 0,
+        max_distance: float | None = None,
     ) -> sa.Select[Any]:
-        """The statement `nearest()` runs. Exposed so a test can read its plan."""
+        """The statement `nearest()` runs. Exposed so a test can read its plan.
+
+        Three selects, and each layer exists for a reason.
+
+        **The window** is what the index answers: the cast ADR-001 requires, the
+        model predicate, and `ORDER BY distance` — **one** key, because an HNSW
+        ordering takes exactly one and a second turns the index scan into a sort
+        over a bitmap scan. It takes everything up to the end of the page that
+        was asked for, not the page itself.
+
+        **The page** is cut from that window *after* the order is total:
+        `ORDER BY distance, asset_id`, then the offset and the limit. Cutting
+        first and ordering afterwards — which is what this did until Gate 2 —
+        lets the index choose arbitrarily among equally distant rows, so a tie
+        that straddles a page boundary can swap, duplicate or lose assets
+        between two requests. Ordering the window first makes the identifier the
+        tie-break for everything down to the end of the page, so a page whose
+        edge does not cut a group of equal distances holds the same items every
+        time. Which equally distant rows enter the window at all is still the
+        index's choice: a page whose edge does cut such a group carries
+        whichever of that group the window held, and nothing here promises
+        which. Closing that would mean taking the whole searchable depth as the
+        window on every query, which costs ninety times as much (design
+        decision 7).
+
+        **The threshold** is outside the page, so it removes results the page
+        already holds instead of reaching further down for replacements — which
+        is what a threshold applied after ranking means. A predicate on the
+        distance inside the window would instead make this a filtered vector
+        search: a different problem, with a different plan and a measurement of
+        its own (change 12).
+        """
         dimension = checked_dimension(model, vector)
         distance = sa.cast(EmbeddingRow.vector, Vector(dimension)).cosine_distance(list(vector))
-        return (
+        window = (
             sa.select(EmbeddingRow.asset_id, distance.label("distance"))
             .where(EmbeddingRow.model == model)
             .order_by(distance)
-            .limit(limit)
+            .limit(limit + offset)
+            .subquery("window")
         )
+        page = (
+            sa.select(window.c.asset_id, window.c.distance)
+            .order_by(window.c.distance, window.c.asset_id)
+            .limit(limit)
+            .offset(offset)
+            .subquery("page")
+        )
+        ranked = sa.select(page.c.asset_id, page.c.distance).order_by(
+            page.c.distance, page.c.asset_id
+        )
+        if max_distance is None:
+            return ranked
+        return ranked.where(page.c.distance <= max_distance)
 
     async def nearest(
-        self, *, model: str, vector: Sequence[float], limit: int
+        self,
+        *,
+        model: str,
+        vector: Sequence[float],
+        limit: int,
+        offset: int = 0,
+        max_distance: float | None = None,
     ) -> list[NeighbourHit]:
         """The closest assets under one model, nearest first."""
         rows = await self._session.execute(
-            self.nearest_statement(model=model, vector=vector, limit=limit)
+            self.nearest_statement(
+                model=model,
+                vector=vector,
+                limit=limit,
+                offset=offset,
+                max_distance=max_distance,
+            )
         )
         return [NeighbourHit(asset_id=row.asset_id, distance=float(row.distance)) for row in rows]
