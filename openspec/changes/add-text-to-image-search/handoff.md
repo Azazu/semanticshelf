@@ -1,7 +1,7 @@
 # Handoff — add-text-to-image-search
 
 **Updated:** 2026-09-22 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/add-text-to-image-search
 
 ## Done this session
@@ -31,14 +31,9 @@ Three things the work corrected, each in the commit body that carries it:
 
 ## Next step
 
-Push the branch and report the CI run:
-
-```
-git push -u origin change/add-text-to-image-search
-```
-
-Then tasks 7.3 and 7.4 are checked and Gate 2 is requested with
-`/gate-review add-text-to-image-search 2`.
+The branch is pushed and its CI run is green (reported by the user), so all 30
+tasks are checked. Gate 2 requested with `/gate-review add-text-to-image-search
+2`; the verdict and its findings are recorded in `review.md` by the runner.
 
 Local evidence, every check CI runs: `openspec validate --all --strict` (11
 items), every `scripts/*_test.sh`, `sh -n scripts/*.sh`,
