@@ -6,6 +6,7 @@ the unreachable one, which is also the proof that `download` never touches it.
 
 import io
 import json
+import re
 import zipfile
 from collections.abc import Iterator
 from pathlib import Path
@@ -78,9 +79,18 @@ def served(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[str]]:
     yield asked
 
 
+#: Rich styles an option name in pieces — `--count` is rendered as a styled `-`
+#: followed by a styled `-count` — so the literal never appears in a coloured
+#: help text. CI turns colour on (`FORCE_COLOR`) and a developer's terminal
+#: usually does not, which is exactly the difference that let this pass here and
+#: fail there. The escapes are stripped, and colour is turned off as well, so
+#: what is asserted is the text rather than the styling.
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
 def run(*arguments: str) -> tuple[int, str]:
-    result = CliRunner().invoke(app, list(arguments))
-    return result.exit_code, result.output
+    result = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"}).invoke(app, list(arguments))
+    return result.exit_code, ANSI.sub("", result.output)
 
 
 def test_a_download_prints_the_notice_and_what_it_did(served: list[str], tmp_path: Path) -> None:
