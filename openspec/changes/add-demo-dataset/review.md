@@ -15,3 +15,18 @@
 | 4 | major | `specs/demo-dataset/spec.md` — “The corpus enters the store through the ordinary import”, especially “A demo asset beside an imported one”; `tasks.md` 5.2 | The scenario requiring the same picture's demo and folder assets to “differ only” in provenance cannot occur through the ordinary import: the global SHA-256 duplicate rule creates one asset, and a duplicate import does not merge the new sidecar provenance into the existing asset. If the ordinary copy is already stored, `demo-dataset index` therefore cannot guarantee the required demo provenance either. Define the intended behavior/precondition for pre-existing duplicate content and replace the impossible two-asset scenario; add verification for that ordering, not only an empty-store import. | fixed |
 | 5 | major | `design.md` Applicability — “Concurrent writers” and “Crash around an external effect”; `tasks.md` 3.3–3.4 | The applicability table claims concurrent downloads cannot corrupt and that a crash leaves either nothing or a complete pair, but publishing the sidecar before the picture necessarily permits an orphan sidecar, and “appears by rename” alone does not define unique staging names, no-clobber behavior, or how two writers avoid pairing files from different runs. No task verifies the concurrent-writer claim. State the actual recoverable intermediate states, define the staging/publication and collision policy for the archive, picture, and sidecar, and add a concurrency/fault-injection test for the guarantee retained. | fixed |
 | 6 | minor | `tasks.md` 2.1 | The task says it refuses “a member whose declared size passes the bound”; the design and spec say the rejected case is a member that exceeds the bound. Correct the task wording so implementation cannot satisfy the opposite condition by following it literally. | fixed |
+
+## Confirmation 1 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** 2d9d6b211be1a7fed3327117e09ccddc22d2c50c
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the archive now has a separate transfer bound, unique staging and cleanup requirements, fatal timeout/redirect/oversize behavior, and planned failing-input coverage for those paths. |
+| 2 | confirmed — sidecars are now required to be opened descriptor-relative with no-follow/nonblocking flags and verified by `fstat` in every walked directory, with symlink and replacement-race failing inputs. |
+| 3 | confirmed — dataset labels now have an explicit whitespace-to-hyphen conversion before the unchanged FR-TAG-1 normalizer, and the tasks test that distinct conversion. |
+| 4 | confirmed — pre-existing duplicate content is now reported without creating or mutating an asset, and task 5.3 verifies both upload-first and folder-import-first orderings. |
+| 5 | changes-requested — per-run staging prevents bytes from being mixed within one file, but it does not prevent a picture from one run being paired with the sidecar from another. For example, sidecar A, sidecar B, picture B, picture A leaves picture A beside sidecar B. The design assumes both runs fetched identical bytes and metadata from the same identifier, but no snapshot or content identity guarantee enforces that assumption. Define publication/collision behavior that preserves pair consistency under that interleaving, and make the concurrency test use distinguishable run inputs so it demonstrates the retained guarantee rather than assuming it. |
