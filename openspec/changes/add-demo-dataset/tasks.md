@@ -5,12 +5,12 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 1. The dependency and where the module may not be reached from
 
-- [ ] 1.1 Move `httpx` from the dev group to the runtime dependencies:
+- [x] 1.1 Move `httpx` from the dev group to the runtime dependencies:
   `uv remove --group dev httpx` then `uv add httpx`. Verify: `pyproject.toml`
   lists it under `dependencies` and no longer under `dev`, `make lock-check`
   passes, and `make check` is green — nothing new enters `uv.lock`, which the
   diff of that file shows.
-- [ ] 1.2 `tests/unit/test_layering_demo.py`: building the application factory
+- [x] 1.2 `tests/unit/test_layering_demo.py`: building the application factory
   never imports the demo module. Verify: the test drops
   `app.services.demo_dataset` from `sys.modules`, calls `create_app`, and
   asserts the module is still absent. Demonstrated failing input: importing it
@@ -18,7 +18,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 2. The manifest and what may be taken from it
 
-- [ ] 2.1 `app/services/demo_dataset.py`: read `annotations/instances_val2017.json`
+- [x] 2.1 `app/services/demo_dataset.py`: read `annotations/instances_val2017.json`
   out of the annotation archive by exact name, refusing a missing member, a
   member whose declared uncompressed size **exceeds** `MEMBER_MAX_BYTES`, and
   any other member name; nothing is extracted to disk (design decision 4).
@@ -28,14 +28,14 @@ check is removed, and that failure is demonstrated before the task is ticked.
   the first is read and the rest are refused with a message naming what was
   expected. Demonstrated failing input: dropping the exact-name check lets the
   `../` member through; dropping the size check reads a member above the bound.
-- [ ] 2.2 The licence filter: an allowlist of licence URLs, looked up through
+- [x] 2.2 The licence filter: an allowlist of licence URLs, looked up through
   the manifest's own `licenses[]`, refusing NonCommercial, NoDerivs, an
   undefined id and a missing `license` field (design decision 2). Verify: unit
   tests over a synthetic manifest carrying all eight COCO licences plus an
   undefined id and an entry with no licence at all; each expected outcome is
   asserted by licence URL. Demonstrated failing input: adding the NoDerivs URL
   to the allowlist makes the test that asserts ND is refused fail.
-- [ ] 2.3 The label-to-tag conversion this change owns (design decision 6):
+- [x] 2.3 The label-to-tag conversion this change owns (design decision 6):
   runs of whitespace become `-`, the result must then pass `normalise_tag`
   unchanged, a label that does not is dropped, and the count is capped at
   `MAX_TAGS`. Verify: unit tests for `traffic light` → `traffic-light`, for a
