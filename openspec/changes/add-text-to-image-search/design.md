@@ -43,6 +43,11 @@ names the one it used rather than taking a choice.
    query, which is a fact about this deployment.
    Rejected: 422, which tells the caller to fix a query that is fine.
 
+   Because that 503 belongs to this operation rather than to the application,
+   the route declares it (`problem_responses(503)`) — FR-OPS-4 asks for the
+   problem-details responses per status code, and the factory only declares the
+   422 and 500 every operation can answer. Gate 2 caught it missing.
+
 3. **One transaction per search, and the index's effort set inside it.**
    `SET LOCAL hnsw.ef_search = :effort` applies to the transaction, so the
    search runs inside `async with session.begin():` — set, query, commit — and

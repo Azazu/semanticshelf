@@ -12,9 +12,11 @@ from app.services.search import (
     MAX_PAGE_DEPTH,
     MAX_SEARCH_EFFORT,
     QUERY_MAX_LENGTH,
+    InvalidQueryError,
     PageTooDeepError,
     check_depth,
     effort_for,
+    normalised_query,
     score_of,
 )
 from tests.conftest import UNREACHABLE_DATABASE_URL
@@ -79,3 +81,28 @@ def test_a_page_one_item_too_deep_is_refused() -> None:
 
 def test_the_query_bound_is_the_one_the_requirements_fix() -> None:
     assert QUERY_MAX_LENGTH == 256
+
+
+def test_a_query_is_used_trimmed() -> None:
+    assert normalised_query("  a blue dragon\t\n") == "a blue dragon"
+
+
+@pytest.mark.parametrize("raw", ["", "   ", "\t\n"], ids=["empty", "spaces", "whitespace"])
+def test_a_query_with_nothing_in_it_is_refused(raw: str) -> None:
+    with pytest.raises(InvalidQueryError, match="empty"):
+        normalised_query(raw)
+
+
+def test_the_bound_is_measured_after_trimming() -> None:
+    """The padding is not the query. Measure the raw string instead — which is
+    what a `max_length` on the parameter does — and this one is refused for a
+    length it does not have.
+    """
+    padded = "  " + "d" * QUERY_MAX_LENGTH + "  "
+
+    assert normalised_query(padded) == "d" * QUERY_MAX_LENGTH
+
+
+def test_a_query_beyond_the_bound_after_trimming_is_refused() -> None:
+    with pytest.raises(InvalidQueryError, match=str(QUERY_MAX_LENGTH)):
+        normalised_query(" " + "d" * (QUERY_MAX_LENGTH + 1) + " ")

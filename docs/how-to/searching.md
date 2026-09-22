@@ -126,8 +126,8 @@ Start without it, look at the scores you actually get, then choose.
 
 | Answer | When |
 |---|---|
-| 422 `/errors/invalid-query` | `q` is missing, empty, or only whitespace |
-| 422 `/errors/validation` | `q` is longer than 256 characters, `limit` is outside 1–100, `offset` is negative, or `min_score` is outside [−1, 1] |
+| 422 `/errors/invalid-query` | `q` is missing, empty, only whitespace, or longer than 256 characters once trimmed — the padding is never counted against you |
+| 422 `/errors/validation` | the raw `q` is longer than 1024 characters (a guard on padding, not on queries), `limit` is outside 1–100, `offset` is negative, or `min_score` is outside [−1, 1] |
 | 422 `/errors/page-too-deep` | `limit + offset` is beyond 999 |
 | 503 `/errors/model-unavailable` | this build does not run the search model, so nothing can embed the query |
 

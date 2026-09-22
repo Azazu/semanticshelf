@@ -1,7 +1,7 @@
 # Handoff — add-text-to-image-search
 
 **Updated:** 2026-09-22 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/add-text-to-image-search
 
 ## Done this session
@@ -40,32 +40,31 @@ behavior changed.
 
 ## Next step
 
-**Gate 1 passed** (Confirmation 2 of round 1, commit `7ba8202`, all four
-findings confirmed). The contract is settled: the page carries a total order,
-membership at a tie-cutting edge belongs to the approximate index, the page
-depth ends at 999 so the `has_more` sentinel is always obtainable, `/stats`
-means the recorded sizes of the originals, and the three new operations carry
-OpenAPI examples.
+Gate 2 round 2 returned two majors, both fixed:
 
-Gate 2 needs a **full round**, not a confirmation of its round 1: the code
-changed after that round (the depth bound, the three examples). Before it can
-be requested, two things that are not mine:
+- The 256-character bound was a `max_length` on the raw parameter while
+  FR-TXT-2 bounds the *trimmed* query, so a query padded with one space and
+  256 characters was refused for a length it did not have. The bound now lives
+  in `normalised_query` in the service; the parameter keeps a far larger guard
+  (1024) so padding cannot make a request unbounded, which is what NFR-SEC-5
+  asks for. Demonstrated: restoring the `max_length` makes the new api test
+  fail.
+- The operation answered 503 without declaring it. The route now declares it
+  with `problem_responses(503)`, and an api test asserts the document carries
+  200, 422, 500 and 503, the last with the problem media type.
 
-1. The repository-root settings file has to come back, so the integration suite
-   runs instead of skipping (see Blockers).
-2. The user pushes `change/add-text-to-image-search` and reports the CI run on
-   the exact HEAD.
+Swept with them: the spec's query requirement and a scenario for the padded
+case, design decision 2, tasks 3.2 and the new 3.8, FR-TXT-2's neighbour
+NFR-SEC-5, and the how-to's refusal table (the length case is
+`/errors/invalid-query` now, and the raw guard is named as a guard).
 
-Then: `/gate-review add-text-to-image-search 2`.
+Run: `/gate-review add-text-to-image-search 2 confirm 2`.
 
-Local evidence so far: `make check` green (314 tests), `openspec validate --all
---strict`, both `scripts/*_test.sh`, `sh -n` over `scripts/*.sh`. The how-to's
-refusal example was re-captured from a running service.
+Local evidence: `make check` green (324 tests), `make test-integration` green
+(183 tests), `openspec validate --all --strict`, both `scripts/*_test.sh`,
+`sh -n` over `scripts/*.sh`.
 
 ## Blockers
 
-The repository-root settings file the integration suite reads is absent on this
-machine (only the example beside it remains), so `make test-integration` skips
-all 183 tests instead of running them. The container is up and listening on
-port 5434. Restoring it is the user's action; the Definition of Ready for
-Gate 2 needs that suite green.
+None. The code changed after the push, so the user pushes again and reports CI
+before the merge.

@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from app.core.errors import PROBLEM_MEDIA_TYPE
 from app.core.settings import Settings
 from app.main import create_app
-from app.services.search import MAX_PAGE_DEPTH, QUERY_MAX_LENGTH
+from app.services.search import MAX_PAGE_DEPTH, QUERY_MAX_LENGTH, RAW_QUERY_MAX_LENGTH
 from tests.conftest import make_client
 
 SEARCH = "/api/v1/search/text"
@@ -54,6 +54,40 @@ async def test_a_query_beyond_the_maximum_length_is_refused(client: httpx.AsyncC
 
     assert response.status_code == 422
     assert str(QUERY_MAX_LENGTH) in response.text
+
+
+async def test_a_query_whose_padding_pushes_it_over_the_bound_is_accepted(
+    client: httpx.AsyncClient,
+) -> None:
+    """FR-TXT-2 bounds the trimmed query. A `max_length` on the parameter would
+    measure the raw string and refuse this one, whose query is exactly at the
+    maximum; the 500 from the unreachable database is the proof it was accepted.
+    """
+    response = await client.get(SEARCH, params={"q": " " + "d" * QUERY_MAX_LENGTH + " "})
+
+    assert response.status_code != 422
+
+
+async def test_a_raw_query_beyond_the_padding_guard_is_refused_by_the_parameter(
+    client: httpx.AsyncClient,
+) -> None:
+    """The guard NFR-SEC-5 asks for: padding may not make the request unbounded.
+    It is deliberately far above the bound that matters, so it can only be hit
+    by something that is not a query."""
+    response = await client.get(SEARCH, params={"q": " " * (RAW_QUERY_MAX_LENGTH + 1)})
+
+    assert response.status_code == 422
+
+
+async def test_a_query_too_long_even_after_trimming_says_which_bound(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.get(SEARCH, params={"q": "  " + "d" * (QUERY_MAX_LENGTH + 1) + "  "})
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["type"] == "/errors/invalid-query"
+    assert "after trimming" in body["detail"]
 
 
 async def test_a_query_at_the_maximum_length_is_not_refused_for_its_length(
@@ -140,3 +174,18 @@ async def test_the_operation_is_in_the_openapi_document(client: httpx.AsyncClien
     assert {"q", "limit", "offset", "min_score"} <= {
         parameter["name"] for parameter in operation["parameters"]
     }
+
+
+async def test_every_status_this_operation_answers_is_documented(
+    client: httpx.AsyncClient,
+) -> None:
+    """FR-OPS-4 asks for the problem-details responses per status code. 422 and
+    500 are the application's, declared in the factory; the 503 is this
+    operation's own and has to be declared with it.
+    """
+    document = (await client.get("/api/openapi.json")).json()
+
+    responses = document["paths"]["/api/v1/search/text"]["get"]["responses"]
+
+    assert {"200", "422", "500", "503"} <= responses.keys()
+    assert set(responses["503"]["content"]) == {PROBLEM_MEDIA_TYPE}

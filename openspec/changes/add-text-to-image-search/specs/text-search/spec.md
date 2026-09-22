@@ -38,9 +38,11 @@ it.
 
 A query SHALL be required and non-empty once trimmed, and SHALL be refused with
 422 problem details when it is missing, empty, or longer than the configured
-maximum. A model that cannot represent the whole query SHALL NOT silently
-answer a shorter one: when the query was cut to fit the model, the answer SHALL
-say so.
+maximum. The maximum SHALL be measured on the trimmed query, so that padding is
+never counted against a caller; a separate, far larger bound on the raw
+parameter SHALL keep padding from making the request unbounded. A model that
+cannot represent the whole query SHALL NOT silently answer a shorter one: when
+the query was cut to fit the model, the answer SHALL say so.
 
 #### Scenario: No query at all
 - **WHEN** a search is requested without a query, or with one that is empty
@@ -50,6 +52,11 @@ say so.
 #### Scenario: A query beyond the maximum length
 - **WHEN** a query longer than the configured maximum is searched for
 - **THEN** the answer is 422 problem details naming the bound
+
+#### Scenario: A query whose padding carries it past the maximum
+- **WHEN** a query is searched for whose trimmed length is exactly the maximum
+  but whose raw parameter is longer because of surrounding whitespace
+- **THEN** it is answered normally rather than refused for its length
 
 #### Scenario: A query the model had to cut
 - **WHEN** a query longer than the model's context is searched for

@@ -30,6 +30,11 @@ from app.services import indexing
 #: What a query may be. Fixed by the requirements rather than configured: a
 #: bound no deployment turns is not a setting.
 QUERY_MAX_LENGTH = 256
+#: The bound on the raw parameter, before it is trimmed. It exists only so that
+#: padding cannot make a request unbounded (NFR-SEC-5): the bound that matters
+#: is the one above, measured after trimming, and four times it is more room
+#: than any query written by a person or a client needs.
+RAW_QUERY_MAX_LENGTH = 4 * QUERY_MAX_LENGTH
 #: pgvector's own maximum for `hnsw.ef_search`, which is also the most
 #: candidates one index scan will produce: past it the index cannot answer
 #: accurately at all.
@@ -43,6 +48,10 @@ MAX_PAGE_DEPTH = MAX_SEARCH_EFFORT - 1
 
 class SearchUnavailableError(Exception):
     """The model a search needs is not one this build can run."""
+
+
+class InvalidQueryError(ValueError):
+    """The query is outside the bounds a query has to be within."""
 
 
 class PageTooDeepError(ValueError):
@@ -83,6 +92,23 @@ def effort_for(*, settings: Settings, limit: int, offset: int) -> int:
 def score_of(distance: float) -> float:
     """Cosine similarity from cosine distance: what a client can reason about."""
     return 1.0 - distance
+
+
+def normalised_query(raw: str) -> str:
+    """The query as the service uses it: trimmed, and within its bounds.
+
+    The bound is on the trimmed value (FR-TXT-2), which is why it cannot be a
+    constraint on the parameter: FastAPI would measure the raw string, and a
+    query padded with spaces would be refused for a length it does not have.
+    """
+    query = raw.strip()
+    if not query:
+        raise InvalidQueryError("q must not be empty")
+    if len(query) > QUERY_MAX_LENGTH:
+        raise InvalidQueryError(
+            f"q must be at most {QUERY_MAX_LENGTH} characters after trimming, got {len(query)}"
+        )
+    return query
 
 
 def check_depth(*, limit: int, offset: int) -> None:
