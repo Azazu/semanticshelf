@@ -21,3 +21,14 @@
 | # | Resolution |
 |---|------------|
 | 1 | changes-requested — the new window still executes `ORDER BY distance LIMIT offset + limit` without the UUID tie-break, so it may choose a different subset of an equal-distance group before the outer query orders and cuts the page. This preserves the named swap/duplicate/omission defect and also cannot guarantee the revised specification's unconditional promise that repeated requests for one page return the same items. The added tests only observe one PostgreSQL plan returning the same arbitrary subset several times; they do not enforce a total order before the window limit. The specification's new permission for arbitrary division across pages therefore does not resolve the finding, and the retained per-page repeatability claim remains unsupported. |
+
+## Confirmation 2 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** 3b42d089a6e369a488e591cb714239dbe70b6caa
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — the implementation still cuts an index-selected `LIMIT offset + limit` window before applying the UUID tie-break, and the revised specification now permits the same cross-page repeats and omissions named in Round 1 instead of implementing the original global tie-break. That contract change is not coherent across the change artifacts: `proposal.md` still promises unconditionally that identifier tie-breaking makes a page stable while the index is unchanged, while the revised spec and how-to disclaim stable membership when a page edge cuts an equal-score group. Under the repository's fix-the-claim rule, the surviving scope claim means the finding is not resolved. |
