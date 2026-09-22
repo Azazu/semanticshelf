@@ -97,3 +97,15 @@
 |---|----------|----------|---------|--------|
 | 1 | major | `app/api/search.py:63-70`; `docs/explanation/requirements.md:101`; `tests/api/test_search_refusals.py:52-66` | The 256-character limit is enforced by FastAPI on the raw query parameter before the endpoint trims it. FR-TXT-2 defines the bound after trimming, so a valid query such as one leading space followed by 256 non-space characters is rejected with 422 even though its trimmed value is exactly at the allowed maximum. The boundary tests cover only unpadded strings and therefore preserve the mismatch. | fixed |
 | 2 | major | `app/api/search.py:42-58,84-85`; `docs/explanation/requirements.md:144`; `tests/api/test_search_refusals.py:117-142` | The endpoint returns a 503 problem response when the search model is unavailable, but its route declares only the 200 response example. The generated OpenAPI operation consequently contains 200, the application-wide 422/500 responses, and no 503 response at all, violating FR-OPS-4's requirement that problem-details responses be documented per status code. The existing OpenAPI assertion checks only the operation metadata and parameters, so it does not catch the missing 503 contract. | fixed |
+
+## Confirmation 1 · Gate 2 · Round 2
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** 31072061344437afb0bcf07c73e3bfb05083de6c
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the route now permits a bounded raw parameter of up to 1024 characters and delegates the contractual 256-character check to `normalised_query`, which trims first. The padded 256-character boundary case is therefore accepted, while empty and overlong trimmed values are refused; the service and API tests cover those boundaries and the raw padding guard. The specification, design, tasks, requirements, and how-to use the same two-bound rule. |
+| 2 | confirmed — the search route now declares its operation-specific 503 through `problem_responses`, and the generated OpenAPI operation contains 200, the application-wide 422/500 responses, and 503 under `application/problem+json`. The focused API test asserts both the status entry and its media type, while the existing unavailable-model test verifies the runtime 503 response. |
