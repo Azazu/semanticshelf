@@ -75,11 +75,14 @@ page SHALL return the same items. Where a group of identical scores does fall
 across a page's boundary, the service SHALL NOT promise which of that group's
 members the page holds: they MAY differ between requests, and paging through
 such a group MAY show one of its members twice or not at all. A caller who needs
-such a group whole asks for a page large enough to hold it.
+such a group whole asks for a page large enough to hold it, which also raises
+the search effort that decides how much of the group the index returns.
 
-Identical scores mean two different pictures whose vectors match to the last
-bit — which the content hash makes impossible for identical bytes, and which a
-real model does not otherwise produce.
+Identical scores do not require identical vectors: any two vectors at the same
+angle to the query score the same. The service therefore does not treat a tie
+as impossible — it states what it can and cannot promise about one, because an
+approximate index may return some members of a tied group and not others
+however deep the page asks.
 
 #### Scenario: What an item says
 - **WHEN** a search returns an asset

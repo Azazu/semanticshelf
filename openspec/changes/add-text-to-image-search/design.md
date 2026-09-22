@@ -115,16 +115,45 @@ names the one it used rather than taking a choice.
    service says nothing about which. The test that observes the repetition
    remains, labelled as a record of what this engine does rather than as a
    contract.
-   Closing that too would mean taking the whole searchable depth as the window
-   for every query, which was measured on 10 000 vectors before the choice was
-   made: **0.2 ms for a page-sized window against 18.3 ms for a full window at
-   `ef_search = 1000`**, ninety times the cost on every search including the
-   first page of twenty. The cost is permanent; the case it buys needs two
-   *different* pictures whose vectors match to the last bit, which the content
-   hash makes impossible for identical bytes and a real model does not produce
-   otherwise. So: the order on a page is total, a page whose edge does not cut
-   a group of identical scores repeats exactly, the edge that does cut one
-   belongs to the index, and the specification says exactly that and no more.
+   Two arguments were offered for leaving that edge open, and the third
+   confirmation destroyed one of them and the measurement behind it destroyed
+   the need for the other.
+
+   The wrong one was rarity: "a tie needs two pictures whose vectors match to
+   the last bit". That is false. A tie needs only two vectors at the same angle
+   to the query, and nothing ties their tails together. Built on the probe
+   database — 10 000 random unit vectors plus five *distinct* unit vectors each
+   carrying 0.6 in the first slot and 0.8 in a different one — all five sit at
+   cosine distance `0.3999999761581421` from the one-hot query, exactly and
+   reproducibly. Distinct vectors, one distance.
+
+   The remaining one is cost, and it is the wrong question. Taking the whole
+   searchable depth as the window costs **18.3 ms against 0.2 ms** on 10 000
+   vectors at `ef_search = 1000`, ninety times the price on every search
+   including the first page of twenty — but it would not buy the guarantee
+   anyway. On that same probe, forced onto the index (`enable_seqscan = off`)
+   and asked for a thousand rows:
+
+   | `hnsw.ef_search` | rows the index returned | of the five tied rows |
+   |---|---|---|
+   | 40 (the default) | 40 | **1** |
+   | 100 | 100 | 5 |
+   | 1000 | 1000 | 5 |
+
+   At the default effort four of the five nearest neighbours are not in the
+   candidate set at all. No window can order rows the index never returned, and
+   no `FETCH FIRST … WITH TIES` can either — tried on the same data, it stopped
+   at four rows because the fifth tied row was not there to tie with. The
+   effort, not the window, decides; and `ef_search` is a heuristic, not a
+   promise. A global tie-break on the identifier is therefore not a thing an
+   approximate index can offer at any price short of an exact scan — which is
+   the one thing this index exists to avoid.
+
+   So the specification says the strongest true thing and stops: the order on a
+   page is total, a page whose edge does not cut a group of identical scores
+   repeats exactly, and which members of such a group a page holds belongs to
+   the index. That is not a weakening for convenience; it is what an
+   approximate nearest-neighbour search is.
 
 8. **Three bounded queries per search, and no N+1.** The vector query returns
    the page's asset identifiers and their distances; one query fetches those
