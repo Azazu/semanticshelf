@@ -115,9 +115,15 @@ class EmbeddingRepository:
         first and ordering afterwards — which is what this did until Gate 2 —
         lets the index choose arbitrarily among equally distant rows, so a tie
         that straddles a page boundary can swap, duplicate or lose assets
-        between two requests. Ordering first makes the identifier the tie-break
-        for the whole ranking rather than for whatever happened to land on one
-        page.
+        between two requests. Ordering the window first makes the identifier the
+        tie-break for everything down to the end of the page, so a page whose
+        edge does not cut a group of equal distances holds the same items every
+        time. Which equally distant rows enter the window at all is still the
+        index's choice: a page whose edge does cut such a group carries
+        whichever of that group the window held, and nothing here promises
+        which. Closing that would mean taking the whole searchable depth as the
+        window on every query, which costs ninety times as much (design
+        decision 7).
 
         **The threshold** is outside the page, so it removes results the page
         already holds instead of reaching further down for replacements — which

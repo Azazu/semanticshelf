@@ -20,8 +20,11 @@ ranked by the cosine similarity the index was built for.
   is embedded with the CLIP text tower on the inference pool, and the nearest
   assets by cosine similarity of their `clip-vit-l14` vectors come back ranked.
 - An item is the asset representation the rest of the API returns, plus
-  `score = 1 − cosine distance` in [−1, 1]. Ties break on the identifier, so a
-  page is stable while the index is.
+  `score = 1 − cosine distance` in [−1, 1]. Every page is ordered by score and
+  then by identifier, so what a page holds is never ambiguous about its
+  arrangement; a page across which no group of identical scores falls repeats
+  exactly while the index is unchanged, and a page whose edge cuts such a group
+  carries whichever members it got, with nothing promised about which.
 - The envelope is `{items, limit, offset, has_more, model, query_truncated}`:
   no total, `has_more` from fetching one candidate beyond the page, the model
   key stated because a score means nothing without it, and `query_truncated`

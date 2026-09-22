@@ -55,11 +55,14 @@ names the one it used rather than taking a choice.
    ADR-002's question, and this change says so rather than implying an answer.
 
 4. **The threshold is an outer filter over the page, and the page is not
-   refilled.** The statement is one: an inner select ordered by distance with
-   `LIMIT limit + 1 OFFSET offset` — the shape the index answers — wrapped in an
-   outer select that drops rows beyond the maximum distance. A filtered page
-   can therefore be shorter than `limit`, which is what FR-FLT-1 means by
-   "after ranking", and the next page still starts where this one ended.
+   refilled.** The statement is one, in the three layers decision 7 settles:
+   the window the index answers, the page cut from it once the order is total,
+   and outside both a filter that drops rows beyond the maximum distance. A
+   filtered page can therefore be shorter than `limit`, which is what FR-FLT-1
+   means by "after ranking", and the next page still starts where this one
+   ended. The `limit + 1` that answers `has_more` belongs to the service rather
+   than to the statement: it asks for one row beyond the page (decision 5), and
+   the window grows with it.
    Rejected: filtering inside the ordered select, which turns the query into a
    filtered vector search — a different problem with its own measurement
    (change 12), and one that would make `offset` mean something else.
@@ -119,8 +122,9 @@ names the one it used rather than taking a choice.
    first page of twenty. The cost is permanent; the case it buys needs two
    *different* pictures whose vectors match to the last bit, which the content
    hash makes impossible for identical bytes and a real model does not produce
-   otherwise. So: the page is exact and repeatable, its edge belongs to the
-   index, and the specification says so.
+   otherwise. So: the order on a page is total, a page whose edge does not cut
+   a group of identical scores repeats exactly, the edge that does cut one
+   belongs to the index, and the specification says exactly that and no more.
 
 8. **Three bounded queries per search, and no N+1.** The vector query returns
    the page's asset identifiers and their distances; one query fetches those
