@@ -1,7 +1,7 @@
 # Handoff — add-text-to-image-search
 
 **Updated:** 2026-09-22 · claude
-**State:** awaiting-gate-2
+**State:** ready-to-merge
 **Branch:** change/add-text-to-image-search
 
 ## Done this session
@@ -40,25 +40,12 @@ behavior changed.
 
 ## Next step
 
-Gate 2 round 2 returned two majors, both fixed:
+**Gate 2 passed** (Confirmation 1 of round 2, commit `3107206`, both findings
+confirmed). Gate 1 passed earlier on the contract.
 
-- The 256-character bound was a `max_length` on the raw parameter while
-  FR-TXT-2 bounds the *trimmed* query, so a query padded with one space and
-  256 characters was refused for a length it did not have. The bound now lives
-  in `normalised_query` in the service; the parameter keeps a far larger guard
-  (1024) so padding cannot make a request unbounded, which is what NFR-SEC-5
-  asks for. Demonstrated: restoring the `max_length` makes the new api test
-  fail.
-- The operation answered 503 without declaring it. The route now declares it
-  with `problem_responses(503)`, and an api test asserts the document carries
-  200, 422, 500 and 503, the last with the problem media type.
-
-Swept with them: the spec's query requirement and a scenario for the padded
-case, design decision 2, tasks 3.2 and the new 3.8, FR-TXT-2's neighbour
-NFR-SEC-5, and the how-to's refusal table (the length case is
-`/errors/invalid-query` now, and the raw guard is named as a guard).
-
-Run: `/gate-review add-text-to-image-search 2 confirm 2`.
+The user pushes `change/add-text-to-image-search` once more — the code changed
+after the last push — and reports the CI run. Then `/git:merge
+add-text-to-image-search`, and `/opsx:archive` after it.
 
 Local evidence: `make check` green (324 tests), `make test-integration` green
 (183 tests), `openspec validate --all --strict`, both `scripts/*_test.sh`,
@@ -66,5 +53,4 @@ Local evidence: `make check` green (324 tests), `make test-integration` green
 
 ## Blockers
 
-None. The code changed after the push, so the user pushes again and reports CI
-before the merge.
+None.
