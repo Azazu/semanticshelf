@@ -1,7 +1,7 @@
 # Handoff — add-text-to-image-search
 
 **Updated:** 2026-09-22 · claude
-**State:** awaiting-gate-1
+**State:** implementing
 **Branch:** change/add-text-to-image-search
 
 ## Done this session
@@ -40,21 +40,25 @@ behavior changed.
 
 ## Next step
 
-Gate 1 round 1 returned two blockers and two majors, all fixed in `28feebe`:
-the storage delta now carries the same bounded tie guarantee as the search
-contract; the page bound and the `has_more` sentinel are one rule
-(`MAX_PAGE_DEPTH = MAX_SEARCH_EFFORT - 1`, so a page reaches 999) with a unit
-test that fails when the bound is raised back; `/stats` is described one way
-everywhere (the recorded sizes of the originals); and all three new operations
-carry an OpenAPI example that the suite parses with its own model. FR-FLT-4,
-FR-FLT-5 and the roadmap were amended with them.
+**Gate 1 passed** (Confirmation 2 of round 1, commit `7ba8202`, all four
+findings confirmed). The contract is settled: the page carries a total order,
+membership at a tie-cutting edge belongs to the approximate index, the page
+depth ends at 999 so the `has_more` sentinel is always obtainable, `/stats`
+means the recorded sizes of the originals, and the three new operations carry
+OpenAPI examples.
 
-Run: `/gate-review add-text-to-image-search 1 confirm 1` (second confirmation: the first confirmed findings 1, 2 and 4 and kept 3 open on one surviving phrase in the capability list, fixed in the commit above). After Gate 1 settles,
-Gate 2 needs a fresh round rather than a confirmation of its round 1 — the code
-changed here (the depth bound, three examples), so the user pushes and reports
-CI first.
+Gate 2 needs a **full round**, not a confirmation of its round 1: the code
+changed after that round (the depth bound, the three examples). Before it can
+be requested, two things that are not mine:
 
-Local evidence: `make check` green (314 tests), `openspec validate --all
+1. The repository-root settings file has to come back, so the integration suite
+   runs instead of skipping (see Blockers).
+2. The user pushes `change/add-text-to-image-search` and reports the CI run on
+   the exact HEAD.
+
+Then: `/gate-review add-text-to-image-search 2`.
+
+Local evidence so far: `make check` green (314 tests), `openspec validate --all
 --strict`, both `scripts/*_test.sh`, `sh -n` over `scripts/*.sh`. The how-to's
 refusal example was re-captured from a running service.
 
@@ -62,5 +66,6 @@ refusal example was re-captured from a running service.
 
 The repository-root settings file the integration suite reads is absent on this
 machine (only the example beside it remains), so `make test-integration` skips
-all 183 tests instead of running them. The container is up on port 5434. This
-round changed no SQL, but the suite has to run green before Gate 2.
+all 183 tests instead of running them. The container is up and listening on
+port 5434. Restoring it is the user's action; the Definition of Ready for
+Gate 2 needs that suite green.
