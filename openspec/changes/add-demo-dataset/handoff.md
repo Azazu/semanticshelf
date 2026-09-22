@@ -6,30 +6,27 @@
 
 ## Done this session
 
-Branch, scaffold and all four planning artifacts. Two decisions the user made
-before anything was written:
+All 26 tasks. The corpus exists, is licence-filtered, imports through the
+ordinary folder import and is searchable — proved by a real run, not only by
+tests: 20 pictures fetched in 30 s, 20 indexed, and
+"a red stop sign at a junction" puts both stop-sign pictures on top.
 
-- **The dataset is COCO val2017.** FR-CLI-3 left the choice here and named two
-  candidates. COCO's manifest carries a licence per picture, so the licence
-  check is a filter rather than a sentence; Unsplash Lite's terms forbid
-  publishing any portion of the data, which collides with the README
-  screenshots NFR-DOC-1 wants.
-- **The tier is `high`**, raised from the `medium` the specification and the
-  roadmap declare. Their reason holds — the egress is an operator's, not the
-  service's — but the command also turns remote bytes into files, which is
-  security-sensitive input handling.
+What the real manifest settled, which planning could only guess at:
 
-Two things the planning found by checking rather than assuming:
+- the archive is 252 907 541 B and the manifest inside it 19 987 840 B, so
+  `MEMBER_MAX_BYTES` is comfortable and the design's "~46 MiB" estimate was
+  wrong and is corrected;
+- **1 279 of the 5 000 pictures** are under an accepted licence; 3 721 are
+  refused, which the run reports;
+- every `val2017` entry carries `flickr_url` — the open question of `design.md`,
+  now struck. It is the original's address on Flickr, so it is what the
+  provenance records as `source_url`; the bucket copy identifies nobody.
+  `author` stays absent: the manifest has no name for a single picture.
 
-- `images.cocodataset.org` has **no valid certificate for its own name**
-  (`SSL: no alternative certificate subject name matches target hostname`), and
-  the manifest's own addresses are plain `http://`. The same objects answer
-  over `https://s3.amazonaws.com/images.cocodataset.org/…` with a certificate
-  that verifies — checked for the archive and for a picture.
-- The manifest's shape was verified against a real COCO file (the small
-  `image_info_test2017` archive): `licenses[]` of eight entries, a `license` id
-  on every image, and **no author field** — so attribution is by the picture's
-  address, and `author` is absent rather than invented.
+Evidence: `make check` 406 green, `make test-integration` 195 green,
+`openspec validate --all --strict` 13/13, both `scripts/*_test.sh`, `sh -n`
+over every script. Twelve demonstrated failing inputs across the four guards
+that matter (the layering, the manifest, the transfers, the sidecar).
 
 ## Next step
 

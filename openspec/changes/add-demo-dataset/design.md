@@ -78,8 +78,18 @@ is already there".
    read for its *filename only* and never used as an address.
    Rejected: plain HTTP with a pinned checksum of the archive — it would leave
    every picture unauthenticated, and a pinned checksum breaks the day COCO
-   republishes the archive. Rejected: `flickr_url`, which is a third party's
-   hotlink and rots.
+   republishes the archive. Rejected: fetching `flickr_url`, which is a third
+   party's hotlink and rots.
+
+   Recording it is another matter, and the manifest settled the open question:
+   every `val2017` entry carries `flickr_url` (checked against the real file,
+   5 000 of 5 000). It is the original's address on Flickr — a CDN address
+   carrying the photo's Flickr id, so the photograph and its page can be found
+   from it, which is as close to attribution as this manifest gets: it records
+   no author name at all. So that is what the provenance keeps, as metadata:
+   bounded, validated as an `http(s)` address, never fetched and never a path.
+   The copy in the bucket identifies nobody, and is what an entry without a
+   usable address falls back to.
 
 4. **Two bounds, because there are two kinds of object.** A picture is bounded
    by `MAX_UPLOAD_BYTES` (20 MiB): that is what a picture may weigh. The
@@ -254,7 +264,6 @@ command is unaffected, which is the point of keeping it out of the service.
 
 ## Open Questions
 
-- Whether `val2017`'s image entries carry `flickr_url` beside `coco_url` (the
-  `test2017` manifest, which was the one small enough to check while planning,
-  does not). It decides only which address is recorded as the picture's own,
-  and the first implementation task reads the real manifest and settles it.
+None. The one there was — whether `val2017` entries carry `flickr_url` — was
+answered by reading the real manifest during implementation: they all do, and
+decision 3 records what that changed.

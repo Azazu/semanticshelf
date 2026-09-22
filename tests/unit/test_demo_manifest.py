@@ -230,11 +230,40 @@ def test_a_picture_with_no_annotations_has_no_tags() -> None:
 
 
 def test_the_provenance_names_what_the_dataset_supplies_and_no_more() -> None:
-    picture = select(manifest([{"id": 39769, "license": 4}])).pictures[0]
+    image = {"id": 39769, "license": 4, "flickr_url": "http://farm9.staticflickr.com/x_z.jpg"}
 
-    provenance = picture.provenance()
+    provenance = select(manifest([image])).pictures[0].provenance()
 
     assert provenance["dataset_id"] == "39769"
     assert provenance["licence"] == "http://creativecommons.org/licenses/by/2.0/"
-    assert provenance["source_url"].endswith("/val2017/000000039769.jpg")
+    assert provenance["source_url"] == image["flickr_url"], "where the picture can be seen"
     assert "author" not in provenance, "COCO records none; it is absent rather than invented"
+
+
+@pytest.mark.parametrize(
+    "declared",
+    [None, 7, "javascript:alert(1)", "/etc/passwd", "http://" + "x" * 600],
+    ids=["absent", "not a string", "not http", "a path", "too long"],
+)
+def test_an_address_the_manifest_cannot_supply_falls_back_to_the_one_we_built(
+    declared: object,
+) -> None:
+    image: dict[str, Any] = {"id": 39769, "license": 4}
+    if declared is not None:
+        image["flickr_url"] = declared
+
+    picture = select(manifest([image])).pictures[0]
+
+    assert picture.source_url == picture.fetch_url
+    assert picture.fetch_url.endswith("/val2017/000000039769.jpg")
+
+
+def test_the_address_the_bytes_come_from_is_always_ours() -> None:
+    """The manifest may say where a picture can be seen; it never says where
+    this command goes."""
+    image = {"id": 39769, "license": 4, "flickr_url": "http://elsewhere.example/steal.jpg"}
+
+    picture = select(manifest([image])).pictures[0]
+
+    assert picture.fetch_url.startswith("https://s3.amazonaws.com/images.cocodataset.org/")
+    assert picture.source_url == "http://elsewhere.example/steal.jpg"

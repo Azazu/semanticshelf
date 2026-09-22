@@ -146,7 +146,7 @@ async def test_the_corpus_imports_with_its_provenance(
         assert list(row.tags) == ["traffic-light"]
         assert row.meta["dataset"] == demo_dataset.DATASET
         assert row.meta["licence"] == "http://creativecommons.org/licenses/by/2.0/"
-        assert row.meta["source_url"].startswith(demo_dataset.BASE_URL)
+        assert row.meta["source_url"].startswith("http")
         assert "author" not in row.meta
         assert row.meta[SOURCE_PATH_KEY].endswith(".png")
 

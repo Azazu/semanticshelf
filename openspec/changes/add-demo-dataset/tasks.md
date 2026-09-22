@@ -44,7 +44,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
   for more than 32 distinct categories. Demonstrated failing input: passing a
   raw multi-word label to `normalise_tag` raises `TagError`, which is why the
   conversion exists.
-- [ ] 2.4 Read the real manifest once and record what it says: the eight
+- [x] 2.4 Read the real manifest once and record what it says: the eight
   licence entries, whether `val2017` image entries carry `flickr_url` beside
   `coco_url` (design.md, Open Questions), and the count of pictures under each
   accepted licence. Verify: the numbers appear in
@@ -129,7 +129,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
 - [x] 4.4 A sidecar is never a candidate picture: it is not imported, not
   refused and not skipped-with-a-reason. Verify: the integration test above
   asserts the counters name only the pictures.
-- [ ] 4.5 `docs/how-to/indexing.md` documents the sidecar with a run whose
+- [x] 4.5 `docs/how-to/indexing.md` documents the sidecar with a run whose
   output is captured from a real command.
 
 ## 5. The commands and `make demo`
@@ -159,28 +159,28 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 6. Documentation and the amendments this change owes
 
-- [ ] 6.1 `docs/reference/demo-dataset.md`: the dataset, the eight licences and
+- [x] 6.1 `docs/reference/demo-dataset.md`: the dataset, the eight licences and
   which four are accepted, why NoDerivs is not, the label-to-tag conversion,
   the provenance keys written per asset, how attribution is given, the download
   sizes and bounds, the layout the corpus has on disk (one directory per
   picture, and why), and the exact commands. Verify: every command in it was run
   in the form shown and its output pasted from that run.
-- [ ] 6.2 `docs/explanation/requirements.md`: FR-CLI-3 records the chosen
+- [x] 6.2 `docs/explanation/requirements.md`: FR-CLI-3 records the chosen
   dataset and the licence filter; §7's row 9 carries the tier this change
   actually has. Verify: both lines read as the implementation behaves, and
   `openspec validate --all --strict` passes.
-- [ ] 6.3 `openspec/ROADMAP.md`: row 9 carries the same tier. Verify: the row
+- [x] 6.3 `openspec/ROADMAP.md`: row 9 carries the same tier. Verify: the row
   matches `proposal.md`'s `**Risk-Tier:**` line.
 
 ## 7. Evidence
 
-- [ ] 7.1 One real run against the live dataset with a small count
+- [x] 7.1 One real run against the live dataset with a small count
   (`uv run semanticshelf demo-dataset download --count 20 --into .data/demo`
   then `uv run semanticshelf demo-dataset index --into .data/demo`), its output
   captured into `docs/reference/demo-dataset.md`, and a search against the
   corpus in `docs/how-to/searching.md`'s form to show it is findable. Verify:
   the captured output is from that run, and the assets carry the provenance the
   spec requires.
-- [ ] 7.2 `make check`, `make test-integration` and
+- [x] 7.2 `make check`, `make test-integration` and
   `openspec validate --all --strict` green, and every `scripts/*_test.sh` and
   `sh -n scripts/*.sh` run locally before the branch is pushed.

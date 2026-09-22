@@ -19,7 +19,7 @@ import secrets
 import shutil
 import zipfile
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -55,7 +55,7 @@ MANIFEST_MEMBER = "annotations/instances_val2017.json"
 
 #: Three bounds, because there are three kinds of object. A picture is what the
 #: service accepts as a picture (`MAX_UPLOAD_BYTES`); the archive is 241 MiB
-#: today, so its bound is its own; the member inside it is ~46 MiB today.
+#: today, so its bound is its own; the member inside it is 19 MiB today.
 ARCHIVE_MAX_BYTES = 512 * 1024 * 1024
 MEMBER_MAX_BYTES = 128 * 1024 * 1024
 
@@ -80,22 +80,33 @@ class ManifestError(Exception):
     """The archive or the manifest inside it is not what was expected."""
 
 
+#: How long an address recorded as attribution may be. It is metadata, never a
+#: path and never something this service fetches, but it is still a stranger's
+#: text and it still has to fit inside the metadata bound.
+MAX_ADDRESS_LENGTH = 512
+
+
 @dataclass(frozen=True, slots=True)
 class Picture:
     """One picture of the corpus, as the manifest describes it.
 
     `identifier` is the dataset's own, validated to be a positive integer,
     because it is what every name this command writes is built from.
+    `source_url` is where the picture can be *seen* — the photographer's page,
+    which is what a CC BY licence wants pointed at — and is recorded as
+    metadata only: nothing here ever fetches it.
     """
 
     identifier: int
     licence: str
     tags: tuple[str, ...]
+    source_url: str
 
     @property
-    def source_url(self) -> str:
-        """Where the picture can be seen. Built here, never read from the
-        manifest: attribution has to point at something this command trusts."""
+    def fetch_url(self) -> str:
+        """Where the bytes are fetched from: built here, from the identifier
+        this command validated and its own base. No address from the manifest
+        is ever requested."""
         return f"{BASE_URL}/{PICTURES_PATH}/{self.identifier:012d}.jpg"
 
     def provenance(self) -> dict[str, str]:
@@ -176,6 +187,17 @@ def _licence_urls(manifest: Mapping[str, Any]) -> dict[int, str]:
     return urls
 
 
+def _address(declared: Any, *, fallback: str) -> str:
+    """An address from the manifest, if it is one, and ours if it is not."""
+    if (
+        isinstance(declared, str)
+        and len(declared) <= MAX_ADDRESS_LENGTH
+        and declared.startswith(("http://", "https://"))
+    ):
+        return declared
+    return fallback
+
+
 def _labels_by_picture(manifest: Mapping[str, Any]) -> dict[int, list[str]]:
     """Which object categories each picture is annotated with."""
     categories = {
@@ -230,11 +252,16 @@ def select(manifest: Mapping[str, Any]) -> Selection:
         if licence is None or licence not in ACCEPTED_LICENCES:
             refused += 1
             continue
+        picture = Picture(
+            identifier=identifier,
+            licence=licence,
+            tags=tags_of(labels.get(identifier, ())),
+            source_url="",
+        )
         pictures.append(
-            Picture(
-                identifier=identifier,
-                licence=licence,
-                tags=tags_of(labels.get(identifier, ())),
+            replace(
+                picture,
+                source_url=_address(image.get("flickr_url"), fallback=picture.fetch_url),
             )
         )
     return Selection(pictures=tuple(pictures), refused_for_licence=refused)
@@ -384,7 +411,7 @@ def stage(client: httpx.Client, picture: Picture, *, into: Path, settings: Setti
     staging.mkdir(parents=True)
     try:
         part = staging / "picture.part"
-        _stream(client, picture.source_url, part, limit=settings.max_upload_bytes)
+        _stream(client, picture.fetch_url, part, limit=settings.max_upload_bytes)
         facts = images.inspect(part, settings)
         stem = f"{picture.identifier:012d}"
         os.rename(part, staging / f"{stem}.{facts.file_ext}")

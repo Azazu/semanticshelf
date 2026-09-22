@@ -315,6 +315,52 @@ normalisation an upload uses, and neither can replace the recorded path.
 `source` is `folder` rather than `upload`; everything else about the asset is
 what an upload of the same bytes would store.
 
+### A picture's own tags and metadata
+
+`--tags` and `--meta` describe the whole run. A picture can also carry its own,
+in a file named after it and lying beside it: `rose.png` and `rose.json`.
+
+```json
+{
+  "tags": ["flower", "red"],
+  "meta": {"photographer": "ada", "roll": 7}
+}
+```
+
+Its tags are added to the run's and its metadata is merged over the run's, both
+through the same normalisation and the same limits an upload applies. Neither
+can replace the recorded path:
+
+```console
+$ uv run semanticshelf index-folder ~/pictures --tags garden
+folder: /home/you/pictures
+created: 1
+already stored: 0
+refused: 1
+skipped: 0
+  refused        lake.png — its sidecar: not JSON: Expecting property name enclosed in double quotes: line 1 column 3 (char 2)
+indexed: 1
+still queued: 0
+failed: 0
+
+$ psql -c "SELECT original_filename, tags, meta->>'photographer', meta->>'source_path'
+           FROM assets WHERE original_filename = 'rose.png'"
+ original_filename |        tags         | photographer | source_path
+-------------------+---------------------+--------------+-------------
+ rose.png          | {garden,flower,red} | ada          | rose.png
+```
+
+A sidecar only ever reaches its own picture: one that cannot be read, is not an
+object, breaks a limit or carries a tag the service would refuse costs that
+picture and nothing else, and the run says which file it was — as `lake.png`
+shows above. A sidecar is not itself a picture to import, so it is never
+reported as skipped either.
+
+It is read exactly as a picture is: through a descriptor opened relative to the
+directory being walked, never by its path. A sidecar that is a symbolic link, a
+fifo or anything but a regular file is refused, and so is one swapped for such a
+thing between the walk listing its picture and the sidecar being read.
+
 ### What it will not read
 
 Only regular files inside the directory, chosen by extension

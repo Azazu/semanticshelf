@@ -36,6 +36,7 @@ PICTURE = Picture(
     identifier=39769,
     licence="http://creativecommons.org/licenses/by/2.0/",
     tags=("cat", "traffic-light"),
+    source_url="http://farm9.staticflickr.com/seen-here.jpg",
 )
 
 
@@ -380,8 +381,8 @@ def test_two_runs_racing_publish_one_run_s_pair_and_never_a_mixture(
     sidecar here; moving the directory cannot, so whichever run publishes first
     owns both halves.
     """
-    red_run = Picture(identifier=7, licence=PICTURE.licence, tags=("red",))
-    blue_run = Picture(identifier=7, licence=PICTURE.licence, tags=("blue",))
+    red_run = Picture(identifier=7, licence=PICTURE.licence, tags=("red",), source_url="x")
+    blue_run = Picture(identifier=7, licence=PICTURE.licence, tags=("blue",), source_url="x")
     red, blue = picture_bytes("red"), picture_bytes("blue")
     red_client, _ = serving(jpg=red)
     blue_client, _ = serving(jpg=blue)
@@ -416,8 +417,8 @@ def test_two_runs_racing_publish_one_run_s_pair_and_never_a_mixture(
 def test_two_runs_one_after_the_other_leave_the_first_pair_alone(
     into: Path, settings: Settings
 ) -> None:
-    red_run = Picture(identifier=7, licence=PICTURE.licence, tags=("red",))
-    blue_run = Picture(identifier=7, licence=PICTURE.licence, tags=("blue",))
+    red_run = Picture(identifier=7, licence=PICTURE.licence, tags=("red",), source_url="x")
+    blue_run = Picture(identifier=7, licence=PICTURE.licence, tags=("blue",), source_url="x")
     red, blue = picture_bytes("red"), picture_bytes("blue")
     red_client, _ = serving(jpg=red)
     blue_client, asked = serving(jpg=blue)
