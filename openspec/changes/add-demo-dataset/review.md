@@ -30,3 +30,18 @@
 | 3 | confirmed — dataset labels now have an explicit whitespace-to-hyphen conversion before the unchanged FR-TAG-1 normalizer, and the tasks test that distinct conversion. |
 | 4 | confirmed — pre-existing duplicate content is now reported without creating or mutating an asset, and task 5.3 verifies both upload-first and folder-import-first orderings. |
 | 5 | changes-requested — per-run staging prevents bytes from being mixed within one file, but it does not prevent a picture from one run being paired with the sidecar from another. For example, sidecar A, sidecar B, picture B, picture A leaves picture A beside sidecar B. The design assumes both runs fetched identical bytes and metadata from the same identifier, but no snapshot or content identity guarantee enforces that assumption. Define publication/collision behavior that preserves pair consistency under that interleaving, and make the concurrency test use distinguishable run inputs so it demonstrates the retained guarantee rather than assuming it. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** f03c61af6ad7efce0e90ad82fe24e90682a9c490
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the archive transfer, archive member, and picture now have distinct applicable bounds; archive timeout, redirect, oversize cleanup, and failing-input coverage are specified. |
+| 2 | confirmed — sidecars retain the folder-import boundary through descriptor-relative, no-follow, nonblocking opens and descriptor inspection, with symlink and replacement-race failing inputs. |
+| 3 | confirmed — dataset-label whitespace conversion is explicitly separate from FR-TAG-1 normalisation, and the planned tests exercise that distinction. |
+| 4 | confirmed — pre-existing duplicate content leaves the existing asset and its provenance unchanged, and both upload-first and folder-import-first orderings are covered. |
+| 5 | confirmed — each distinguishable picture/sidecar pair is now built in a run-private directory and published by one atomic directory rename; the losing publisher leaves the winning pair untouched, and the concurrency test verifies pair identity with different bytes and labels. |
