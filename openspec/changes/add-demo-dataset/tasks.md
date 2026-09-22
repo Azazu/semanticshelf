@@ -104,13 +104,13 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 4. The sidecar in the folder import
 
-- [ ] 4.1 `app/services/folder.py`: a picture's sidecar supplies its tags and
+- [x] 4.1 `app/services/folder.py`: a picture's sidecar supplies its tags and
   metadata — tags added to the run's, metadata merged over the run's, the
   recorded origin winning over both, all through the normalisation and limits
   an upload applies (design decision 7). Verify: unit tests for the merge
   rules; `tests/integration/test_folder_import.py` gains a folder with
   sidecars and asserts the stored tags, metadata and origin.
-- [ ] 4.2 The sidecar is opened the way a picture is: relative to the
+- [x] 4.2 The sidecar is opened the way a picture is: relative to the
   descriptor of the directory the walk holds, with `O_NOFOLLOW | O_NONBLOCK |
   O_CLOEXEC`, and judged by `fstat` on that descriptor — never by its path
   (design decision 7). Verify: integration tests for a sidecar that is a
@@ -120,13 +120,13 @@ check is removed, and that failure is demonstrated before the task is ticked.
   the folder was read, and that the run did not block. Demonstrated failing
   input: opening the sidecar with `open(path)` reads through the symbolic link,
   which the first of those tests catches.
-- [ ] 4.3 A sidecar that can be opened but not accepted — not an object, over
+- [x] 4.3 A sidecar that can be opened but not accepted — not an object, over
   the limits, an unacceptable tag — refuses its own picture with a reason
   naming the sidecar, and the run continues. Verify: an integration test with
   one good picture and one whose sidecar is broken asserts the summary and the
   store. Demonstrated failing input: skipping the sidecar validation stores a
   tag the service would refuse at upload.
-- [ ] 4.4 A sidecar is never a candidate picture: it is not imported, not
+- [x] 4.4 A sidecar is never a candidate picture: it is not imported, not
   refused and not skipped-with-a-reason. Verify: the integration test above
   asserts the counters name only the pictures.
 - [ ] 4.5 `docs/how-to/indexing.md` documents the sidecar with a run whose

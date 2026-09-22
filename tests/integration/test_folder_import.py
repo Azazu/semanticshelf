@@ -703,3 +703,179 @@ async def test_a_rehearsal_counts_the_second_copy_of_the_same_bytes_as_stored(
 
     assert verdicts(rehearsal) == {"first.png": CREATED, "second.png": ALREADY_STORED}
     assert verdicts(rehearsal) == verdicts(real)
+
+
+# --- a picture's own tags and metadata ------------------------------------------
+#
+# The merge rules are decided in `tests/unit/test_folder_sidecar.py`; what needs
+# a real filesystem is the discipline that gets the bytes — a sidecar is opened
+# through the descriptor the walk holds, never by its path.
+
+
+def with_sidecar(directory: Path, name: str, content: dict[str, Any] | str) -> Path:
+    (directory / f"{name}.png").write_bytes(picture_bytes(seed=len(name)))
+    sidecar = directory / f"{name}.json"
+    sidecar.write_text(content if isinstance(content, str) else json.dumps(content))
+    return sidecar
+
+
+async def test_a_picture_carries_what_its_sidecar_says(
+    incoming: Path,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+    engine: AsyncEngine,
+) -> None:
+    with_sidecar(incoming, "one", {"tags": ["cat"], "meta": {"dataset": "demo", "run": 2}})
+
+    report = await folder.import_folder(
+        incoming,
+        session=session,
+        storage=storage,
+        settings=settings,
+        tags=("shared",),
+        meta={"run": 1},
+    )
+
+    assert report.count(CREATED) == 1
+    (row,) = await rows(engine)
+    assert list(row.tags) == ["shared", "cat"]
+    assert row.meta["dataset"] == "demo"
+    assert row.meta["run"] == 2, "the picture's own wins over the run's"
+    assert row.meta[SOURCE_PATH_KEY] == "one.png", "and neither reaches the origin"
+
+
+async def test_a_sidecar_is_not_a_file_the_run_reports(
+    incoming: Path, session: AsyncSession, storage: MediaStorage, settings: Settings
+) -> None:
+    with_sidecar(incoming, "one", {"tags": ["cat"]})
+    (incoming / "notes.json").write_text("{}")  # belongs to no picture
+
+    report = await folder.import_folder(
+        incoming, session=session, storage=storage, settings=settings
+    )
+
+    assert report.count(CREATED) == 1
+    assert [outcome.path.name for outcome in report.files if outcome.state == SKIPPED] == [
+        "notes.json"
+    ], "a sidecar is invisible; an ordinary file that is not a picture is not"
+    assert report.count(REFUSED) == 0
+
+
+async def test_a_sidecar_the_service_cannot_accept_refuses_its_own_picture(
+    incoming: Path,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+    engine: AsyncEngine,
+) -> None:
+    with_sidecar(incoming, "good", {"tags": ["cat"]})
+    with_sidecar(incoming, "broken", "{not json")
+
+    report = await folder.import_folder(
+        incoming, session=session, storage=storage, settings=settings
+    )
+
+    refused = [outcome for outcome in report.files if outcome.state == REFUSED]
+    assert report.count(CREATED) == 1
+    assert [outcome.path.name for outcome in refused] == ["broken.png"]
+    assert refused[0].reason is not None and "sidecar" in refused[0].reason
+    assert [row.original_filename for row in await rows(engine)] == ["good.png"]
+
+
+async def test_a_sidecar_that_is_a_symbolic_link_is_not_read(
+    incoming: Path,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+    tmp_path: Path,
+    engine: AsyncEngine,
+) -> None:
+    """`O_NOFOLLOW` is the whole defence: the kernel refuses it, so the link's
+    target is never opened — wherever it points."""
+    outside = tmp_path / "outside.json"
+    outside.write_text(json.dumps({"tags": ["from-outside"]}))
+    (incoming / "one.png").write_bytes(picture_bytes())
+    (incoming / "one.json").symlink_to(outside)
+
+    report = await folder.import_folder(
+        incoming, session=session, storage=storage, settings=settings
+    )
+
+    (refused,) = [outcome for outcome in report.files if outcome.state == REFUSED]
+    assert refused.path.name == "one.png"
+    assert refused.reason is not None and "symbolic link" in refused.reason
+    assert await rows(engine) == []
+
+
+async def test_a_sidecar_that_is_not_a_regular_file_does_not_block_the_run(
+    incoming: Path, session: AsyncSession, storage: MediaStorage, settings: Settings
+) -> None:
+    """A fifo would hang a reader for ever; `O_NONBLOCK` plus `fstat` on the
+    descriptor means the run refuses the picture instead of stopping."""
+    (incoming / "one.png").write_bytes(picture_bytes())
+    os.mkfifo(incoming / "one.json")
+
+    report = await folder.import_folder(
+        incoming, session=session, storage=storage, settings=settings
+    )
+
+    (refused,) = [outcome for outcome in report.files if outcome.state == REFUSED]
+    assert refused.path.name == "one.png"
+    assert refused.reason is not None and "regular file" in refused.reason
+
+
+async def test_a_sidecar_replaced_after_its_picture_was_listed_is_refused(
+    incoming: Path,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The race the walk is built against: the name was a plain file when the
+    directory was listed and is a symbolic link by the time it is opened. What
+    is judged is the descriptor, so the swap changes nothing."""
+    outside = tmp_path / "outside.json"
+    outside.write_text(json.dumps({"tags": ["from-outside"]}))
+    (incoming / "one.png").write_bytes(picture_bytes())
+    (incoming / "one.json").write_text(json.dumps({"tags": ["honest"]}))
+    real_open = folder._open_candidate
+
+    def swap_then_open(name: str, dir_fd: int) -> int:
+        if name == "one.json":
+            os.unlink(incoming / "one.json")
+            (incoming / "one.json").symlink_to(outside)
+        return real_open(name, dir_fd)
+
+    monkeypatch.setattr(folder, "_open_candidate", swap_then_open)
+
+    report = await folder.import_folder(
+        incoming, session=session, storage=storage, settings=settings
+    )
+
+    (refused,) = [outcome for outcome in report.files if outcome.state == REFUSED]
+    assert refused.reason is not None and "symbolic link" in refused.reason
+
+
+async def test_a_sidecar_in_a_subdirectory_is_read_the_same_way(
+    incoming: Path,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+    engine: AsyncEngine,
+) -> None:
+    """One directory per picture is what the demo corpus looks like."""
+    nested = incoming / "7"
+    nested.mkdir()
+    with_sidecar(nested, "000000000007", {"tags": ["cat"], "meta": {"dataset_id": "7"}})
+
+    report = await folder.import_folder(
+        incoming, session=session, storage=storage, settings=settings, recursive=True
+    )
+
+    assert report.count(CREATED) == 1
+    (row,) = await rows(engine)
+    assert list(row.tags) == ["cat"]
+    assert row.meta["dataset_id"] == "7"
+    assert row.meta[SOURCE_PATH_KEY] == "7/000000000007.png"
