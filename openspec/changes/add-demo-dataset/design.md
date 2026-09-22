@@ -133,8 +133,10 @@ is already there".
    What a killed run leaves is exactly one thing: its own staging directory,
    which no other run reads, which no later run needs removed, and which the
    operator may delete at any time.
-   The manifest's `file_name` is parsed for nothing but a sanity check that it
-   matches the identifier; it never becomes a path.
+   The manifest's `file_name` is not read at all — not even to check it. Every
+   name comes from the identifier this command validated and the extension the
+   decoded bytes earned, so a manifest naming a picture
+   `../../../../etc/passwd.jpg` changes nothing about where anything lands.
 
    Rejected: flat `<into>/<id>.jpg` plus `<into>/<id>.json` with per-run
    staging names — the interleaving above. Rejected: making the sidecar carry

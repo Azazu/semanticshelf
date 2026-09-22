@@ -53,7 +53,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 3. The transfers, each bounded by its own bound
 
-- [ ] 3.1 Fetch one picture: a per-request timeout, redirects refused rather
+- [x] 3.1 Fetch one picture: a per-request timeout, redirects refused rather
   than followed, the response abandoned past `MAX_UPLOAD_BYTES`, the bytes
   accepted only if they decode as a picture the service accepts (design
   decisions 4 and 5). Verify: `tests/unit/test_demo_download.py` drives it
@@ -62,7 +62,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
   not a picture — and asserts what landed in the directory each time and that
   the run continued. Demonstrated failing input: allowing redirects makes the
   redirect test write a file from the wrong host.
-- [ ] 3.2 Fetch the archive under `ARCHIVE_MAX_BYTES`, with its own timeout and
+- [x] 3.2 Fetch the archive under `ARCHIVE_MAX_BYTES`, with its own timeout and
   the same refusal of redirects, and with an archive failure ending the command
   instead of being counted (design decision 4). Verify: unit tests through the
   same stub for a streamed response that passes the bound, one that times out
@@ -70,14 +70,14 @@ check is removed, and that failure is demonstrated before the task is ticked.
   the host, that no staging file survives, and that no picture was requested.
   Demonstrated failing input: applying `MAX_UPLOAD_BYTES` to the archive makes
   the ordinary 241 MiB archive fail, which is the mistake Gate 1 named.
-- [ ] 3.3 Every written name is built from the identifier the command validated
+- [x] 3.3 Every written name is built from the identifier the command validated
   and the extension it derived from the decoded bytes; nothing from the
   manifest builds a path. Verify: a unit test whose manifest entry has
   `file_name` `../../../../etc/passwd.jpg` asserts the picture is written
   inside the target directory under the identifier-derived name and that
   nothing exists outside it. Demonstrated failing input: using `file_name` for
   the output path makes the test fail on a file outside the directory.
-- [ ] 3.4 Publication is one rename of a directory: the picture and its sidecar
+- [x] 3.4 Publication is one rename of a directory: the picture and its sidecar
   are built in `<into>/.staging/<id>.<pid>-<random>/` and the whole directory is
   renamed to `<into>/pictures/<id>/`; a target that already exists makes the
   rename fail,
@@ -86,7 +86,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
   corpus before the rename, that a failure anywhere before it leaves the corpus
   untouched and only a staging directory behind, and that publishing over an
   existing directory leaves that directory byte-identical.
-- [ ] 3.5 The concurrency claim, demonstrated with **distinguishable** runs
+- [x] 3.5 The concurrency claim, demonstrated with **distinguishable** runs
   rather than assumed: two downloads fetch the same picture into one directory
   through transports that serve different bytes and different labels for it.
   Verify: a unit test interleaves the two runs' publications and asserts the
@@ -96,7 +96,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
   Demonstrated failing input: publishing the two files separately, sidecar
   first, makes this test pair one run's picture with the other's sidecar — the
   interleaving the first Gate 1 confirmation named.
-- [ ] 3.6 Bounds and repetition: `--count` honoured and defaulted to 500,
+- [x] 3.6 Bounds and repetition: `--count` honoured and defaulted to 500,
   `--count 0` writing nothing but still printing the notice, a picture already
   present skipped without a request, and a per-picture failure counted without
   ending the run. Verify: unit tests for each, with the transport asserting how

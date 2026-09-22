@@ -12,14 +12,31 @@ decides every licence against the manifest's own table, and writes every file
 under a name it derived itself.
 """
 
+import errno
 import json
+import os
+import secrets
+import shutil
 import zipfile
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import httpx
+
+from app.core.settings import Settings
+from app.services import images
 from app.services.tagging import MAX_TAGS, TagError, normalise_tag
+
+#: What a picture may be refused for: the upload pipeline's own rules, applied
+#: to bytes that arrived from the internet exactly as to bytes from a client.
+REFUSALS = (
+    images.UndecodableImageError,
+    images.UnsupportedFormatError,
+    images.ImageTooLargeError,
+    images.ImageTooSmallError,
+)
 
 #: What the corpus is, as it is recorded on every asset it produces.
 DATASET = "coco-val2017"
@@ -245,3 +262,198 @@ def licence_notice(accepted: Sequence[str] = tuple(sorted(ACCEPTED_LICENCES))) -
         "Details: docs/reference/demo-dataset.md",
     ]
     return "\n".join(lines)
+
+
+# --- fetching ------------------------------------------------------------------
+#
+# Three kinds of object, three bounds, one rule for all of them: a transfer is
+# timed, is never followed to another host, and is abandoned the moment it
+# passes what that kind of object may weigh. A picture that fails is counted and
+# the run goes on; the archive failing ends the run, because without the
+# manifest there is nothing to fetch.
+
+#: What a single request may take before it is abandoned.
+REQUEST_TIMEOUT_SECONDS = 30.0
+
+#: The layout under the directory the operator named: the corpus, the place
+#: runs build pairs in, and the archive beside them. `demo-dataset index`
+#: imports the corpus alone, so neither staging nor the archive is ever a
+#: candidate for import.
+PICTURES_DIR = "pictures"
+STAGING_DIR = ".staging"
+ARCHIVE_NAME = "annotations_trainval2017.zip"
+
+WRITTEN = "written"
+ALREADY_PRESENT = "already present"
+
+
+class TransferError(Exception):
+    """A transfer that was refused, abandoned or answered wrongly."""
+
+
+class DownloadError(Exception):
+    """The run cannot continue: the manifest could not be fetched or read."""
+
+
+@dataclass(slots=True)
+class Report:
+    """What a download did, in the words the command prints."""
+
+    written: int = 0
+    already_present: int = 0
+    refused_for_licence: int = 0
+    failed: int = 0
+    failures: list[str] = field(default_factory=list)
+
+
+def corpus_of(into: Path) -> Path:
+    """Where the pictures live, and the only directory the import is given."""
+    return into / PICTURES_DIR
+
+
+def _staging_root(into: Path) -> Path:
+    return into / STAGING_DIR
+
+
+def _staging_name(stem: str) -> str:
+    """A name only this run writes, so two runs never share a staging path."""
+    return f"{stem}.{os.getpid()}-{secrets.token_hex(4)}"
+
+
+def client() -> httpx.Client:
+    """The one client these commands use.
+
+    `follow_redirects=False` is the guard: a redirect is data from the same
+    stranger who wrote the manifest, and following it would move the transfer to
+    a host this repository never named. It is refused explicitly in `_stream`
+    too, so the reason reaches the report rather than a status code.
+    """
+    return httpx.Client(follow_redirects=False, timeout=REQUEST_TIMEOUT_SECONDS)
+
+
+def _stream(client: httpx.Client, url: str, target: Path, *, limit: int) -> None:
+    """One transfer into one file: timed, bounded, and never redirected away."""
+    with client.stream("GET", url, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        if response.is_redirect:
+            raise TransferError(
+                f"{url} answered {response.status_code} redirecting to "
+                f"{response.headers.get('location', 'elsewhere')}, which is not followed"
+            )
+        if response.status_code != httpx.codes.OK:
+            raise TransferError(f"{url} answered {response.status_code}")
+        taken = 0
+        with target.open("wb") as sink:
+            for chunk in response.iter_bytes():
+                taken += len(chunk)
+                if taken > limit:
+                    raise TransferError(f"{url} is larger than the {limit} bytes allowed")
+                sink.write(chunk)
+
+
+def fetch_archive(client: httpx.Client, *, into: Path) -> Path:
+    """The manifest archive, fetched once and kept.
+
+    Staged where only this run writes and moved into place complete, so a run
+    that dies leaves nothing a later run would read as the archive.
+    """
+    archive = into / ARCHIVE_NAME
+    if archive.is_file():
+        return archive
+    staging_root = _staging_root(into)
+    staging_root.mkdir(parents=True, exist_ok=True)
+    staging = staging_root / _staging_name(ARCHIVE_NAME)
+    try:
+        _stream(client, f"{BASE_URL}/{ARCHIVE_PATH}", staging, limit=ARCHIVE_MAX_BYTES)
+        os.replace(staging, archive)
+    except (TransferError, httpx.HTTPError, OSError) as error:
+        staging.unlink(missing_ok=True)
+        raise DownloadError(f"the manifest archive could not be fetched: {error}") from error
+    return archive
+
+
+def stage(client: httpx.Client, picture: Picture, *, into: Path, settings: Settings) -> Path:
+    """Build the pair where only this run writes, and return that directory.
+
+    Nothing here is visible in the corpus: the picture is streamed to a part
+    file, accepted only if it decodes as a picture the service accepts, and
+    named from the identifier this command validated. The sidecar is written
+    beside it. Publication is a separate step on purpose — it is the only step
+    that changes what anyone else can see.
+    """
+    staging = _staging_root(into) / _staging_name(str(picture.identifier))
+    staging.mkdir(parents=True)
+    try:
+        part = staging / "picture.part"
+        _stream(client, picture.source_url, part, limit=settings.max_upload_bytes)
+        facts = images.inspect(part, settings)
+        stem = f"{picture.identifier:012d}"
+        os.rename(part, staging / f"{stem}.{facts.file_ext}")
+        (staging / f"{stem}.json").write_text(
+            json.dumps(sidecar_of(picture), indent=2, sort_keys=True), encoding="utf-8"
+        )
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return staging
+
+
+def publish(staging: Path, *, into: Path, identifier: int) -> str:
+    """Move a staged pair into the corpus — both halves, or neither.
+
+    One `os.rename` of the directory: the corpus can never hold this run's
+    picture beside another run's sidecar, whatever two runs do at the same time.
+    A target that already exists makes the rename fail, and the pair that is
+    already published is left exactly as it is.
+    """
+    target = corpus_of(into) / str(identifier)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.rename(staging, target)
+    except OSError as error:
+        shutil.rmtree(staging, ignore_errors=True)
+        if error.errno in (errno.ENOTEMPTY, errno.EEXIST):
+            return ALREADY_PRESENT
+        raise
+    return WRITTEN
+
+
+def fetch_picture(client: httpx.Client, picture: Picture, *, into: Path, settings: Settings) -> str:
+    """One picture and its sidecar, fetched and published as a pair."""
+    target = corpus_of(into) / str(picture.identifier)
+    if target.exists():
+        return ALREADY_PRESENT
+    staging = stage(client, picture, into=into, settings=settings)
+    return publish(staging, into=into, identifier=picture.identifier)
+
+
+def download(client: httpx.Client, *, into: Path, count: int, settings: Settings) -> Report:
+    """Fetch the manifest, then the pictures its licences allow, bounded by count."""
+    if count < 0:
+        raise ValueError("count must not be negative")
+    into.mkdir(parents=True, exist_ok=True)
+    selection = select(read_manifest(fetch_archive(client, into=into)))
+    report = Report(refused_for_licence=selection.refused_for_licence)
+    for picture in wanted(selection, count=count):
+        try:
+            outcome = fetch_picture(client, picture, into=into, settings=settings)
+        except (TransferError, httpx.HTTPError, OSError, *REFUSALS) as error:
+            report.failed += 1
+            report.failures.append(f"{picture.identifier}: {error}")
+            continue
+        if outcome == WRITTEN:
+            report.written += 1
+        else:
+            report.already_present += 1
+    return report
+
+
+def describe(report: Report) -> list[str]:
+    """The summary a run prints, one fact per line."""
+    lines = [
+        f"written:            {report.written}",
+        f"already present:    {report.already_present}",
+        f"refused (licence):  {report.refused_for_licence}",
+        f"failed:             {report.failed}",
+    ]
+    lines.extend(f"  {failure}" for failure in report.failures[:10])
+    return lines
