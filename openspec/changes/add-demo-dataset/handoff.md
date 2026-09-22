@@ -6,22 +6,35 @@
 
 ## Done this session
 
-Branch and scaffold only. The roadmap already carried the row (change 9,
-tier medium): a demo corpus the search can be shown on — a download command
-for an openly licensed dataset with its licence checked and its notice kept,
-tags from the dataset's own labelling, provenance in `meta`, and `make demo`.
+Branch, scaffold and all four planning artifacts. Two decisions the user made
+before anything was written:
+
+- **The dataset is COCO val2017.** FR-CLI-3 left the choice here and named two
+  candidates. COCO's manifest carries a licence per picture, so the licence
+  check is a filter rather than a sentence; Unsplash Lite's terms forbid
+  publishing any portion of the data, which collides with the README
+  screenshots NFR-DOC-1 wants.
+- **The tier is `high`**, raised from the `medium` the specification and the
+  roadmap declare. Their reason holds — the egress is an operator's, not the
+  service's — but the command also turns remote bytes into files, which is
+  security-sensitive input handling.
+
+Two things the planning found by checking rather than assuming:
+
+- `images.cocodataset.org` has **no valid certificate for its own name**
+  (`SSL: no alternative certificate subject name matches target hostname`), and
+  the manifest's own addresses are plain `http://`. The same objects answer
+  over `https://s3.amazonaws.com/images.cocodataset.org/…` with a certificate
+  that verifies — checked for the archive and for a picture.
+- The manifest's shape was verified against a real COCO file (the small
+  `image_info_test2017` archive): `licenses[]` of eight entries, a `license` id
+  on every image, and **no author field** — so attribution is by the picture's
+  address, and `author` is absent rather than invented.
 
 ## Next step
 
-`/opsx:propose add-demo-dataset`. Questions the proposal has to settle before
-anything is written: which dataset and under which licence, what the command
-does when the licence file cannot be verified, where the notice lives in the
-repository, how much is downloaded by default, and whether the import goes
-through the folder pipeline of change 7 or its own path.
-
-Network egress from the service is a `high`-tier trigger in AGENTS.md, so the
-tier is the first thing the proposal decides rather than inherits: the roadmap
-says `medium`, and a command that downloads from the internet may not be.
+Gate 1, because the tier is `high`: `/gate-review add-demo-dataset 1`. The
+mechanical floor already passes.
 
 ## Blockers
 
