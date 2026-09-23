@@ -563,3 +563,157 @@ async def test_the_same_query_at_the_default_budget_is_complete(
     assert page.has_more is True, "the scan reached the row beyond the page"
     assert page.scan_limited is False
     assert counting == [], "and nothing had to be asked"
+
+
+# --- the window, the answer, and what the question counts ------------------------
+
+
+async def place(session: AsyncSession, *, tags: list[str], model: str | None) -> UUID:
+    """One asset carrying `tags`, with a vector of `model` — or with none.
+
+    Deliberately not `seed`: what the bounded question counts is about rows
+    existing or not, and a corpus would only hide which row each assertion is
+    about.
+    """
+    identifier = uuid4()
+    async with session.begin():
+        await session.execute(
+            sa.text(
+                "INSERT INTO assets (id, sha256, content_type, file_ext, width, height,"
+                " size_bytes, source, tags, meta) VALUES (:id, :sha256, 'image/png', 'png',"
+                " 64, 64, 1024, 'upload', :tags, '{}'::jsonb)"
+            ),
+            {"id": identifier, "sha256": f"{identifier.hex}{'0' * 32}", "tags": tags},
+        )
+        if model is not None:
+            await session.execute(
+                sa.text(
+                    "INSERT INTO embeddings (asset_id, model, vector) "
+                    "VALUES (:asset_id, :model, CAST(:vector AS vector))"
+                ),
+                {
+                    "asset_id": identifier,
+                    "model": model,
+                    "vector": str(plane_vector(dimension_of(model), 1.0, 0.0)),
+                },
+            )
+    return identifier
+
+
+async def test_an_asset_search_that_reached_its_lookahead_asks_nothing(
+    session: AsyncSession, db_settings: Settings, pool: Any, counting: list[int]
+) -> None:
+    """The window carries the excluded asset; the answer never counts on it.
+
+    Five rare assets, one of them asking: four neighbours, which is exactly the
+    `limit + 1` a page of three needs. Requiring one row more — the exclusion's
+    — would make this search pay for the bounded question, and every search of
+    this shape with it.
+    """
+    await seed(session, assets=50, rare_every=10)
+    rare = await tagged(session, RARE)
+    assert len(rare) == 5
+
+    page = await search.search_similar(
+        rare[0],
+        session=session,
+        settings=db_settings,
+        limit=3,
+        model=CLIP_VIT_L14,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert len(page.hits) == 3
+    assert rare[0] not in [hit.asset.id for hit in page.hits], "never among its own neighbours"
+    assert page.has_more is True, "the fourth neighbour is the row beyond the page"
+    assert page.scan_limited is False
+    assert counting == [], "the scan reached everything the answer needed"
+
+
+async def test_the_same_when_the_asking_asset_is_outside_the_narrowing(
+    session: AsyncSession, db_settings: Settings, pool: Any, counting: list[int]
+) -> None:
+    """The asking asset is not in the window at all here, so the window's extra
+    row is spent on nothing — and the answer still needs only its four."""
+    await seed(session, assets=50, rare_every=13)
+    rare = await tagged(session, RARE)
+    common = await tagged(session, COMMON)
+    assert len(rare) == 4
+
+    page = await search.search_similar(
+        common[0],
+        session=session,
+        settings=db_settings,
+        limit=3,
+        model=CLIP_VIT_L14,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert {hit.asset.id for hit in page.hits} <= set(rare)
+    assert len(page.hits) == 3
+    assert page.has_more is True
+    assert page.scan_limited is False
+    assert counting == []
+
+
+async def test_the_bounded_question_counts_only_vectors_of_the_search_model(
+    session: AsyncSession,
+) -> None:
+    """A model is part of an embedding's identity, and of this count.
+
+    Without it an asset indexed only by the other model would count as
+    reachable, and a scan that reached everything there is would report itself
+    cut short.
+    """
+    await place(session, tags=[RARE], model=CLIP_VIT_L14)
+    await place(session, tags=[RARE], model=DINOV2_LARGE)
+    await place(session, tags=[RARE], model=None)
+    await place(session, tags=[COMMON], model=CLIP_VIT_L14)
+
+    async with session.begin():
+        found = await EmbeddingRepository(session).reachable(
+            model=CLIP_VIT_L14, narrowing=Narrowing(tags_all=(RARE,)), at_most=10
+        )
+
+    assert found == 1, "the rare asset this model has seen, and no other row"
+
+
+async def test_the_bounded_question_never_counts_the_asking_asset(
+    session: AsyncSession,
+) -> None:
+    asking = await place(session, tags=[RARE], model=CLIP_VIT_L14)
+    await place(session, tags=[RARE], model=CLIP_VIT_L14)
+
+    async with session.begin():
+        repository = EmbeddingRepository(session)
+        without = await repository.reachable(
+            model=CLIP_VIT_L14,
+            narrowing=Narrowing(tags_all=(RARE,)),
+            at_most=10,
+            exclude_asset_id=asking,
+        )
+        counted = await repository.reachable(
+            model=CLIP_VIT_L14, narrowing=Narrowing(tags_all=(RARE,)), at_most=10
+        )
+
+    assert without == 1, "an asset is not its own neighbour, here as everywhere"
+    assert counted == 2, "and the same question without the exclusion says so"
+
+
+async def test_the_bounded_question_stops_where_it_is_told_to(session: AsyncSession) -> None:
+    """It is asked as `reached + 1`: whether more exist than the scan reached,
+    never how many. A count of the corpus is exactly what it must not be."""
+    for _ in range(5):
+        await place(session, tags=[RARE], model=CLIP_VIT_L14)
+
+    async with session.begin():
+        repository = EmbeddingRepository(session)
+        bounded = await repository.reachable(
+            model=CLIP_VIT_L14, narrowing=Narrowing(tags_all=(RARE,)), at_most=3
+        )
+        further = await repository.reachable(
+            model=CLIP_VIT_L14, narrowing=Narrowing(tags_all=(RARE,)), at_most=10
+        )
+
+    assert bounded == 3, "the bound, not the five that are there"
+    assert further == 5

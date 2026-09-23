@@ -78,7 +78,7 @@ two plans answered the query.
   neighbours after the exclusion (complete, nothing asked). Demonstrated failing
   input: comparing against `offset + reached` instead of `reached` turns the
   fourth row into "exhausted" — the defect confirmation 1 named.
-- [ ] 3.3 The window asks for `offset + limit + 1 + excluding` rows, and the
+- [x] 3.3 The window asks for `offset + limit + 1 + excluding` rows, and the
   page needs `offset + limit + 1` of them: the exclusion's extra row belongs to
   the window and never to what the answer requires. Verify: a unit test asserts
   both numbers for an ordinary search and for an asset's own search; an
@@ -87,7 +87,7 @@ two plans answered the query.
   itself satisfies the narrowing and when it does not. Demonstrated failing
   input: requiring one more usable row makes every such search pay for the
   question.
-- [ ] 3.4 The bounded question carries the search's own model, its narrowing and
+- [x] 3.4 The bounded question carries the search's own model, its narrowing and
   the asking asset, and stops at `reached + 1`. Verify: integration tests assert
   it counts neither an asset without a vector of that model nor the asking
   asset. Demonstrated failing input: dropping the model makes an asset indexed

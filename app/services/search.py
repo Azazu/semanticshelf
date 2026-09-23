@@ -139,6 +139,20 @@ def effort_for(*, settings: Settings, limit: int, offset: int, excluded: int = 0
     return min(MAX_SEARCH_EFFORT, max(settings.hnsw_ef_search, limit + offset + 1 + excluded))
 
 
+def rows_needed(*, limit: int, offset: int) -> int:
+    """How many candidates the answer needs from the scan.
+
+    The offset's worth, the page's, and the one beyond the page that says
+    whether more exist. A row the page may not use — the asset left out of its
+    own answer — is **not** here: it belongs to the window the repository asks
+    for (`EmbeddingRepository.nearest_statement`), because a row that can never
+    become a result is not a row the answer requires. Making the exclusion cost
+    a row here would make every asset search pay for the bounded question of
+    decision 3 whenever the store held exactly enough neighbours.
+    """
+    return offset + limit + 1
+
+
 def score_of(distance: float) -> float:
     """Cosine similarity from cosine distance: what a client can reason about."""
     return 1.0 - distance
@@ -309,7 +323,7 @@ async def _page_of(
     scan is asked for every candidate the answer needs — the offset's worth, the
     page's, and the one beyond it — and the page is cut from what came back.
     """
-    needed = offset + limit + 1
+    needed = rows_needed(limit=limit, offset=offset)
     embeddings = EmbeddingRepository(session)
     candidates = await embeddings.nearest(
         model=model,
