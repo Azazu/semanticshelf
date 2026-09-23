@@ -1,66 +1,70 @@
 # Handoff — add-dinov2-image-search
 
 **Updated:** 2026-09-23 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/add-dinov2-image-search
-**Security-sensitive:** yes — a picture arrives in a request body and is
-decoded (FR-IMG-1), a second model is downloaded and loaded on first use, and
-the API's search surface gains a parameter a client chooses. `AGENTS.md` puts
-file uploads and model downloads at `high`; the roadmap already declared it.
+**Security-sensitive:** yes — a picture arrives in a request body and is decoded
+(FR-IMG-1), and a second model is downloaded from the model hub on first use.
+The query picture goes to a temporary file outside the media root, through the
+same inspection an upload passes, and is unlinked whatever happens; the body is
+bounded by the middleware and the multipart parser by its own limits; no path is
+ever built from anything a client sent. No new dependency.
 
 ## Done this session
 
-Branch, scaffold and all four planning artifacts; Gate 1 round 1 requested and
-recorded: **changes-requested**, three `major` findings — all three verified
-against the source, all three real, all three now `fixed`.
+All 27 tasks, Gate 1 passed (Confirmation 2 of round 1, all three findings
+confirmed), and everything CI runs is green locally:
 
-One decision the user made before anything was written: **the backfill is an
-operator command** (`index missing`), not something the service does at start.
+| Check | Result |
+|---|---|
+| `openspec validate --all --strict` | 15 passed |
+| `scripts/*_test.sh` | both suites pass |
+| `sh -n scripts/*.sh` | clean |
+| `FORCE_COLOR=1 CI=true make check` | 470 passed |
+| `FORCE_COLOR=1 CI=true make test-integration` | 230 passed |
+| `FORCE_COLOR=1 CI=true make test-ui` | 45 passed |
+| `make test-models` (real weights, never in CI) | 19 passed |
+| `scripts/pregate-verify.sh gate2` | all checks passed |
 
-Two things checked rather than assumed while writing the artifacts: no
-migration is needed for the vectors themselves (the live CHECK already carries
-`dinov2-large` at 1024 and both partial HNSW indexes exist, from change 3), and
-`embedding-models` needs no delta (its requirements are already written for any
-embedder, including "an embedder without a text tower refuses text").
+What was built: the DINOv2 adapter (CLS token after the final layer norm, read
+from the installed transformers, text refused outright), `POST /search/image`,
+`GET /assets/{id}/similar`, a `model` parameter on all three searches with 503
+and 422 refusals decided before anything loads, `semanticshelf index missing`,
+and the interface's fifth page with a "Find similar" action under every
+thumbnail.
 
-Each of the three findings was verified against the source before being
-accepted, and each holds:
+Seven guards were demonstrated by removing them and watching the right test
+fail: exclusion after the page is cut (a repeated neighbour), the missing window
+candidate (`has_more` wrong at the deepest page), the excluding depth rule (the
+effort invariant), the unlinked query picture, the modality check (503 instead
+of 422), the advisory lock (the second backfill does not wait), and `failed`
+treated as merely unfinished (work that gave up gets a fresh budget).
 
-1. `indexing_jobs` has **no** unique constraint on `(asset_id, model)` —
-   `app/models/indexing_job.py` carries only `ix_jobs_claim` and `ix_jobs_asset`,
-   both non-unique. Design decision 6's `ON CONFLICT DO NOTHING` therefore
-   guarantees nothing against a concurrent backfill.
-2. `EmbeddingRepository.nearest_statement` applies OFFSET inside SQL, so
-   dropping the asset in the service after the page was cut shifts every later
-   page: for the ranking `[self, A, B, C, D]` with limit 2, page 1 is `[A, B]`
-   and page 2 is `[B, C]`. The lookahead row also has to fit inside
-   `MAX_SEARCH_EFFORT`, which the deepest accepted page already saturates.
-3. FR-IDX-5 makes `POST /assets/{id}/reindex` "the only way a `failed` job runs
-   again", and `failed` is terminal, not unfinished — so a backfill that queues
-   "assets with no vector and no unfinished work" would queue a fresh job with a
-   fresh attempt budget for work that already exhausted its retries.
+Two things found on the way, both fixed here:
 
-How each was resolved: (1) `pg_advisory_xact_lock` keyed on the model, plus the
-written-out argument that no other writer can race the selection — the
-partial-unique-index alternative is recorded as rejected, because `reset()`
-would then be unable to reindex an asset carrying two rows for a pair; (2) the
-exclusion moved into the statement above the index scan, before the OFFSET, and
-the two spent candidates cost one page of depth (998), stated and refused rather
-than met by searching shallower; (3) the selection asks for "no work pending,
-running or failed", and the command counts what it passed over and names
-`reindex`.
+- **CI was about to run the integration suite with both models enabled** and
+  would have gone red in 43 tests: CI sets no `ENABLED_MODELS`, the default is
+  now every implemented key, and only the machine's environment file was hiding
+  it. The integration suite now declares what it runs, fakes every implemented
+  key, and the folder CLI writes `ENABLED_MODELS` into the environment it hands
+  the command.
+- **`.env.example` and the local environment file** pinned one model. The user
+  updated both by hand (the policy blocks those paths for me); the settings
+  reference and the template block were updated to match.
 
 ## Next step
 
-`/opsx:apply add-dinov2-image-search` — Gate 1 passed (Confirmation 2 of round
-1, `4a6a870`, all three findings confirmed), so implementation may start. The
-order of `tasks.md` is the order to take: the adapter and the modality table
-first, because everything else names them.
+Push the branch, watch CI, and then Gate 2:
+`/gate-review add-dinov2-image-search 2`.
 
-Two things the implementation must not quietly soften: the excluding search's
-depth bound is `MAX_SEARCH_EFFORT - 2` and the window takes the candidate it
-pays for (task 3.4 fails otherwise), and the backfill's advisory lock is taken
-in the same transaction as the insert.
+Worth the reviewer's attention: the exclusion lives in
+`EmbeddingRepository.nearest_statement` above the window and pays for itself
+with one extra candidate and one page-depth (`depth_bound` is the single rule
+both bounds come from); the backfill's only concurrency guarantee is
+`pg_advisory_xact_lock` in the inserting transaction, because the queue has no
+uniqueness per (asset, model); and the drain loop moved from
+`app/services/folder.py` to `app/services/indexing.py` as `finish_work`, which
+`index-folder` now calls through a wrapper.
 
 ## Blockers
 

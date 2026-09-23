@@ -188,6 +188,6 @@ check is removed, and that failure is demonstrated before the task is ticked.
   `/similar` against the corpus with the real weights, captured into the how-to.
   Verify: the captured output is from that run, and `make test-models` asserts
   1024 on the real checkpoint.
-- [ ] 8.2 `make check`, `make test-integration` and `make test-ui` green the way
+- [x] 8.2 `make check`, `make test-integration` and `make test-ui` green the way
   CI runs them (`FORCE_COLOR=1 CI=true`), `openspec validate --all --strict`,
   every `scripts/*_test.sh`, and `sh -n` over `scripts/*.sh`.

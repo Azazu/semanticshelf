@@ -24,8 +24,9 @@ and gets its vectors in the background. The history is in git and in
 Done: every change of this stage is merged and archived. Words find pictures
 (`GET /search/text`, with scores, a threshold and honest paging), `make demo`
 fills a clean machine with a licence-filtered corpus from COCO val2017, and
-`make ui` puts four Streamlit pages over the API — with the screenshots to
-prove it in `docs/images/`.
+`make ui` puts a Streamlit interface over the API — with the screenshots to
+prove it in `docs/images/`. (It was four pages when this stage closed; change
+11 added the fifth.)
 
 ## Stage 3 — image→image, filters, worker, index tuning
 
