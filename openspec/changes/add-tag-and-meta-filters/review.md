@@ -97,3 +97,27 @@ strict OpenSpec validation. This is a review of the renewed Gate 1 contract and
 verification plan, not Gate 2 approval of the partial implementation. No
 benchmark, database mutation or implementation test suite was run. Only this
 review file was modified; no git write commands were run.
+
+## Confirmation 3 · Gate 1 · Round 2
+**Reviewer:** codex
+**Date:** 2026-09-23
+**Reviewed-Commit:** 7cd7e85bde3fb6518cd379b6c58b4fcd0a490b97
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — Task 2.1 and the new narrowed-search paragraph permit the exact plan, but the same delta requirement still begins “Every search SHALL be answered from the vector index”, and “The index answers the query” still requires an index scan for an unqualified search. Restrict those retained obligations explicitly to unnarrowed searches. The new assertion that the chosen plan “SHALL NOT change what the answer contains” also conflicts with the supported bounded-index path: task 3.5 deliberately requires a full page without lookahead and `scan_limited=true`, whereas an exact plan with the same remaining matches obtains the lookahead and reports false. State the common filtering, ordering and pagination semantics while explicitly permitting the documented bounded-scan incompleteness and its report; do not require identical answers from the two paths. |
+| 2 | confirmed — Task 3.5 now requires an integration regression through real candidate retrieval, the bounded probe and the resulting true flag, asserts the model's vector-index plan, and pairs a reduced-budget full page with a default-budget false result. It explicitly requires failure when the positive-path probe is disabled. Task 3.5a retains the negative cases and tasks 3.6–3.7 retain probe-invocation and envelope coverage. This closes the missing positive-path evidence in the Gate 1 plan; implementation and mutation-test evidence remain Gate 2 obligations. |
+| 3 | confirmed — Proposal, design decision 7 and task 6.1 now isolate benchmark writes and deletion in a schema created for the run, with service tables outside that boundary. Applicability covers benchmark deletion and a crash leaving its own schema behind. Task 6.1a requires the default entry point to preserve seeded assets, embeddings and jobs, checks schema cleanup, and specifies the destructive mis-targeting that must make the preservation test fail. This confirms the isolation and verification plan, not an implemented benchmark. |
+
+### Validation
+
+Reviewed only the diff from `0094306c58f7aa0f5a7f210526f1cd5855f265b4`
+to `7cd7e85bde3fb6518cd379b6c58b4fcd0a490b97` and collateral contracts
+and service count/probe wiring reachable from round 2 findings 1–3.
+The requested branch and HEAD match, the working tree was initially clean,
+and all source-round findings were dispositioned. The Gate 1 mechanical
+floor passed, including strict OpenSpec validation. No benchmark, database
+mutation or implementation test suite was run. Only `review.md` was modified;
+no git write commands were run.
