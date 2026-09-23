@@ -46,3 +46,27 @@ findings had been dispositioned. `scripts/pregate-verify.sh gate1
 add-tag-and-meta-filters` passed, including strict OpenSpec validation. The
 counterexamples above follow the proposed decision formulas and the current
 window/page boundaries; no implementation or database experiments were run.
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-23
+**Reviewed-Commit:** e3956bc161624b950ee0024af40d8e0e996eddc1
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — Design decision 3 separates window reach (`offset + limit + 1 + excluding`) from usable candidates needed (`offset + limit + 1`). Exactly `limit` matches trigger the bounded probe and the envelope reports an incomplete scan when more exist; a usable lookahead takes the no-probe path. Tasks 3.2–3.3 and 3.5–3.7 cover the full-page case, the report, and `/similar` with exactly `limit + 1` neighbours both when self satisfies the narrowing and when it does not. |
+| 2 | confirmed — Candidates and `reached` are retained after self-exclusion but before OFFSET and threshold removal, including when either empties the page. The probe uses the same model and narrowing, excludes self, and compares its count, bounded at `reached + 1`, against actual `reached`. Thus 10 reached at offset 50 with 40 matches reports a cut-short scan, while genuine exhaustion before that offset does not. Tasks 3.1–3.5 cover both cases, threshold-only shortening including zero hits, model isolation and self-exclusion, and preservation of existing page semantics. |
+| 3 | confirmed — The high tier, both required gates, applicability table, demonstrated failing inputs for every new or changed check, and security-sensitive commit/handoff declarations remain in the planning artifacts. The resolution confirmed previously is preserved; implementation evidence remains a Gate 2 obligation. |
+
+### Validation
+
+Reviewed the diff from `d760236ca902bfd8cb8d48d5a8155b5844f04c27` to
+`e3956bc161624b950ee0024af40d8e0e996eddc1` and collateral pagination behavior
+reachable from findings 1–3, including the existing repository/service boundary.
+The branch and HEAD match the request, the working tree was clean, and all
+source-round findings were dispositioned. Checked the revised formulas against
+the prior counterexamples and the planned regressions. The Gate 1 mechanical
+floor passed, including strict OpenSpec validation. This confirms the design
+and verification plan; no implementation or database experiments were run.
