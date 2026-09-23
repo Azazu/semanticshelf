@@ -16,11 +16,18 @@ displays SHALL be fetched from an address the API gave it.
 It SHALL be configured by the address of the service alone, with a default that
 matches the documented development port.
 
-#### Scenario: What the interface can reach
-- **WHEN** the interface's code is inspected
-- **THEN** nothing it loads reaches the service's modules, the database, the
-  media root or a model, and every picture it shows is addressed by a URL the
-  API returned
+#### Scenario: The interface does not import the service
+- **WHEN** the interface's own modules are read, including the imports inside
+  their functions
+- **THEN** none of them imports the service's code — which is what a check can
+  answer; that the interface opens no database, reads no media root and loads no
+  model is held by there being nothing in it that could, and by review of these
+  few modules
+
+#### Scenario: Where a picture comes from
+- **WHEN** the interface shows any picture
+- **THEN** it is addressed by a URL the API returned, and the interface never
+  reads the bytes itself
 
 #### Scenario: A service somewhere else
 - **WHEN** the interface is told a different address for the service
@@ -53,9 +60,13 @@ wording. A refusal SHALL leave the rest of the page usable.
 
 The search page SHALL take a description, ask the service for it, and show the
 pictures it found with the score the service gave each one. It SHALL offer the
-threshold the API offers, a filter by tag, and a way to ask for the next page of
-results, which SHALL use the offset the API takes rather than fetching more and
-hiding some.
+threshold the API offers and a way to ask for the next page of results, which
+SHALL use the offset the API takes rather than fetching more and hiding some.
+
+It SHALL also offer a filter by tag. Because the search the service offers takes
+no tag, that filter SHALL apply to the results already fetched, and the page
+SHALL NOT pretend otherwise: a page the filter empties SHALL still offer the
+rest of the ranking, and SHALL say that the filter is what emptied it.
 
 The page SHALL say when a search found nothing, and SHALL say which model
 answered, because a score means nothing without it.
@@ -73,6 +84,12 @@ answered, because a score means nothing without it.
 #### Scenario: A search that finds nothing
 - **WHEN** a search returns no results, or the threshold removes them all
 - **THEN** the page says so plainly rather than showing an empty grid
+
+#### Scenario: A tag that nothing fetched so far carries
+- **WHEN** the tag filter removes every result fetched so far, while the ranking
+  holds more
+- **THEN** the page says that the filter is what emptied it, and the way to the
+  rest of the ranking stays on the page
 
 ### Requirement: Browsing shows the corpus and what is known about a picture
 

@@ -1,7 +1,7 @@
 # Handoff — add-demo-ui
 
 **Updated:** 2026-09-23 · claude
-**State:** fixing-g2
+**State:** awaiting-gate-2
 **Branch:** change/add-demo-ui
 
 ## Done this session
@@ -29,39 +29,25 @@ Decided in the proposal rather than inherited:
 
 ## Next step
 
-**Security-sensitive** (AGENTS.md): this change adds dependencies and uploads a
-file, and it deletes assets irreversibly from a page. That is what raised the
-tier to `high`.
+**Gate 1 passed** — `approved`, the retrospective artifact review the tier
+correction owed. Two `minor` findings, both about a claim being wider than its
+mechanism, and both fixed rather than left to discretion:
 
-Gate 2 round 1 returned eight findings — seven major, one minor — and every one
-was real.
+- the tag on the search page filters what has already been fetched, because the
+  search endpoint takes no tag (change 12 owns filtered vector search). The
+  design, the spec and the how-to now say that, and say what follows from it:
+  a page the filter empties is not the end of the ranking, so "More" stays;
+- the import walk proves that nothing in `ui/` imports the service. It does not
+  prove the interface *cannot* reach a database or the media root — that is held
+  by there being nothing in the group that could, and by review of these few
+  modules. The design, the spec's scenario and the how-to's opening sentence
+  were all claiming the stronger thing.
 
-1. **The tier was wrong.** `AGENTS.md` puts a change touching file uploads or
-   dependencies at `high`, whatever the reasoning about the service. Raised, the
-   applicability table added, and Gate 1 is owed on the artifacts.
-2-7. **Streamlit's execution model.** A page draws itself and only then runs the
-   code that changes state, so a click showed its effect one interaction late: a
-   page of results that appeared after some unrelated click, a tag change that
-   asked for the new tag at the old offset, a delete that left the picture on
-   screen, a refusal that destroyed the results a person already had, paging
-   that used whatever was typed rather than what was searched, and a "More" that
-   disappeared exactly when a filter had emptied the page. Each is now
-   state-then-rerun, with a snapshot of what was asked kept beside the results,
-   and each has a test that asserts what is *rendered* after one click.
-8. **The cleanup promise was stronger than the code.** Stopping a screenshot
-   server returned as soon as the leader had exited, which says nothing about
-   the child holding the port. The group id is kept and the group itself is
-   checked, with a test for a child that outlives its leader.
+Run: `/gate-review add-demo-ui 2 confirm 1`. The user pushes first.
 
-The earlier tests all passed because they asserted the requests a page made —
-which every one of these defects got right.
-
-Run: `/gate-review add-demo-ui 1` (the tier now demands it), then the Gate 2
-confirmation. The user pushes first — the code changed.
-
-Local evidence, the way CI runs it (`FORCE_COLOR=1 CI=true`): `make check` 408
-green, `make test-integration` 198 green, `make test-ui` 35 green, strict
-validation 14/14. Seven demonstrated failing inputs, one per fix.
+Local evidence, the way CI runs it: `make check` 408 green,
+`make test-integration` 198 green, `make test-ui` 35 green, strict validation
+14/14.
 
 ## Blockers
 

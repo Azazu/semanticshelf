@@ -24,8 +24,11 @@ Goals beyond the proposal's scope statement:
 
 - A person who has run `make demo` and `make ui` can search, browse, upload and
   read the service's state without knowing the API exists.
-- Nothing in `ui/` can reach the database, the media root, a model, or the
-  service's own code — and that is checked rather than intended.
+- Nothing in `ui/` imports the service's own code — checked rather than
+  intended. That nothing reaches the database, the media root or a model is an
+  architectural requirement held by review and by there being no such
+  dependency in the group: the check below proves the import, not the
+  capability.
 - The screenshots are produced by one command, so they can be produced again
   when a page changes.
 
@@ -56,9 +59,19 @@ person using it at a time.
    invent a second way to serve a picture.
 
 3. **Paging is the API's, not the page's.** "More" asks for the next `offset`
-   and appends; the grid never fetches more than it shows. `has_more` decides
-   whether the button exists. The same for browsing. This keeps the UI honest
-   about what the service promised in change 8: a page is what was asked for.
+   and appends; `has_more` decides whether the button exists. The same for
+   browsing. This keeps the UI honest about what the service promised in change
+   8: a page is what was asked for.
+
+   **The tag on the search page is the exception, and it is one on purpose.**
+   `GET /search/text` takes no tag — filtered vector search is change 12's
+   question, with its own measurement — so the page filters the items it has
+   already fetched. Two consequences, and both are said rather than hidden: a
+   page can come back empty while the ranking still holds matches further down,
+   and `has_more` describes the unfiltered ranking. That is why "More" is
+   offered even when the filter has emptied the page, and why the page says
+   which of the two emptied it. Browsing has no such gap: `GET /assets` takes
+   `tags_all`, so there the filter is the store's.
 
 4. **State lives in `st.session_state`, and only what a page needs**: the query,
    the threshold, the chosen tag, the accumulated results and the asset being
@@ -75,10 +88,18 @@ person using it at a time.
    Rejected: driving the pages through a browser for the smoke tests — slow, and
    it would test Chromium rather than the pages.
 
-6. **Reach is proved, not promised.** A test walks the import statements of
-   every module under `ui/` and asserts that none of them reaches `app.` — the
-   walk change 9 wrote, pointed the other way. It catches an import inside a
-   function, which is how a shortcut to `app.core.settings` would arrive.
+6. **One reach is proved; the rest is architecture.** A test walks the import
+   statements of every module under `ui/` and asserts that none of them reaches
+   `app.` — the walk change 9 wrote, pointed the other way. It catches an import
+   inside a function, which is how a shortcut to `app.core.settings` would
+   arrive.
+   What it does **not** prove: that the interface cannot open a database, read
+   the media root or load a model by some other route — a driver it imported
+   itself, a dynamic import, a path read from the environment. Nothing in the
+   `ui` group can do those things today, and the requirement that it must not is
+   held by review of these few modules; the test is a guard on the one way it
+   would most likely happen, not a capability boundary. A sandbox would be the
+   boundary, and a demo interface does not earn one.
 
 7. **The screenshots are a script, and the script cleans up after itself.**
    `scripts/screenshots.py` starts the API and the UI on ports it picked, waits

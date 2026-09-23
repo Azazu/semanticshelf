@@ -2,7 +2,9 @@
 
 The demo interface is four pages over the same HTTP API everything else uses:
 search, browse, upload, and the service's own state. It holds no database
-session, reads no file and loads no model — it cannot, and a test proves it.
+session, reads no file and loads no model: there is nothing in it that could,
+and a test proves the part a test can — that it never imports the service's own
+code, not even inside a function.
 
 Every command here was run in the form shown on 2026-09-23. Where a run printed
 this machine's addresses, only the local one is kept.
@@ -36,8 +38,14 @@ is to your words. The score beside each result is `1 − cosine distance`, so it
 is comparable within one model and one query and nowhere else; the page names
 the model for that reason. The slider is the API's `min_score`, which cuts the
 tail of a page rather than reaching deeper for replacements, and **More** asks
-the service for the next page by offset — the grid never fetches more than it
-shows.
+the service for the next page by offset.
+
+The **tag box on this page is a filter of what has been fetched**, not part of
+the search: `GET /search/text` takes no tag — filtered vector search is its own
+question, with its own measurement, and change 12 owns it. So a tag can empty a
+page while the ranking still holds matches further down, which is why **More**
+stays on the screen and the page says that the filter is what emptied it. On
+**Browse** the filter is the store's own (`tags_all`), and has no such gap.
 
 **Browse** — everything stored, newest first, narrowed by a tag from the tag
 census. Opening a picture shows what the service knows about it: its metadata,
@@ -94,7 +102,7 @@ truncate the tables), so run `make demo` again before capturing.
 
 ```console
 $ make test-ui
-31 passed, 616 deselected
+35 passed, 618 deselected
 ```
 
 They render the real pages against a service that answers from memory, so they
