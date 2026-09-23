@@ -1,7 +1,7 @@
 # Handoff — add-dinov2-image-search
 
 **Updated:** 2026-09-23 · claude
-**State:** awaiting-gate-1
+**State:** implementing
 **Branch:** change/add-dinov2-image-search
 **Security-sensitive:** yes — a picture arrives in a request body and is
 decoded (FR-IMG-1), a second model is downloaded and loaded on first use, and
@@ -52,11 +52,15 @@ running or failed", and the command counts what it passed over and names
 
 ## Next step
 
-Gate 1 confirmation 2 of round 1: `/gate-review add-dinov2-image-search 1 confirm 1`.
-Confirmation 1 confirmed findings 1 and 3 and asked for more on 2 — the
-pagination promise was unconditional where the index gives a qualified one, and
-the 998 boundary was checked as arithmetic rather than as a result. Both are
-now in the spec and in task 3.4.
+`/opsx:apply add-dinov2-image-search` — Gate 1 passed (Confirmation 2 of round
+1, `4a6a870`, all three findings confirmed), so implementation may start. The
+order of `tasks.md` is the order to take: the adapter and the modality table
+first, because everything else names them.
+
+Two things the implementation must not quietly soften: the excluding search's
+depth bound is `MAX_SEARCH_EFFORT - 2` and the window takes the candidate it
+pays for (task 3.4 fails otherwise), and the backfill's advisory lock is taken
+in the same transaction as the insert.
 
 ## Blockers
 
