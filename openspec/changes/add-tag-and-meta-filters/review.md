@@ -23,3 +23,26 @@ specification, and the current search repository, service, schema and routers.
 `scripts/pregate-verify.sh gate1 add-tag-and-meta-filters` passed, including
 strict OpenSpec validation. The findings above concern the planned contract
 and its verification; implementation and database experiments were not run.
+
+## Confirmation 1 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-23
+**Reviewed-Commit:** ffba0ed8e06748a90d76d8d9bf863fed52517583
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — The exactly-`limit` case and its regression are now covered, but design decision 3 and task 3.2 require `limit + 2` post-exclusion page candidates for `/similar`. The extra self-exclusion slot belongs to the inner window, not to the usable page's lookahead: the existing repository excludes self before OFFSET and caps the page at the requested limit. With public `limit=20`, 21 usable pre-threshold neighbours already supply the lookahead. Requiring 22 either always probes under the retained page shape or, if the page request is enlarged, falsely reports a limit when 21 neighbours were obtained and further neighbours exist. Define window reach separately from the required `limit + 1` usable page rows, and add a `/similar` regression proving no probe runs when that lookahead is present, both when self satisfies the narrowing and when it does not. |
+| 2 | changes-requested — Moving threshold removal into the service and binding the probe to model, narrowing and self-exclusion address those parts. However, decision 3 and tasks 3.2–3.3 still equate `offset + candidates` with the consumed prefix without retaining the actual pre-OFFSET count. If `offset=50`, the bounded scan finds 10 of 40 matching neighbours and then stops, the page count is zero and the probe returns 40; `40 > 50 + 0` is false, so the design declares the ranking genuinely exhausted despite the scan stopping early. An empty post-OFFSET page cannot establish that 50 rows were consumed. Preserve the actual count reached after self-exclusion but before OFFSET, including when the page is empty, and compare the bounded probe against that count. Add paired regressions for budget exhaustion before OFFSET and genuine exhaustion before OFFSET, alongside the existing threshold and nonzero-offset cases. |
+| 3 | confirmed — Proposal and tasks consistently declare high tier and require both gates, demonstrated failing inputs for every new or changed check, and security-sensitive commit/handoff flags. The design adds the applicability table, including empty input and boundary handling, and the handoff carries the security-sensitive declaration. This confirms the Gate 1 plan; implementation evidence remains a Gate 2 obligation. |
+
+### Validation
+
+Reviewed only the specified commit diff and the existing repository/service
+pagination mechanics needed to assess findings 1–3. The branch and HEAD match
+the request, and the working tree was clean before review. All source-round
+findings had been dispositioned. `scripts/pregate-verify.sh gate1
+add-tag-and-meta-filters` passed, including strict OpenSpec validation. The
+counterexamples above follow the proposed decision formulas and the current
+window/page boundaries; no implementation or database experiments were run.
