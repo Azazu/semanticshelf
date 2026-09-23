@@ -7,7 +7,7 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain import Asset, vector_index_name
+from app.domain import Asset, Narrowing, vector_index_name
 from app.models import Embedding as EmbeddingRow
 from app.repositories import AssetRepository, EmbeddingRepository
 from tests.integration.conftest import explain
@@ -178,69 +178,33 @@ async def test_the_model_index_answers_the_lookup(session: AsyncSession) -> None
 
 
 # --- a page of results, and a threshold over it --------------------------------
+#
+# Where the page is cut from the candidates, and what a threshold removes from
+# it, is decided above this repository since change 12 — the count of candidates
+# *before* both is what says whether a narrowed scan stopped at its own budget.
+# The facts those cuts have to keep are unit tests of `app/services/search.py`
+# (`tests/unit/test_search_cut.py`), which is cheaper and exact; what stays here
+# is what only a real index can answer.
 
 
-async def test_an_offset_returns_the_tail_of_the_same_ranking(session: AsyncSession) -> None:
-    a, b, c = await seed_two_models(session)
-    embeddings = EmbeddingRepository(session)
-    query = plane_vector(CLIP_DIM, 1.0, 0.0)
-
-    whole = await embeddings.nearest(model=CLIP, vector=query, limit=3)
-    tail = await embeddings.nearest(model=CLIP, vector=query, limit=3, offset=1)
-
-    assert [hit.asset_id for hit in tail] == [hit.asset_id for hit in whole][1:]
-    assert [hit.asset_id for hit in tail] == [b.id, c.id]
-    assert a.id not in [hit.asset_id for hit in tail]
-
-
-async def test_an_offset_past_the_end_is_an_empty_page(session: AsyncSession) -> None:
-    await seed_two_models(session)
+async def test_a_limit_takes_the_nearest_candidates(session: AsyncSession) -> None:
+    a, b, _ = await seed_two_models(session)
 
     hits = await EmbeddingRepository(session).nearest(
-        model=CLIP, vector=plane_vector(CLIP_DIM, 1.0, 0.0), limit=3, offset=10
+        model=CLIP, vector=plane_vector(CLIP_DIM, 1.0, 0.0), limit=2
     )
 
-    assert hits == []
+    assert [hit.asset_id for hit in hits] == [a.id, b.id]
 
 
-async def test_a_maximum_distance_drops_results_without_refilling(
-    session: AsyncSession,
-) -> None:
-    """The threshold applies to the page the lookup was asked for: the third
-    asset is not pulled up to replace the one that was dropped."""
+async def test_a_limit_past_the_end_returns_what_there_is(session: AsyncSession) -> None:
     a, b, c = await seed_two_models(session)
-    embeddings = EmbeddingRepository(session)
-    query = plane_vector(CLIP_DIM, 1.0, 0.0)
-
-    page = await embeddings.nearest(model=CLIP, vector=query, limit=2, max_distance=0.2)
-
-    assert [hit.asset_id for hit in page] == [a.id], "b is 0.4 away, c is 1.0"
-    assert b.id not in [hit.asset_id for hit in page]
-    assert c.id not in [hit.asset_id for hit in page]
-
-
-async def test_a_maximum_distance_that_nothing_reaches_is_an_empty_page(
-    session: AsyncSession,
-) -> None:
-    await seed_two_models(session)
 
     hits = await EmbeddingRepository(session).nearest(
-        model=CLIP, vector=plane_vector(CLIP_DIM, 1.0, 0.0), limit=3, max_distance=-0.5
+        model=CLIP, vector=plane_vector(CLIP_DIM, 1.0, 0.0), limit=10
     )
 
-    assert hits == []
-
-
-async def test_an_offset_and_a_threshold_together(session: AsyncSession) -> None:
-    a, b, c = await seed_two_models(session)
-
-    page = await EmbeddingRepository(session).nearest(
-        model=CLIP, vector=plane_vector(CLIP_DIM, 1.0, 0.0), limit=2, offset=1, max_distance=0.5
-    )
-
-    assert [hit.asset_id for hit in page] == [b.id], "a is skipped, c is beyond the distance"
-    assert a.id not in [hit.asset_id for hit in page]
-    assert c.id not in [hit.asset_id for hit in page]
+    assert [hit.asset_id for hit in hits] == [a.id, b.id, c.id], "three, and no more to give"
 
 
 async def test_two_assets_at_the_same_distance_keep_one_order(session: AsyncSession) -> None:
@@ -269,17 +233,27 @@ async def test_two_assets_at_the_same_distance_keep_one_order(session: AsyncSess
     assert orders == [expected, expected, expected]
 
 
-async def test_the_index_answers_a_page_with_a_threshold(session: AsyncSession) -> None:
-    """The statement the search endpoint runs, not merely the simplest one: an
-    offset and a threshold must not cost the index scan."""
+async def test_no_narrowed_page_is_answered_by_reading_every_vector(
+    session: AsyncSession,
+) -> None:
+    """The statement the search endpoint runs when a narrowing is given.
+
+    Which plan answers it is the planner's choice and depends on how selective
+    the narrowing is: a selective one is answered exactly, by driving from the
+    narrowed `assets` rows, and a broad one by the vector index. Both are right,
+    and change 12's benchmark measures where the line falls — what must never
+    happen is a sequential scan of the vectors.
+    """
     await seed_two_models(session)
     statement = EmbeddingRepository(session).nearest_statement(
-        model=CLIP, vector=plane_vector(CLIP_DIM, 1.0, 0.0), limit=3, offset=1, max_distance=0.9
+        model=CLIP,
+        vector=plane_vector(CLIP_DIM, 1.0, 0.0),
+        limit=3,
+        narrowing=Narrowing(tags_all=("demo",), meta={"dataset": "coco"}),
     )
 
     plan = await explain(session, statement, no_seqscan=True)
 
-    assert vector_index_name(CLIP) in plan, plan
     assert "Seq Scan on embeddings" not in plan, plan
 
 
@@ -346,10 +320,7 @@ async def test_a_page_that_cuts_through_a_tie_is_ordered_and_stable_here(
     query = plane_vector(CLIP_DIM, 1.0, 0.0)
 
     pages = [
-        [
-            hit.asset_id
-            for hit in await embeddings.nearest(model=CLIP, vector=query, limit=2, offset=2)
-        ]
+        [hit.asset_id for hit in (await embeddings.nearest(model=CLIP, vector=query, limit=4))[2:]]
         for _ in range(5)
     ]
 

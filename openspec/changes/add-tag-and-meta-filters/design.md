@@ -146,6 +146,14 @@ reaches no further down, whichever layer performs either.
    absurd), and re-running the scan to count it (the slow path would pay for the
    expensive part twice).
 
+   One measured fact about the bound, found while building the tests for it and
+   worth knowing before reading them: `hnsw.ef_search` budgets the scan's *first*
+   iteration, and `max_scan_tuples` bounds what comes after. On the corpus of
+   3 000 with thirty matches, a query needing 56 candidates reached all thirty
+   at every bound down to 20, while a query needing 3 reached 2 at a bound of
+   200. So a deep page is not what runs into this bound — a shallow one over a
+   rare narrowing is, which is what the tests use.
+
 4. **One filter object, four surfaces.** A frozen value in `app/domain.py` —
    the tags required, the tags any of which suffice, and the metadata
    equalities — built by one parser in the services layer that normalises tags

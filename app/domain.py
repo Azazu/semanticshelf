@@ -142,6 +142,12 @@ class Narrowing:
         return bool(self.tags_all or self.tags_any or self.meta)
 
 
+#: The narrowing that narrows nothing: the default of every search and listing,
+#: and a value rather than a new object each time, because it is immutable and
+#: most requests carry it.
+NO_NARROWING: Final[Narrowing] = Narrowing()
+
+
 @dataclass(frozen=True, slots=True)
 class Asset:
     """An indexed image as the store keeps it. The file path is derived from the

@@ -28,24 +28,24 @@ that is *full* can be just as wrong.
 
 ## 2. Inside the vector query
 
-- [ ] 2.1 `EmbeddingRepository.nearest_statement` takes the filter and joins
+- [x] 2.1 `EmbeddingRepository.nearest_statement` takes the filter and joins
   `assets` inside the **window**, above nothing and below the page (design
   decision 1). Verify: an integration test reads the plan of the narrowed
   statement and asserts a scan of the model's partial index with no sequential
   scan of `embeddings`; another asserts that the page and the threshold are
   unchanged for an empty filter (the statement is the one change 8 and 11 left).
-- [ ] 2.2 The search service sets `hnsw.iterative_scan = strict_order` for a
+- [x] 2.2 The search service sets `hnsw.iterative_scan = strict_order` for a
   narrowed query, beside the effort it already sets, and leaves it off
   otherwise (design decision 2). Verify: an integration test reads
   `current_setting('hnsw.iterative_scan')` from inside the transaction that runs
   the query, for a narrowed and an unnarrowed search.
-- [ ] 2.3 A narrowing that matches rarely still fills a page. Verify: the
+- [x] 2.3 A narrowing that matches rarely still fills a page. Verify: the
   integration test that reproduced the defect — 3 000 assets, one in three
   hundred carrying the tag, shuffled so they are not the nearest rows — asserts
   a full page of the nearest matching assets, in distance order. Demonstrated
   failing input: leaving `iterative_scan` off returns an empty page while ten
   matches exist, which is the measurement recorded in `design.md`.
-- [ ] 2.4 A narrowing changes which assets are ranked, never their scores.
+- [x] 2.4 A narrowing changes which assets are ranked, never their scores.
   Verify: an integration test searches with and without a narrowing and asserts
   that an asset in both answers carries the same score in both.
 
@@ -55,7 +55,7 @@ The four numbers of design decision 3 — window reach, candidates, reached,
 needed — are the vocabulary of this group. None of these tasks may decide
 anything from the shape of the answer.
 
-- [ ] 3.1 The repository returns the candidates in order — after the exclusion,
+- [x] 3.1 The repository returns the candidates in order — after the exclusion,
   **before** the offset and **before** the threshold — up to the window reach,
   and the service applies the offset and the threshold over them. Verify: change
   8's own threshold tests and change 11's own paging tests pass unchanged
@@ -64,7 +64,7 @@ anything from the shape of the answer.
   a page the threshold empties **and** for a page the offset empties.
   Demonstrated failing input: counting after the offset makes the second of
   those report an exhausted ranking for a scan that stopped early.
-- [ ] 3.2 The decision: cut short when `reached < needed` and more matching rows
+- [x] 3.2 The decision: cut short when `reached < needed` and more matching rows
   exist than `reached`, where `needed = offset + limit + 1`. Verify: unit tests
   over the decision function, one per row of design decision 3's worked table —
   25 reached at offset 0 (complete, nothing asked); exactly 20 with more in the
