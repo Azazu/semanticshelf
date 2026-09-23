@@ -22,3 +22,26 @@ specs, repository policy and OpenSpec configuration, and checked the relevant
 schema, queue and search implementation and existing requirements.
 `openspec validate add-dinov2-image-search --strict` passed. This is an artifact
 review; implementation tests were not run.
+
+## Confirmation 1 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-23
+**Reviewed-Commit:** fc105b55adca2665afca2285455d152453043ec8
+**Verdict:** changes-requested
+
+### Findings
+
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — Design decision 6 replaces the nonexistent uniqueness guard with a transaction-scoped advisory lock per model, held before selection through commit. The upload/reset interaction is accounted for without changing queue identity or schema. Task 5.2 requires overlapping transactions on real PostgreSQL and a demonstrated duplicate when the lock is removed. |
+| 2 | changes-requested — Exclusion before ordering/OFFSET and the 998 bound resolve the original algorithm and effort-budget defects, but the resolution remains incomplete in `specs/image-search/spec.md` and `tasks.md` 3.2–3.3. The new “One page after another” scenario unconditionally promises each neighbour exactly once, while the same spec retains the text-search tie-boundary exception: the bounded unfiltered window can still select different members of a tied group across requests. Qualify the scenario for an unchanged corpus and pages that do not cut tied groups, preserving the inherited exception. Also add an explicit verification task for actual `/similar` results at `limit + offset = 998`, asserting the returned page and `has_more` with and without an eligible lookahead, plus rejection at 999. Task 3.3 currently checks effort arithmetic and bound acceptance/refusal, not the SQL window or the resulting `has_more`; task 3.2 checks page contents without specifying this boundary. An implementation that grants effort 1000 but fetches only 999 candidates could pass those stated checks and incorrectly report no more results. Require that boundary test to fail when the extra candidate is removed. |
+| 3 | confirmed — The selection now excludes pending, running and failed work; the proposal, design and indexing-jobs delta preserve explicit reset as the only retry of terminal failure. Tasks 5.1 and 5.3 cover failed assets, repeated selection, skipped counts and the reset hint, including a demonstrated failure if terminal jobs become eligible again. |
+
+### Validation
+
+Reviewed only the diff from `30015272cea7d69e14d858a7d597255673330fba`
+to the Reviewed-Commit and collateral requirements and source reachable from
+findings 1–3. The branch and HEAD match the requested target; the working tree
+was initially clean. `openspec validate add-dinov2-image-search --strict`
+passed. This is a Gate 1 artifact confirmation; implementation tests were not
+run. Only this review record was appended; no git write commands were run.
