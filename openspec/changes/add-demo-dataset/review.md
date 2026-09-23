@@ -1,0 +1,75 @@
+# Review — add-demo-dataset
+
+## Round 1 · Gate 1
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** 6c2b9fd6a829416fba49309a70adf1a8d450106f
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | blocker | `specs/demo-dataset/spec.md` — “The download is bounded in every direction”; `design.md` decisions 3–4; `tasks.md` 2.1 and 3.1 | The 241 MiB archive transfer has no defined response-size bound or verification. The spec says every request is abandoned past the picture-size bound, which cannot apply to this archive because `MAX_UPLOAD_BYTES` is 20 MiB; the design bounds only the ZIP member's declared uncompressed size, and task 3.1 exercises timeout, redirect, streaming, and response-size handling only for pictures. A malicious or broken archive response can therefore consume disk without bound, and the “every request” requirement is internally impossible as written. Define separate archive-transfer and picture bounds, the archive's temporary/atomic publication and cleanup behavior, and add failing-input coverage for archive timeout/redirect and an oversized streamed archive response. | fixed |
+| 2 | blocker | `design.md` decision 7; `tasks.md` 4.1–4.3; main `folder-indexing` spec — “The walk reads only files it owns” | Adding a second read for `<picture>.json` does not say how the existing folder-import boundary is preserved. The current import opens candidates relative to the held directory descriptor with `O_NOFOLLOW` and verifies the opened descriptor; a path-based sidecar read would allow a sidecar symlink, non-regular file, or name swapped after enumeration to read outside the imported tree or block the run. “Cannot be read” coverage in task 4.2 does not exercise these attacks. Specify descriptor-relative, no-follow, regular-file sidecar opening (including nested directories) and add demonstrated failing inputs for a sidecar symlink and a sidecar replaced between discovery and open. | fixed |
+| 3 | major | `design.md` decision 6; `tasks.md` 2.3; `docs/explanation/requirements.md` FR-TAG-1 | The planned example `traffic light` → `traffic-light` is not FR-TAG-1 normalization. The current authoritative normalizer performs NFKC, trim, and lower-case, then rejects spaces; it does not slugify them. Consequently the design simultaneously says labels use the existing rule and expects a new transformation, while the spec says labels that cannot normalize to an acceptable tag are dropped. Decide and specify whether multi-word COCO categories are dropped or whether a distinct dataset-label-to-tag mapping is introduced, then make the task and tests follow that rule without claiming it is FR-TAG-1 normalization. | fixed |
+| 4 | major | `specs/demo-dataset/spec.md` — “The corpus enters the store through the ordinary import”, especially “A demo asset beside an imported one”; `tasks.md` 5.2 | The scenario requiring the same picture's demo and folder assets to “differ only” in provenance cannot occur through the ordinary import: the global SHA-256 duplicate rule creates one asset, and a duplicate import does not merge the new sidecar provenance into the existing asset. If the ordinary copy is already stored, `demo-dataset index` therefore cannot guarantee the required demo provenance either. Define the intended behavior/precondition for pre-existing duplicate content and replace the impossible two-asset scenario; add verification for that ordering, not only an empty-store import. | fixed |
+| 5 | major | `design.md` Applicability — “Concurrent writers” and “Crash around an external effect”; `tasks.md` 3.3–3.4 | The applicability table claims concurrent downloads cannot corrupt and that a crash leaves either nothing or a complete pair, but publishing the sidecar before the picture necessarily permits an orphan sidecar, and “appears by rename” alone does not define unique staging names, no-clobber behavior, or how two writers avoid pairing files from different runs. No task verifies the concurrent-writer claim. State the actual recoverable intermediate states, define the staging/publication and collision policy for the archive, picture, and sidecar, and add a concurrency/fault-injection test for the guarantee retained. | fixed |
+| 6 | minor | `tasks.md` 2.1 | The task says it refuses “a member whose declared size passes the bound”; the design and spec say the rejected case is a member that exceeds the bound. Correct the task wording so implementation cannot satisfy the opposite condition by following it literally. | fixed |
+
+## Confirmation 1 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** 2d9d6b211be1a7fed3327117e09ccddc22d2c50c
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the archive now has a separate transfer bound, unique staging and cleanup requirements, fatal timeout/redirect/oversize behavior, and planned failing-input coverage for those paths. |
+| 2 | confirmed — sidecars are now required to be opened descriptor-relative with no-follow/nonblocking flags and verified by `fstat` in every walked directory, with symlink and replacement-race failing inputs. |
+| 3 | confirmed — dataset labels now have an explicit whitespace-to-hyphen conversion before the unchanged FR-TAG-1 normalizer, and the tasks test that distinct conversion. |
+| 4 | confirmed — pre-existing duplicate content is now reported without creating or mutating an asset, and task 5.3 verifies both upload-first and folder-import-first orderings. |
+| 5 | changes-requested — per-run staging prevents bytes from being mixed within one file, but it does not prevent a picture from one run being paired with the sidecar from another. For example, sidecar A, sidecar B, picture B, picture A leaves picture A beside sidecar B. The design assumes both runs fetched identical bytes and metadata from the same identifier, but no snapshot or content identity guarantee enforces that assumption. Define publication/collision behavior that preserves pair consistency under that interleaving, and make the concurrency test use distinguishable run inputs so it demonstrates the retained guarantee rather than assuming it. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** f03c61af6ad7efce0e90ad82fe24e90682a9c490
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the archive transfer, archive member, and picture now have distinct applicable bounds; archive timeout, redirect, oversize cleanup, and failing-input coverage are specified. |
+| 2 | confirmed — sidecars retain the folder-import boundary through descriptor-relative, no-follow, nonblocking opens and descriptor inspection, with symlink and replacement-race failing inputs. |
+| 3 | confirmed — dataset-label whitespace conversion is explicitly separate from FR-TAG-1 normalisation, and the planned tests exercise that distinction. |
+| 4 | confirmed — pre-existing duplicate content leaves the existing asset and its provenance unchanged, and both upload-first and folder-import-first orderings are covered. |
+| 5 | confirmed — each distinguishable picture/sidecar pair is now built in a run-private directory and published by one atomic directory rename; the losing publisher leaves the winning pair untouched, and the concurrency test verifies pair identity with different bytes and labels. |
+
+## Round 1 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-22
+**Reviewed-Commit:** ef1574d04cfa17148addad9e74beb4c59734a7b8
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `app/services/folder.py:192-205`, `app/services/folder.py:299-302`; `specs/folder-indexing/spec.md` — “A sidecar the service cannot accept” | A sidecar that was present when the directory was enumerated can disappear before `_read_sidecar` opens it. The caller invokes `_read_sidecar` only because the name was in `sidecars`, but `FileNotFoundError` is returned as `(None, None)`, indistinguishable from there never having been a sidecar, so the picture is imported without the tags/provenance the run observed. This contradicts the requirement that a sidecar which cannot be read refuses its picture and leaves a TOCTOU path that silently drops provenance. Preserve whether a sidecar was observed, treat its disappearance as `SKIP_VANISHED`, and add a race test that removes it between enumeration and open. | fixed |
+| 2 | major | `app/services/folder.py:483-512`, `app/services/folder.py:623-638`; main `folder-indexing` spec — “A dry run changes nothing” | `examine_one` calls `combine(candidate, tags=(), ...)`, while the real path passes the run's tags. Consequently a dry run can report `created` for a picture whose real import is refused: for example, 32 valid run tags plus one distinct sidecar tag pass independently in rehearsal but exceed `MAX_TAGS` when the real import combines them. The living spec requires the dry-run summary to match the real run's refusals. Pass the normalised run tags through the rehearsal path and add coverage comparing dry and real outcomes for a combined-tag overflow. | fixed |
+| 3 | minor | `app/services/folder.py:231-249`, `app/services/folder.py:272-283`; `app/cli.py:133-145` | `count_entries` includes sidecar files in the progress total, but `walk` deliberately suppresses them and therefore never calls `on_file` for them. Any import with sidecars leaves the CLI progress count short by one per sidecar. Count the entries the walk will actually report, or otherwise advance the progress consistently, and cover a folder containing a picture/sidecar pair. | fixed |
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-23
+**Reviewed-Commit:** 2086af425cfeb007d27af88d5cef230ba5578309
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — `_read_sidecar` now maps an observed sidecar's disappearance through `_refusal` to `SKIP_VANISHED`; `combine` refuses the picture in both real and dry imports. A picture without an observed sidecar still bypasses that read. The new integration regression removes the sidecar between enumeration and open and checks refusal and an empty store; the delta spec includes this race. Independently reproduced the disappearance and both refusal paths without a database, and checked that an absent sidecar remains optional. |
+| 2 | confirmed — `_import` now passes its normalised run tags to `examine_one`, which combines them with sidecar tags using the same validation as `import_one`. The new integration regression compares dry and real imports with 32 run tags plus one distinct sidecar tag and requires both to refuse. Independently reproduced both refusals through `import_folder` without a database and checked that an overlapping, differently cased sidecar tag deduplicates within the limit. |
+| 3 | confirmed — the counter and walk now share `_sidecars_in`, so attached sidecars contribute to neither progress total nor reported entries. The added regression compares the total with the walk for a picture/sidecar pair and an unrelated file; an independent local check also confirmed the pair counts as one entry. |
+
+Reviewed only the specified commit interval and consequences of these findings. The checks above exercised the affected paths directly; the database-backed integration suite was not rerun for this confirmation.

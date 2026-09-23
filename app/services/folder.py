@@ -18,6 +18,7 @@ something else behind the walk's back: the check and the read are of one object.
 """
 
 import errno
+import json
 import os
 import stat
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -37,7 +38,7 @@ from app.domain import FILE_EXTENSIONS
 from app.repositories.assets import AssetRepository
 from app.services import images, indexing
 from app.services.assets import DuplicateAssetError, create_asset, receive
-from app.services.tagging import MetadataError, check_metadata, normalise_tags
+from app.services.tagging import MetadataError, TagError, check_metadata, normalise_tags
 from app.storage import MediaStorage
 
 #: Suffixes worth opening: the extensions the service stores, plus `.jpeg`,
@@ -49,6 +50,15 @@ CANDIDATE_SUFFIXES = frozenset({f".{extension}" for extension in FILE_EXTENSIONS
 #: Never through a symbolic link, never blocking on a fifo or a device node,
 #: never inherited by a child process.
 OPEN_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+
+#: A picture may be accompanied by a file of the same name carrying that
+#: picture's tags and metadata. It is read exactly as a picture is — through a
+#: descriptor opened relative to the directory the walk holds — because a
+#: sidecar read by path would hand back every hole `O_NOFOLLOW` closes.
+SIDECAR_SUFFIX = ".json"
+#: The metadata bound is 8 KiB (`tagging.METADATA_MAX_BYTES`); the file also
+#: carries the tags, so it is allowed twice that and no more.
+SIDECAR_MAX_BYTES = 16 * 1024
 
 SKIP_SYMLINK = "a symbolic link"
 SKIP_NOT_REGULAR = "not a regular file"
@@ -88,10 +98,18 @@ class Skipped:
 
 @dataclass(frozen=True, slots=True)
 class Candidate:
-    """A regular file, open. The handle is closed when the walk moves on."""
+    """A regular file, open. The handle is closed when the walk moves on.
+
+    `sidecar` holds the bytes of the file named after this one, when there is
+    one and it could be read; `sidecar_refusal` says why it could not, and a
+    picture whose sidecar could not be read is refused rather than imported
+    without what it says.
+    """
 
     path: Path
     handle: BinaryIO
+    sidecar: bytes | None = None
+    sidecar_refusal: str | None = None
 
 
 def _open_directory(directory: Path) -> int:
@@ -171,12 +189,63 @@ def _open_candidate(name: str, dir_fd: int) -> int:
     return os.open(name, OPEN_FLAGS, dir_fd=dir_fd)
 
 
+def _read_sidecar(name: str, dir_fd: int) -> tuple[bytes | None, str | None]:
+    """The sidecar's bytes, or why they could not be read.
+
+    Opened relative to the descriptor the walk holds, never by path, and judged
+    by `fstat` on what was opened: a sidecar swapped for a symbolic link between
+    the walk listing its picture and this open is refused by the kernel, not by
+    a name check that could be raced.
+
+    Called only for a name the walk has just listed, which is what makes every
+    failure here a refusal: a picture with no sidecar never reaches this
+    function, so "not there" can only mean "not there any more".
+    """
+    try:
+        descriptor = _open_candidate(name, dir_fd)
+    except OSError as error:
+        # This is only reached for a sidecar the walk just listed, so a name
+        # that is gone now is one that vanished between the two — not a picture
+        # without a sidecar. Losing that difference would import the picture
+        # without the provenance the run had already seen it carry.
+        return None, _refusal(error)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            os.close(descriptor)
+            return None, SKIP_NOT_REGULAR
+    except OSError as error:
+        os.close(descriptor)
+        return None, _refusal(error)
+    try:
+        with open(descriptor, "rb", closefd=True) as handle:
+            raw = handle.read(SIDECAR_MAX_BYTES + 1)
+    except OSError as error:
+        return None, _refusal(error)
+    if len(raw) > SIDECAR_MAX_BYTES:
+        return None, f"larger than the {SIDECAR_MAX_BYTES} bytes a sidecar may have"
+    return raw, None
+
+
 def _refusal(error: OSError) -> str:
     if error.errno == errno.ELOOP:
         return SKIP_SYMLINK
     if error.errno == errno.ENOENT:
         return SKIP_VANISHED
     return SKIP_UNREADABLE
+
+
+def _sidecars_in(files: Sequence[str]) -> set[str]:
+    """Which of these names belong to a picture beside them.
+
+    One rule, used by the counter and by the walk: the two must agree about
+    what an entry is, or a progress bar and a report count different things.
+    """
+    here = set(files)
+    return {
+        f"{Path(name).stem}{SIDECAR_SUFFIX}"
+        for name in here
+        if Path(name).suffix.lower() in CANDIDATE_SUFFIXES
+    } & here
 
 
 def count_entries(root: Root, *, recursive: bool = False) -> int:
@@ -190,7 +259,9 @@ def count_entries(root: Root, *, recursive: bool = False) -> int:
     """
     entries = 0
     for _, directories, files, dir_fd in os.fwalk(".", dir_fd=root.fd, follow_symlinks=False):
-        entries += len(files)
+        # A sidecar is not an entry the walk reports — it belongs to its picture
+        # — so counting it here would leave the bar one short for every pair.
+        entries += len(set(files) - _sidecars_in(files))
         if recursive:
             entries += sum(
                 1 for name in directories if stat.S_ISLNK(os.lstat(name, dir_fd=dir_fd).st_mode)
@@ -220,8 +291,11 @@ def walk(root: Root, *, recursive: bool = False) -> Iterator[Candidate | Skipped
         else:
             directories.clear()
 
+        sidecars = _sidecars_in(files)
         for name in sorted(files):
             relative = here / name
+            if name in sidecars:
+                continue  # it belongs to a picture: not a candidate of its own
             if Path(name).suffix.lower() not in CANDIDATE_SUFFIXES:
                 yield Skipped(relative, SKIP_NO_PICTURE_SUFFIX)
                 continue
@@ -239,9 +313,13 @@ def walk(root: Root, *, recursive: bool = False) -> Iterator[Candidate | Skipped
                 os.close(descriptor)
                 yield Skipped(relative, _refusal(error))
                 continue
+            sidecar_name = f"{Path(name).stem}{SIDECAR_SUFFIX}"
+            raw, refusal = (
+                _read_sidecar(sidecar_name, dir_fd) if sidecar_name in sidecars else (None, None)
+            )
             handle = open(descriptor, "rb", closefd=True)
             try:
-                yield Candidate(relative, handle)
+                yield Candidate(relative, handle, sidecar=raw, sidecar_refusal=refusal)
             finally:
                 handle.close()
 
@@ -316,6 +394,61 @@ class ImportReport:
         ]
 
 
+class SidecarError(ValueError):
+    """A sidecar that cannot be used for the picture it belongs to."""
+
+
+def read_sidecar(raw: bytes) -> tuple[tuple[str, ...], dict[str, Any]]:
+    """What a sidecar says: its tags and its metadata, through the same rules.
+
+    Nothing here is new: the tags go through the normalisation an upload
+    applies, the metadata through the same object-and-size check as `--meta`.
+    A sidecar only reaches its own picture, so a broken one costs that picture
+    and nothing else.
+    """
+    try:
+        content = json.loads(raw)
+    except ValueError as error:
+        raise SidecarError(f"not JSON: {error}") from error
+    if not isinstance(content, dict):
+        raise SidecarError("not an object")
+    unknown = set(content) - {"tags", "meta"}
+    if unknown:
+        raise SidecarError(f"unexpected keys: {', '.join(sorted(unknown))}")
+    raw_tags = content.get("tags", [])
+    if not isinstance(raw_tags, list) or not all(isinstance(tag, str) for tag in raw_tags):
+        raise SidecarError("tags must be a list of strings")
+    raw_meta = content.get("meta", {})
+    if not isinstance(raw_meta, dict):
+        raise SidecarError("meta must be an object")
+    try:
+        tags = normalise_tags(raw_tags)
+        meta = check_metadata(raw_meta)
+    except (TagError, MetadataError) as error:
+        raise SidecarError(str(error)) from error
+    return tags, meta
+
+
+def combine(
+    candidate: Candidate, *, tags: Sequence[str], meta: Mapping[str, Any]
+) -> tuple[tuple[str, ...], dict[str, Any]]:
+    """The run's tags and metadata with this picture's own folded in.
+
+    Tags add to the run's; metadata merges over it. Neither can reach the
+    recorded origin, which `metadata_for` writes last whatever either says.
+    """
+    if candidate.sidecar_refusal is not None:
+        raise SidecarError(candidate.sidecar_refusal)
+    if candidate.sidecar is None:
+        return tuple(tags), dict(meta)
+    own_tags, own_meta = read_sidecar(candidate.sidecar)
+    try:
+        combined = normalise_tags([*tags, *own_tags])
+    except TagError as error:
+        raise SidecarError(str(error)) from error
+    return combined, {**dict(meta), **own_meta}
+
+
 def metadata_for(relative: Path, meta: Mapping[str, Any]) -> dict[str, Any]:
     """The run's metadata with the recorded origin last, so a run cannot
     overwrite where the file came from — by accident or otherwise."""
@@ -339,7 +472,11 @@ async def import_one(
     into nothing.
     """
     try:
-        recorded = metadata_for(candidate.path, meta)
+        own_tags, own_meta = combine(candidate, tags=tags, meta=meta)
+    except SidecarError as error:
+        return FileOutcome(candidate.path, REFUSED, reason=f"its sidecar: {error}")
+    try:
+        recorded = metadata_for(candidate.path, own_meta)
     except MetadataError as error:  # the bound a long path can push it over
         return FileOutcome(candidate.path, REFUSED, reason=str(error))
     try:
@@ -349,7 +486,7 @@ async def import_one(
             settings=settings,
             source=candidate.handle,
             original_filename=candidate.path.name,
-            tags=tags,
+            tags=own_tags,
             meta=recorded,
             asset_source="folder",
         )
@@ -366,6 +503,7 @@ async def examine_one(
     session: AsyncSession,
     storage: MediaStorage,
     settings: Settings,
+    tags: Sequence[str] = (),
     meta: Mapping[str, Any],
     rehearsed: set[str] | None = None,
 ) -> FileOutcome:
@@ -385,7 +523,14 @@ async def examine_one(
     and a rehearsal that only ever asked the store would call both of them new.
     """
     try:
-        metadata_for(candidate.path, meta)  # for its refusal; a dry run stores nothing
+        # The run's tags, not none of them: a sidecar's tags are added to them,
+        # and a rehearsal that left them out could call a picture created that
+        # the real run refuses for the two together.
+        _, own_meta = combine(candidate, tags=tags, meta=meta)
+    except SidecarError as error:
+        return FileOutcome(candidate.path, REFUSED, reason=f"its sidecar: {error}")
+    try:
+        metadata_for(candidate.path, own_meta)  # for its refusal; a dry run stores nothing
     except MetadataError as error:
         return FileOutcome(candidate.path, REFUSED, reason=str(error))
 
@@ -502,6 +647,7 @@ async def _import(
                 session=session,
                 storage=storage,
                 settings=settings,
+                tags=normalised,
                 meta=given,
                 rehearsed=rehearsed,
             )

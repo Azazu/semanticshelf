@@ -23,7 +23,7 @@ and gets its vectors in the background. The history is in git and in
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 9 | `add-demo-dataset` | `demo-dataset download/index`, licence check and notice, provenance meta, `make demo` | medium |
+| 9 | `add-demo-dataset` | `demo-dataset download/index`, licence check and notice, provenance meta, per-picture sidecars in the folder import, `make demo` | high |
 | 10 | `add-demo-ui` | Streamlit Search, Browse, Upload, Status pages; own dependency group; `make ui` | low |
 
 ## Stage 3 — image→image, filters, worker, index tuning

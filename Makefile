@@ -5,7 +5,7 @@ RUN     ?= uv run
 MSG     ?= change
 
 .DEFAULT_GOAL := help
-.PHONY: help init up down ps logs run migrate revision test test-models test-integration lock-check lint fmt fmt-check types check
+.PHONY: help init up down ps logs run migrate revision test test-models test-integration demo lock-check lint fmt fmt-check types check
 
 # Application targets are guarded until the scaffold exists: the change that
 # adds the FastAPI app brings alembic.ini together with app/main.py. A
@@ -86,6 +86,14 @@ fmt-check: ## ruff format --check
 
 types: ## mypy on app/
 	$(RUN) mypy app
+
+demo: ## Fetch the demo corpus and index it, so a search has something to find
+ifdef APP_MISSING
+	@echo "$(SKIP_MSG)"
+else
+	$(RUN) semanticshelf demo-dataset download --count $${DEMO_COUNT:-500} --into $${DEMO_ROOT:-.data/demo}
+	$(RUN) semanticshelf demo-dataset index --into $${DEMO_ROOT:-.data/demo}
+endif
 
 check: lock-check lint fmt-check types test ## The gate floor: lock + lint + format + types + tests
 	@echo "check: all green"
