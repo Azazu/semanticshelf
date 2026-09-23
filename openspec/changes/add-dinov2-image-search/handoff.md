@@ -1,7 +1,7 @@
 # Handoff — add-dinov2-image-search
 
 **Updated:** 2026-09-23 · claude
-**State:** proposing
+**State:** fixing-g1
 **Branch:** change/add-dinov2-image-search
 **Security-sensitive:** yes — a picture arrives in a request body and is
 decoded (FR-IMG-1), a second model is downloaded and loaded on first use, and
@@ -10,36 +10,41 @@ file uploads and model downloads at `high`; the roadmap already declared it.
 
 ## Done this session
 
-Branch, scaffold and all four planning artifacts. One decision the user made
-before anything was written: **the backfill is an operator command**
-(`index missing`), not something the service does at start — existing assets
-have no DINOv2 vector, a second `make demo` gives them none (the import sees
-duplicates and queues nothing), and a demo where "find similar" answers 409 for
-every picture is not a demo.
+Branch, scaffold and all four planning artifacts; Gate 1 round 1 requested and
+recorded: **changes-requested**, three `major` findings, all still `open`.
 
-Two things checked rather than assumed, and both changed the plan:
+One decision the user made before anything was written: **the backfill is an
+operator command** (`index missing`), not something the service does at start.
 
-- **No migration is needed.** The live constraint already reads
-  `(clip-vit-l14 AND 768) OR (dinov2-large AND 1024)` and both partial HNSW
-  indexes exist — change 3 wrote them. The handoff written at `/workflow:start`
-  said this change would need a migration; it does not, and the proposal's
-  non-goals say so.
-- **`embedding-models` needs no delta.** Its requirements are already written
-  for any embedder, including "an embedder without a text tower refuses text",
-  which is exactly what the new adapter must do. The proposal listed it as
-  modified and no longer does.
+Two things checked rather than assumed while writing the artifacts: no
+migration is needed for the vectors themselves (the live CHECK already carries
+`dinov2-large` at 1024 and both partial HNSW indexes exist, from change 3), and
+`embedding-models` needs no delta (its requirements are already written for any
+embedder, including "an embedder without a text tower refuses text").
+
+Each of the three findings was verified against the source before being
+accepted, and each holds:
+
+1. `indexing_jobs` has **no** unique constraint on `(asset_id, model)` —
+   `app/models/indexing_job.py` carries only `ix_jobs_claim` and `ix_jobs_asset`,
+   both non-unique. Design decision 6's `ON CONFLICT DO NOTHING` therefore
+   guarantees nothing against a concurrent backfill.
+2. `EmbeddingRepository.nearest_statement` applies OFFSET inside SQL, so
+   dropping the asset in the service after the page was cut shifts every later
+   page: for the ranking `[self, A, B, C, D]` with limit 2, page 1 is `[A, B]`
+   and page 2 is `[B, C]`. The lookahead row also has to fit inside
+   `MAX_SEARCH_EFFORT`, which the deepest accepted page already saturates.
+3. FR-IDX-5 makes `POST /assets/{id}/reindex` "the only way a `failed` job runs
+   again", and `failed` is terminal, not unfinished — so a backfill that queues
+   "assets with no vector and no unfinished work" would queue a fresh job with a
+   fresh attempt budget for work that already exhausted its retries.
 
 ## Next step
 
-Gate 1, because the tier is `high`: `/gate-review add-dinov2-image-search 1`.
-The mechanical floor already passes.
-
-Worth the reviewer's attention: the model-choice rule lives in `text-search`
-(the capability that already owns "a query is answered by the vectors of one
-model") and `image-search` references it rather than restating it; and the
-self-exclusion of `/similar` is done by asking for one row more rather than by a
-predicate inside the ordered select, because a filter on an approximate index
-scan is change 12's question.
+`/workflow:fix-findings add-dinov2-image-search` — all three are design-level:
+they change decisions 5 and 6, the `image-search` bounds requirement, the
+`indexing-jobs` delta and tasks 3.2, 5.1 and 5.2. Then Gate 1 confirmation of
+round 1.
 
 ## Blockers
 
