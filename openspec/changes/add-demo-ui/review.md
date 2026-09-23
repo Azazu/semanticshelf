@@ -72,3 +72,29 @@
 - Ran `.venv/bin/python -B -m pytest tests/ui -m ui -p no:cacheprovider -q`: **35 passed**.
 - Ran additional in-memory AppTest checks for a refused replacement after pagination, all submitted search parameters remaining stable, and deletion emptying a later browse page. All passed; no test files were written.
 - Full gate-floor, integration and browser screenshot runs were not repeated. Only this review file was modified; no git write commands were run.
+
+## Confirmation 2 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-23
+**Reviewed-Commit:** d9ba64a4b8e9f7306d6a7369674d3e056b2907f3
+**Verdict:** confirmed
+
+### Findings
+
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The handoff now declares `high`, explicitly rejects the earlier medium-tier rationale, and flags dependencies, file upload and irreversible deletion as security-sensitive. The proposal, applicability table, task evidence, roadmap and requirements reflect the corrected tier; fix commit bodies carry the sensitive-scope flag. The retrospective Gate 1 decision is `approved`. This resolves the remaining objection from Confirmation 1. |
+| 2 | confirmed — Search More and browse page transitions rerun after updating state, so the resulting page is displayed immediately. Regression tests pass, including removal of More on the final search page. |
+| 3 | confirmed — A changed browse tag resets the offset and widget generation, clearing the selected asset. Previous page permits backward navigation; the regression test filters after advancing and verifies the first filtered page. |
+| 4 | confirmed — Successful deletion increments the widget generation and reruns, refetching tags and assets and clearing the actual detail selection and confirmation. The regression test verifies immediate removal; an emptied later page retains Previous page. The implementation is unchanged since Confirmation 1's additional last-page deletion check. |
+| 5 | confirmed — A replacement search commits results and pagination state only after success. The refusal regression test passes; the implementation preserving the submitted parameters and accumulated state is unchanged since Confirmation 1. |
+| 6 | confirmed — More uses the saved submitted query, threshold and tag, independently of current widget values. The query-edit regression test passes, and all three parameters remain bound to the submitted snapshot. |
+| 7 | confirmed — More is independent of whether filtered results are empty. The regression test reaches a matching later page after an unmatched first page; the UI and documentation explain the client-side filter. |
+
+### Verification
+
+- Confirmed branch `change/add-demo-ui`, the requested HEAD and an initially clean working tree.
+- Reviewed the specified diff from `890da452bcbfe963fb51bb364b8be6faed42fe69` to `d9ba64a4b8e9f7306d6a7369674d3e056b2907f3` for findings 1–7 and their reachable collateral effects. Since Confirmation 1, only the handoff and review record changed; the confirmed UI implementations and tests are unchanged.
+- Re-read the corrected handoff and checked related tier declarations, applicability, task evidence and commit bodies. No unrelated findings were introduced; optional minor finding 8 was outside this confirmation.
+- Ran `.venv/bin/python -B -m pytest tests/ui -m ui -p no:cacheprovider -q`: **35 passed**.
+- Full gate-floor, integration and browser screenshot runs were not repeated. Only `review.md` was modified; no git write commands were run.
