@@ -1,7 +1,7 @@
 # Handoff — add-dinov2-image-search
 
 **Updated:** 2026-09-23 · claude
-**State:** ready-to-merge
+**State:** archived
 **Branch:** change/add-dinov2-image-search
 **Security-sensitive:** yes — a picture arrives in a request body and is decoded
 (FR-IMG-1), and a second model is downloaded from the model hub on first use.
@@ -54,13 +54,10 @@ Two things found on the way, both fixed here:
 
 ## Next step
 
-`/git:merge add-dinov2-image-search`. Both gates pass: Gate 1 confirmed at
-`4a6a870`, Gate 2 confirmed at `87e9de6` (round 1's single `major` fixed and
-confirmed). Nothing but `review.md` and this file has changed since the
-reviewed commit.
-
-After the merge: push, then `/opsx:archive add-dinov2-image-search`, and the
-Russian companion document outside the repository gets stage 3's first change.
+None — this change is done. Its four capability deltas are in
+`openspec/specs/` (`image-search` is new; `text-search`, `indexing-jobs` and
+`demo-ui` each carry what this change added), and `openspec/ROADMAP.md` opens
+stage 3 with what it delivered.
 
 ## Blockers
 

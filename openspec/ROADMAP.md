@@ -25,14 +25,18 @@ Done: every change of this stage is merged and archived. Words find pictures
 (`GET /search/text`, with scores, a threshold and honest paging), `make demo`
 fills a clean machine with a licence-filtered corpus from COCO val2017, and
 `make ui` puts a Streamlit interface over the API — with the screenshots to
-prove it in `docs/images/`. (It was four pages when this stage closed; change
-11 added the fifth.)
+prove it in `docs/images/`. (Four pages when this stage closed; the fifth came
+with the first change of stage 3.)
 
 ## Stage 3 — image→image, filters, worker, index tuning
 
+Started: `add-dinov2-image-search` is merged and archived. A picture is a query
+now — one sent in a request or one the store already holds — every search takes
+the model that answers it, and `semanticshelf index missing` gives a model that
+arrived late the vectors it has none of.
+
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 11 | `add-dinov2-image-search` | DINOv2 adapter, `POST /search/image`, `/similar`, `model` parameter, UI "Find similar" page | high |
 | 12 | `add-tag-and-meta-filters` | `tags_all`, `tags_any`, `meta.<key>` inside the vector query on every search and listing; filtered-HNSW measurement | medium |
 | 13 | `add-indexing-worker` | `worker` command with `SKIP LOCKED` claims, graceful shutdown, `INDEXING_RUNNER` switch, multi-worker test | high |
 | 14 | `tune-vector-indexes` | HNSW vs IVFFlat per model, recall@10, p95, `ef_search` curve, `docs/how-to/benchmarks.md`, ADR-002 | low |
