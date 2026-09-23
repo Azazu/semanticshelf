@@ -45,3 +45,28 @@ findings 1–3. The branch and HEAD match the requested target; the working tree
 was initially clean. `openspec validate add-dinov2-image-search --strict`
 passed. This is a Gate 1 artifact confirmation; implementation tests were not
 run. Only this review record was appended; no git write commands were run.
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-23
+**Reviewed-Commit:** 4a6a870a023b5638ba842ee213889379b97c4936
+**Verdict:** confirmed
+
+### Findings
+
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — Design decision 6 specifies a transaction-scoped advisory lock per model before selection, held through commit, instead of relying on nonexistent queue uniqueness. It accounts for upload/reset writers without changing the schema. Task 5.2 requires overlapping transactions on real PostgreSQL and a demonstrated duplicate when the lock is removed. |
+| 2 | confirmed — Exclusion occurs above the unfiltered candidate window before ordering, OFFSET and page cutting, preserving the inherited threshold semantics. The 998 depth bound budgets both self and lookahead. The image-search delta now qualifies consecutive-page guarantees for an unchanged corpus without tied groups crossing page edges and explicitly preserves the inherited tie exception. Tasks 3.2–3.4 cover consecutive pages, effort bounds, actual deepest-page items and both values of has_more at limit + offset = 998, rejection at 999, and a demonstrated failure when the extra window candidate is removed. This resolves the remaining objections in Confirmation 1. |
+| 3 | confirmed — Backfill eligibility excludes pending, running and failed work, preserving explicit reset as the only retry of terminal failures. The proposal, design and indexing-jobs delta agree; tasks 5.1 and 5.3 cover repeated selection, failed assets, skipped counts and the reset hint, with a demonstrated failure if failed work becomes eligible. |
+
+### Validation
+
+Reviewed only the diff from `30015272cea7d69e14d858a7d597255673330fba`
+to `4a6a870a023b5638ba842ee213889379b97c4936` and collateral requirements
+and source reachable from findings 1–3, including the remaining objections
+recorded in Confirmation 1. The branch and HEAD match the requested target;
+the working tree was initially clean. All source-round findings are marked
+fixed. `openspec validate add-dinov2-image-search --strict` passed.
+This is a Gate 1 artifact confirmation; implementation tests were not run.
+Only this review record was appended; no git write commands were run.
