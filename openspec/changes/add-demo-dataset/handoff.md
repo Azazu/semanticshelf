@@ -1,7 +1,7 @@
 # Handoff — add-demo-dataset
 
-**Updated:** 2026-09-22 · claude
-**State:** awaiting-gate-2
+**Updated:** 2026-09-23 · claude
+**State:** ready-to-merge
 **Branch:** change/add-demo-dataset
 
 ## Done this session
@@ -30,30 +30,17 @@ that matter (the layering, the manifest, the transfers, the sidecar).
 
 ## Next step
 
-Gate 2 round 1 returned three findings — two majors and a minor — and all three
-were real defects in the sidecar work:
+**Gate 2 passed** (Confirmation 1 of round 1, commit `2086af4`, all three
+findings confirmed; the reviewer reproduced each independently). Gate 1 passed
+earlier on the artifacts.
 
-1. A sidecar that **vanished** between the walk listing it and the open was
-   treated as "this picture has no sidecar", so the picture was imported
-   without the provenance the run had already seen it carry. `_read_sidecar` is
-   only ever called for a name the walk just listed, so every failure there is
-   a refusal now, and the spec gained the scenario.
-2. A **dry run** combined the sidecar's tags with none of the run's, while the
-   real import combines them with all of them: 32 run tags plus one sidecar tag
-   pass the rehearsal and are refused for real. The rehearsal now takes the
-   run's tags, and a test runs the same folder both ways.
-3. The **progress total** counted sidecars that the walk never reports, so a
-   bar ended one short per pair. The counter and the walk now share one rule
-   (`_sidecars_in`), and a test asserts they agree.
+`/git:merge add-demo-dataset`, then `/opsx:archive`. The corpus itself is not
+committed — `.data/` is gitignored — so nothing of the 20 pictures or the
+241 MiB archive goes with it.
 
-Each fix has a demonstrated failing input: undo it and its test fails.
-
-Run: `/gate-review add-demo-dataset 2 confirm 1`. The user pushes first — the
-code changed.
-
-Local evidence, run the way CI runs it (`FORCE_COLOR=1 CI=true`, the difference
-that made the last push red): `make check` 406 green,
-`make test-integration` 198 green, `openspec validate --all --strict` 13/13.
+Local evidence, run the way CI runs it (`FORCE_COLOR=1 CI=true`): `make check`
+406 green, `make test-integration` 198 green, `openspec validate --all
+--strict` 13/13, both `scripts/*_test.sh`, `sh -n` over every script.
 
 ## Blockers
 
