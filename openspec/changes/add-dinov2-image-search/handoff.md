@@ -52,9 +52,11 @@ running or failed", and the command counts what it passed over and names
 
 ## Next step
 
-Gate 1 confirmation of round 1: `/gate-review add-dinov2-image-search 1 confirm 1`.
-All three findings are `fixed`; what the confirmation sees is the diff since
-`3001527`.
+Gate 1 confirmation 2 of round 1: `/gate-review add-dinov2-image-search 1 confirm 1`.
+Confirmation 1 confirmed findings 1 and 3 and asked for more on 2 — the
+pagination promise was unconditional where the index gives a qualified one, and
+the 998 boundary was checked as arithmetic rather than as a result. Both are
+now in the spec and in task 3.4.
 
 ## Blockers
 
