@@ -12,12 +12,12 @@ that is *full* can be just as wrong.
 
 ## 1. What a narrowing is
 
-- [ ] 1.1 `app/domain.py` gains the frozen filter value: the tags all of which
+- [x] 1.1 `app/domain.py` gains the frozen filter value: the tags all of which
   must be present, the tags any of which suffice, and the metadata equalities
   (design decision 4). It carries no framework and no SQL. Verify: unit tests
   assert that it is frozen, that an empty one is falsy (nothing to apply) and
   that two built from the same input are equal.
-- [ ] 1.2 One parser builds it: tags normalised as `app/services/tagging.py`
+- [x] 1.2 One parser builds it: tags normalised as `app/services/tagging.py`
   normalises them, metadata keys matched against `^[a-z0-9_]{1,64}$`, at most
   five conditions, the same key twice refused. Verify: unit tests for each
   refusal with the message naming the offending value, for normalisation

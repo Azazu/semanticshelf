@@ -9,7 +9,7 @@ constraint keeps its own frozen copy, and a unit test holds the two together.
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Final, Literal, get_args
 from uuid import UUID
@@ -117,6 +117,29 @@ def modality_of(model: str) -> Modality:
 
 
 # --- immutable objects -------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Narrowing:
+    """Which assets a search or a listing is willing to consider.
+
+    Three conditions, all optional and all combinable: every one of `tags_all`
+    present, at least one of `tags_any` present, and each entry of `meta` equal
+    at the top level of the asset's metadata. What may be in them — how a tag is
+    normalised, how a metadata key is shaped, how many conditions are allowed —
+    is the parser's business (`app/services/tagging.py`); what this carries is
+    the answer, already checked.
+
+    An empty narrowing is falsy, and a falsy narrowing is never applied: it must
+    cost nothing, because most searches carry one.
+    """
+
+    tags_all: tuple[str, ...] = ()
+    tags_any: tuple[str, ...] = ()
+    meta: Mapping[str, str] = field(default_factory=dict)
+
+    def __bool__(self) -> bool:
+        return bool(self.tags_all or self.tags_any or self.meta)
 
 
 @dataclass(frozen=True, slots=True)
