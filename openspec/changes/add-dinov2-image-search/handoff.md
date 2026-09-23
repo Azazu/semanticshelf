@@ -1,7 +1,7 @@
 # Handoff — add-dinov2-image-search
 
 **Updated:** 2026-09-23 · claude
-**State:** awaiting-gate-2
+**State:** ready-to-merge
 **Branch:** change/add-dinov2-image-search
 **Security-sensitive:** yes — a picture arrives in a request body and is decoded
 (FR-IMG-1), and a second model is downloaded from the model hub on first use.
@@ -54,15 +54,13 @@ Two things found on the way, both fixed here:
 
 ## Next step
 
-Push, watch CI, then the Gate 2 confirmation of round 1:
-`/gate-review add-dinov2-image-search 2 confirm 1`.
+`/git:merge add-dinov2-image-search`. Both gates pass: Gate 1 confirmed at
+`4a6a870`, Gate 2 confirmed at `87e9de6` (round 1's single `major` fixed and
+confirmed). Nothing but `review.md` and this file has changed since the
+reviewed commit.
 
-Round 1 found one `major`, and it was real: the action this change put under
-every thumbnail was keyed by the asset alone, so a page that repeats an asset —
-which the search contract explicitly allows — made Streamlit refuse to render,
-on the text search page as well. Reproduced first, then fixed in the grid (a key
-per drawn cell) and in the two accumulating pages (a repeat is dropped, the
-service's offset is not), with both halves demonstrated by removing them.
+After the merge: push, then `/opsx:archive add-dinov2-image-search`, and the
+Russian companion document outside the repository gets stage 3's first change.
 
 ## Blockers
 
