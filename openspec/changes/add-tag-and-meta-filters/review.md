@@ -121,3 +121,29 @@ and all source-round findings were dispositioned. The Gate 1 mechanical
 floor passed, including strict OpenSpec validation. No benchmark, database
 mutation or implementation test suite was run. Only `review.md` was modified;
 no git write commands were run.
+
+## Confirmation 4 · Gate 1 · Round 2
+**Reviewer:** codex
+**Date:** 2026-09-23
+**Reviewed-Commit:** 19f60d2048aa94b1fc749cd44a095363baacc6ef
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The delta requirement and its index-plan scenario now explicitly restrict the mandatory vector-index path to unnarrowed searches. Narrowed searches may use either the vector index or exact distances over matching assets. The shared contract specifies filtering, ordering, page bounds, threshold and lookahead semantics while explicitly permitting different completeness and requiring the bounded-scan report. The existing full-page-without-lookahead scenario remains applicable. Task 2.1 permits both plans, and task 3.5 separately verifies the filtered HNSW path. This resolves the normative contradictions identified in confirmation 3. |
+| 2 | confirmed — Task 3.5 retains the real-index positive regression through candidate retrieval, the bounded probe and the true flag, with an asserted vector-index plan, a reduced budget yielding a full page without lookahead, and a default-budget false counterpart. Disabling the positive-path probe must make it fail. Tasks 3.5a–3.7 retain negative cases, probe-invocation checks and envelope coverage. The Gate 1 verification obligation is explicit; implemented regression and failing-input evidence remain Gate 2 obligations. |
+| 3 | confirmed — Proposal, design decision 7 and task 6.1 keep benchmark mutations inside a schema created for the run, separate from service tables. Applicability covers cleanup deletion and a crash leaving only that schema behind. Task 6.1a requires the default entry point to preserve seeded assets, embeddings and jobs and verifies schema cleanup, with destructive mis-targeting as the demonstrated failing input. The isolation plan remains intact; its implementation and preservation evidence remain Gate 2 obligations. |
+
+### Validation
+
+Reviewed only the diff from `0094306c58f7aa0f5a7f210526f1cd5855f265b4`
+to `19f60d2048aa94b1fc749cd44a095363baacc6ef` and collateral contracts
+and count/probe boundaries reachable from round 2 findings 1–3. Confirmed the
+requested branch and HEAD, an initially clean working tree, and disposition of
+all source-round findings. Read the applicable repository instructions and
+OpenSpec configuration, checked the revised planning artifacts and searched for
+superseded claims. The Gate 1 mechanical floor passed, including strict OpenSpec
+validation. This confirms the contract and verification plan, not the partial
+implementation. No benchmark, database mutation or implementation test suite was
+run. Only `review.md` was modified; no git write commands were run.
