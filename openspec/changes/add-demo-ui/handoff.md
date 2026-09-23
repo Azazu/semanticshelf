@@ -1,7 +1,7 @@
 # Handoff — add-demo-ui
 
 **Updated:** 2026-09-23 · claude
-**State:** awaiting-gate-2
+**State:** ready-to-merge
 **Branch:** change/add-demo-ui
 **Security-sensitive:** yes — this change adds dependencies (two groups:
 Streamlit and Playwright), uploads a file from a page, and deletes assets
@@ -35,17 +35,17 @@ Decided in the proposal rather than inherited:
 
 ## Next step
 
-Gate 1 passed (`approved`). Gate 2's confirmation of round 1 confirmed six of
-the seven findings and kept the first open: the handoff itself still declared
-`medium` and repeated the reasoning the gate had rejected, and it carried no
-security-sensitive flag. Both are fixed above — the flag is in the header, and
-the tier paragraph says what happened rather than what was first thought.
+**Both gates pass.** Gate 1 `approved` (the retrospective artifact review the
+tier correction owed), Gate 2 `confirmed` — all seven findings of round 1, plus
+the minor eighth fixed with them.
 
-Run: `/gate-review add-demo-ui 2 confirm 1` again. The user pushes first.
+`/git:merge add-demo-ui`, then `/opsx:archive`. The three screenshots in
+`docs/images/` are committed; the corpus they were taken from is not, because
+`.data/` is gitignored and `make demo` rebuilds it.
 
-Local evidence, the way CI runs it: `make check` 408 green,
-`make test-integration` 198 green, `make test-ui` 35 green, strict validation
-14/14.
+Local evidence, the way CI runs it (`FORCE_COLOR=1 CI=true`): `make check` 408
+green, `make test-integration` 198 green, `make test-ui` 35 green, strict
+validation 14/14, both `scripts/*_test.sh`, `sh -n` over every script.
 
 ## Blockers
 
