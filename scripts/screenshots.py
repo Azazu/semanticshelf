@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 import httpx
@@ -53,11 +53,12 @@ def started(command: list[str], *, url: str, name: str, env: dict[str, str]) -> 
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
+    group = os.getpgid(process.pid)
     try:
         _await(url, name=name, process=process)
         yield
     finally:
-        _stop(process, name=name)
+        _stop(process, group=group, name=name)
 
 
 def _await(url: str, *, name: str, process: subprocess.Popen[bytes]) -> None:
@@ -74,21 +75,41 @@ def _await(url: str, *, name: str, process: subprocess.Popen[bytes]) -> None:
     raise RuntimeError(f"{name} did not answer at {url} within {START_TIMEOUT_SECONDS}s")
 
 
-def _stop(process: subprocess.Popen[bytes], *, name: str) -> None:
-    """Signal the whole group, then make sure it is gone."""
-    if process.poll() is not None:
-        return
+def _group_is_gone(group: int) -> bool:
+    """Whether any process is still in that group.
+
+    Signal 0 checks for existence without sending anything, and it answers for
+    the *group* — which is the question, because uvicorn and streamlit both
+    spawn children and a leader that has exited says nothing about them.
+    """
+    try:
+        os.killpg(group, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:  # pragma: no cover - something else owns it now
+        return False
+    return False
+
+
+def _stop(process: subprocess.Popen[bytes], *, group: int, name: str) -> None:
+    """Signal the whole group, then make sure the whole group is gone.
+
+    The leader exiting is not the end of it: Gate 2 caught this returning as
+    soon as `process.poll()` answered, which leaves a surviving child holding
+    the port it was listening on.
+    """
     for attempt in (signal.SIGTERM, signal.SIGKILL):
-        try:
-            os.killpg(os.getpgid(process.pid), attempt)
-        except ProcessLookupError:
-            return
-        try:
+        if _group_is_gone(group):
+            break
+        with suppress(ProcessLookupError):
+            os.killpg(group, attempt)
+        with suppress(subprocess.TimeoutExpired):
             process.wait(timeout=10)
-            return
-        except subprocess.TimeoutExpired:
-            continue
-    raise RuntimeError(f"{name} would not stop")
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and not _group_is_gone(group):
+            time.sleep(0.2)
+    if not _group_is_gone(group):
+        raise RuntimeError(f"{name} left something running in process group {group}")
 
 
 def corpus_is_there(api: str) -> bool:

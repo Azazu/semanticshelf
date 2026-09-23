@@ -67,6 +67,19 @@
 - [x] 3.5 A page whose request fails leaves the rest of the page usable. Verify:
   a test per page asserts that after a failed call the page still renders and
   shows the service's wording.
+- [x] 3.6 What a click changes is what the next draw shows: a page mutates state
+  and reruns rather than drawing and then mutating, state is replaced only once
+  a request has succeeded, paging repeats the search that produced the results
+  rather than whatever the boxes now say, a filter change starts that filter at
+  its first page, and a deletion rebuilds the page from the service. Verify:
+  `AppTest` asserts what is *rendered* after one click for each — the next page
+  appearing at once, a refused search keeping the previous results, a typed but
+  unsearched query not mixing rankings, a tag that empties a page still offering
+  the rest of the ranking, a tag picked from a later page starting at its first,
+  and a deleted picture leaving the grid and the detail. Demonstrated failing
+  inputs: undoing each makes its test fail. (All seven were Gate 2 findings; the
+  earlier tests asserted the requests a page made, which every one of them got
+  right.)
 
 ## 4. Running it
 
@@ -93,6 +106,10 @@
   by `ss -ltn` and a process list shows neither server; a run that is
   interrupted mid-way is followed by the same check. Demonstrated failing input:
   removing the cleanup leaves a listening port behind, which the check catches.
+  Gate 2 found the guarantee stronger than the implementation — stopping
+  returned as soon as the *leader* had exited — so the group id is kept and the
+  group itself is checked, with `tests/unit/test_screenshots_cleanup.py` covering
+  a child that outlives its leader.
 - [x] 5.3 An empty corpus is said, not screenshotted. Verify: running the script
   against an empty store exits with a message naming `make demo`, and writes no
   image.

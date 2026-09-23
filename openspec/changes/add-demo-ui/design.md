@@ -97,6 +97,18 @@ person using it at a time.
    which group they need when it is missing rather than failing with an import
    error.
 
+## Applicability
+
+| Question | Answer |
+|---|---|
+| Crash around an external effect | The interface makes one request at a time and holds nothing of its own: a page that dies mid-request loses the page, not data. The two effects that reach the store are upload and delete, and both are the API's — a person sees either the service's answer or its refusal, and a reload asks the service what is there now rather than trusting what was drawn. The screenshot script is the other side of this: it starts two servers, and stops the whole process group of each on every exit path, verified rather than assumed. |
+| Deletion / expiry | Deleting is the only irreversible thing a person can do here. It asks first, deletes through the API exactly as `curl` would, and then the page is rebuilt from the service — the deleted picture, its detail and the confirmation are gone because the listing was fetched again, not because they were hidden. |
+| Empty / zero / null inputs | An empty store, a search that matches nothing, a threshold that empties a page, a tag that empties every page fetched so far, a corpus with no tags, and a service that answers nothing at all: each is a sentence a person can act on rather than an empty grid, and paging stays reachable when a filter empties the page it was applied to. |
+| Idempotent retries | Every page is a fresh read: searching again re-asks, paging asks for the next offset of the search that produced what is shown, and a repeated upload is the service's duplicate rule (409), shown as the service words it. Nothing here retries by itself. |
+| Concurrent writers | n/a — one person, one browser session, and no state of the interface's own beyond what that session is looking at. A second person deleting something shows up as the service's 404 on the next read. |
+| Authorization boundary | n/a — the service has no authentication (D12) and the interface has no privileges of its own: it can ask for exactly what `curl` can. The README already says the service belongs behind something that does have an opinion about who is asking. |
+| Money rounding | n/a. |
+
 ## Risks / Trade-offs
 
 - **Streamlit's API moves between versions** → the pages use its documented

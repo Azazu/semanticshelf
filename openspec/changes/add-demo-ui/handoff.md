@@ -1,7 +1,7 @@
 # Handoff — add-demo-ui
 
 **Updated:** 2026-09-23 · claude
-**State:** proposing
+**State:** fixing-g2
 **Branch:** change/add-demo-ui
 
 ## Done this session
@@ -29,34 +29,39 @@ Decided in the proposal rather than inherited:
 
 ## Next step
 
-All 20 tasks. The interface exists, runs against the real service, and the three
-screenshots in `docs/images/` were taken from it on the demo corpus — not drawn,
-not cropped by hand.
+**Security-sensitive** (AGENTS.md): this change adds dependencies and uploads a
+file, and it deletes assets irreversibly from a page. That is what raised the
+tier to `high`.
 
-What the work found that the plan could not:
+Gate 2 round 1 returned eight findings — seven major, one minor — and every one
+was real.
 
-- The gate floor would have gone red in CI the moment `tests/ui/` was collected,
-  because collection imports a test module before deciding to deselect it and
-  Streamlit is in a group CI does not install. The directory is now ignored when
-  the group is absent, and that was verified by pruning the group
-  (`uv run --exact`) and running the floor's own selection: 406 tests, the UI
-  directory not looked at.
-- The first `make ui` asked for an email address and blocked — Streamlit's
-  onboarding. The target runs headless and prints the address instead.
-- The integration suite empties the store, so the corpus has to be re-indexed
-  before capturing screenshots. The how-to says so, and the script refuses an
-  empty store rather than writing three pictures of nothing — checked by
-  emptying it.
+1. **The tier was wrong.** `AGENTS.md` puts a change touching file uploads or
+   dependencies at `high`, whatever the reasoning about the service. Raised, the
+   applicability table added, and Gate 1 is owed on the artifacts.
+2-7. **Streamlit's execution model.** A page draws itself and only then runs the
+   code that changes state, so a click showed its effect one interaction late: a
+   page of results that appeared after some unrelated click, a tag change that
+   asked for the new tag at the old offset, a delete that left the picture on
+   screen, a refusal that destroyed the results a person already had, paging
+   that used whatever was typed rather than what was searched, and a "More" that
+   disappeared exactly when a filter had emptied the page. Each is now
+   state-then-rerun, with a snapshot of what was asked kept beside the results,
+   and each has a test that asserts what is *rendered* after one click.
+8. **The cleanup promise was stronger than the code.** Stopping a screenshot
+   server returned as soon as the leader had exited, which says nothing about
+   the child holding the port. The group id is kept and the group itself is
+   checked, with a test for a child that outlives its leader.
 
-Evidence: `make check` 406 green and `make test-integration` 198 green, both
-under `FORCE_COLOR=1 CI=true`; `make test-ui` 31 green; `openspec validate --all
---strict` 14/14; both `scripts/*_test.sh`; `sh -n` over every script. Five
-demonstrated failing inputs: importing `app` from a page, returning a refusal
-instead of raising it, paging from a fixed offset, deleting without the
-confirmation, and removing the screenshot script's cleanup (which leaves a
-server running — the probe killed what it leaked).
+The earlier tests all passed because they asserted the requests a page made —
+which every one of these defects got right.
 
-The user pushes, then Gate 2: `/gate-review add-demo-ui 2`.
+Run: `/gate-review add-demo-ui 1` (the tier now demands it), then the Gate 2
+confirmation. The user pushes first — the code changed.
+
+Local evidence, the way CI runs it (`FORCE_COLOR=1 CI=true`): `make check` 408
+green, `make test-integration` 198 green, `make test-ui` 35 green, strict
+validation 14/14. Seven demonstrated failing inputs, one per fix.
 
 ## Blockers
 

@@ -1,12 +1,17 @@
 # Something to look at
 
-**Risk-Tier:** medium
+**Risk-Tier:** high
 
-Raised from the `low` the roadmap declares. `low` covers documentation, config
-wiring and tests; this change adds a second application to the repository, a
-dependency group, a browser-driven screenshot step and a page that deletes
-assets on a person's click. None of it touches the service, which is why it is
-not `high` — but it is an ordinary feature by any reading, so Gate 2 reviews it.
+Raised twice. The roadmap declares `low`; this change was first proposed as
+`medium` on the reasoning that it touches nothing in the service. Gate 2 was
+right that the reasoning does not matter: `AGENTS.md` says a change touching
+**file uploads or dependencies** is `high` tier, and this one adds two
+dependency groups and a page that uploads a file. It also deletes assets
+irreversibly on a click, which the tier table names on its own.
+
+So it is `high`: Gate 1 on the artifacts as well as Gate 2 on the code, an
+applicability table in `design.md`, a demonstrated failing input for every new
+check, and the security-sensitive flag in the commit body and the handoff.
 
 ## Why
 

@@ -45,7 +45,7 @@ def thumbnails(
                 st.image(
                     address_of(asset["links"]["thumbnail"]),
                     caption=caption or asset["id"][:8],
-                    use_container_width=True,
+                    width="stretch",
                 )
 
 
