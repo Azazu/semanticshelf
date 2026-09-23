@@ -20,6 +20,12 @@ See `proposal.md` — Why. What the design has to work with:
   a temporary file outside the media root and discarding it in a `finally`.
 - `app/ml/base.py` normalises and checks every vector, so the new adapter is
   responsible for producing features and nothing else.
+- **The queue has no uniqueness per (asset, model)** — also checked rather than
+  assumed. `indexing_jobs` has a UUID primary key and two non-unique indexes
+  (`ix_jobs_claim`, `ix_jobs_asset`); change 5 deliberately left open whether a
+  pair keeps one row or a history of them, and `reset()` puts *every* row of an
+  asset back to `pending`. Nothing may be built here on a constraint that does
+  not exist.
 
 ## Goals / Non-Goals
 
@@ -28,7 +34,10 @@ Goals beyond the proposal's scope statement:
 - A picture as a query costs one inference and leaves nothing behind.
 - `/similar` costs no inference at all — the vector is already stored.
 - Everything about a page (its bounds, its order, its refusals) is the same for
-  both kinds of query, because it is the same code.
+  both kinds of query, because it is the same code — with one difference that is
+  stated rather than discovered: a search that excludes an asset from its own
+  answer spends one of the index's candidates on it and so reaches one page-depth
+  less (decision 5).
 
 Non-goals at the design level: filtered vector search (change 12), any measure
 of which model is better (change 14), and any change to how vectors are stored.
@@ -67,25 +76,63 @@ of which model is better (change 14), and any change to how vectors are stored.
    409 before anything is searched. No model is loaded, which is also what makes
    the endpoint answerable on a build whose weights were never downloaded.
 
-5. **The asset is excluded by asking for one more and dropping it.** The
-   vector query asks for `limit + 1 + 1` rows — one for `has_more`, one for the
-   asset itself, which is always the nearest to its own vector — and the service
-   drops the asset by identifier. A `WHERE asset_id <> …` inside the ordered
-   select would be a filter on an approximate index scan: the same class of
-   problem change 12 exists to measure, for one row that is trivially known.
-   Rejected: dropping it after the page is cut — that would silently shorten the
-   first page by one.
+5. **The asset is excluded inside the query, above the index scan.** The
+   window — the select the index answers — stays unfiltered and takes one row
+   more than the page reaches; the select above it drops the asset by
+   identifier *before* it orders, offsets and cuts. The exclusion has to happen
+   before the OFFSET, because the OFFSET is applied in SQL: removing the asset
+   in the service after the page was cut would shift every later page by the row
+   it removed, and for the ranking `[self, A, B, C, D]` with a page of two that
+   gives page 1 `[A, B]` and page 2 `[B, C]` — a repeated neighbour with no tie
+   anywhere in sight. Filtering above the window instead of inside it leaves the
+   index scan the plan of ADR-001 requires, which the existing plan test reads.
 
-6. **`index missing` is one statement and then the ordinary drain.**
-   `INSERT INTO indexing_jobs (asset_id, model) SELECT a.id, :model FROM assets a
-   WHERE NOT EXISTS (a vector for that model) AND NOT EXISTS (unfinished work
-   for that model) ON CONFLICT DO NOTHING`, then the same
-   claim/execute/finish drain `index-folder` uses. Two runs at once cannot
-   double-queue: the unique constraint the queue already carries decides, and
-   `ON CONFLICT DO NOTHING` makes that a no-op rather than an error.
-   Rejected: queueing at start-up or in the lifespan — the service would begin
-   writing rows and burning CPU because someone restarted it, and nothing in
-   this service writes without being asked.
+   Two of the candidates the index produces are therefore spent on something
+   other than the page: the asset itself, and the row beyond the page that is
+   the whole of `has_more`. The ceiling is `MAX_SEARCH_EFFORT` (1000), so a
+   search that excludes an asset reaches one page-depth less than one that does
+   not — `limit + offset` at most 998, where a text or picture query may ask for
+   999 — and that page is refused explicitly, the way any page beyond the
+   searchable depth is, rather than answered from a ranking the index was not
+   allowed to look far enough to produce.
+   Rejected: `WHERE asset_id <> …` inside the window — a filter on an
+   approximate index scan, which is exactly what change 12 exists to measure.
+   Rejected: dropping the row in the service — the duplicate above, which is
+   what the artifacts said until Gate 1 round 1 found it.
+
+6. **`index missing` is one statement under a lock, and then the ordinary
+   drain.** `INSERT INTO indexing_jobs (asset_id, model) SELECT a.id, :model
+   FROM assets a WHERE NOT EXISTS (a vector of that model for it) AND NOT
+   EXISTS (work for that pair that is pending, running or failed)`, then the
+   same claim/execute/finish drain `index-folder` uses.
+
+   **Two backfills cannot double-queue, because they cannot run at once for the
+   same model.** The statement runs under `pg_advisory_xact_lock(<namespace>,
+   hashtext(:model))`, taken in the transaction that inserts and released when
+   it commits. The second transaction waits, then reads the rows the first
+   committed and selects none of the assets they cover; a backfill of another
+   model is not blocked, because the key is the model. **No other writer can race it:** an upload
+   creates an asset and its work in one transaction (`indexing-jobs`: "Work is
+   created with the asset, or not at all"), so an asset is never visible without
+   its work, and a reset only moves a row the selection already skips.
+   Rejected: `ON CONFLICT DO NOTHING`, which these artifacts claimed until Gate
+   1 round 1 found it — there is no unique constraint on the pair for it to
+   name, so it prevents nothing.
+   Rejected: adding that constraint as a partial unique index over open work —
+   it would give the queue an invariant it has never had, and `reset()` sets
+   every row of an asset back to `pending`, so an asset that already carries two
+   rows for a pair could not be reindexed at all afterwards. A search change is
+   not where the queue's identity gets rewritten.
+
+   **Work that failed is not resurrected.** FR-IDX-5 makes
+   `POST /assets/{id}/reindex` the only thing that runs work again once its
+   attempts are spent, and the `indexing-jobs` capability says failed work is
+   not attempted again on its own. A fresh row with a fresh attempt budget would
+   be that retry under another name, and a repeated `make demo` would keep
+   paying for work that already gave up — so such an asset is skipped, counted,
+   and reported with the command that does run it again. This is also why the
+   selection asks for "no work that is pending, running **or failed**" rather
+   than "no unfinished work".
 
 7. **The interface's fifth page is the search page with a different question.**
    Same grid, same scores, same "More", same refusal surface; what differs is
@@ -103,9 +150,9 @@ of which model is better (change 14), and any change to how vectors are stored.
 | Question | Answer |
 |---|---|
 | Crash around an external effect | The query picture is written to a temporary file outside the media root and unlinked in a `finally`; a crash between the two leaves a file in the system temporary directory and nothing in the store — no asset, no vector, no work. The backfill's insert is one statement in one transaction: it either queued the work or it did not. |
-| Concurrent writers | Two backfills at once cannot double-queue: the queue's unique constraint decides and `ON CONFLICT DO NOTHING` makes the loser a no-op. Two runners taking that work is the claim the queue already answers (`FOR UPDATE SKIP LOCKED`, ADR-003). A search never writes. |
-| Empty / zero / null inputs | A store with no vectors for the search model answers an empty page; an asset with no vector for it answers 409 rather than an empty page, because "nothing is known" is not "nothing is like it"; a picture that decodes to nothing acceptable is the upload's own refusal; a corpus where every asset already has its vector makes `index missing` a no-op that says so. |
-| Idempotent retries | Searching the same picture twice costs two inferences and changes nothing. Asking for the missing work twice queues nothing the second time. A retried job is the queue's existing at-least-once upsert. |
+| Concurrent writers | Two backfills of the same model serialise on `pg_advisory_xact_lock(<namespace>, hashtext(model))`, so the second selects against the first's committed rows and queues nothing (decision 6); the queue has no uniqueness per pair, so nothing here may lean on one. No other writer can race the selection: an asset and its work are created in one transaction, and a reset only moves a row the selection skips. Two runners taking the queued work is the claim the queue already answers (`FOR UPDATE SKIP LOCKED`, ADR-003). A search never writes. |
+| Empty / zero / null inputs | A store with no vectors for the search model answers an empty page; an asset with no vector for it answers 409 rather than an empty page, because "nothing is known" is not "nothing is like it"; a picture that decodes to nothing acceptable is the upload's own refusal; a corpus where every asset already has its vector makes `index missing` a no-op that says so, and one where the only assets without a vector have failed work makes it a no-op that says *why*. |
+| Idempotent retries | Searching the same picture twice costs two inferences and changes nothing. Asking for the missing work twice queues nothing the second time — the first run's rows are exactly what the second run's `NOT EXISTS` sees — and asking for it twice at once is the lock above. A retried job is the queue's existing at-least-once upsert. |
 | Deletion / expiry | An asset deleted between being listed and having its neighbours asked for answers 404, as every other read of it does; its work and vectors went with it (change 6). Nothing here deletes. |
 | Authorization boundary | n/a — the service has no authentication (D12), and this change adds no privileged operation: the backfill is a CLI command, like every other operator action. |
 | Money rounding | n/a. |
@@ -116,8 +163,10 @@ of which model is better (change 14), and any change to how vectors are stored.
   adds ~1.2 GB of weights → it is what FR-IDX-1's default means, the how-to
   says so before the first `make demo`, and `ENABLED_MODELS` still lets a
   deployment run one model.
-- **`/similar` on a large store reads one extra row per page** → trivially
-  bounded, and it buys a self-exclusion that cannot silently shorten a page.
+- **`/similar` reads one extra candidate per page and can reach one page less
+  deep than a text query** (998 rather than 999) → the cost is one row; the
+  depth is refused explicitly rather than answered from a ranking the index was
+  not allowed to reach, and no client can tell the difference below 998.
 - **The backfill drains in the foreground** like `index-folder` → it is an
   operator command with a progress bar, and `--no-index` leaves the work queued
   for the worker of change 13.
@@ -129,8 +178,9 @@ of which model is better (change 14), and any change to how vectors are stored.
 
 None. No schema change, no data change: the constraint and both indexes have
 been in place since change 3, and this change writes rows of the kind they were
-built for. A deployment that keeps `ENABLED_MODELS=clip-vit-l14` sees no
-difference at all.
+built for. The backfill's concurrency guarantee needs no schema either — an
+advisory lock is taken, not declared (decision 6). A deployment that keeps
+`ENABLED_MODELS=clip-vit-l14` sees no difference at all.
 
 ## Open Questions
 

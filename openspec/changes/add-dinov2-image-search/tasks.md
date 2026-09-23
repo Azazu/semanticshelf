@@ -54,13 +54,30 @@ check is removed, and that failure is demonstrated before the task is ticked.
   `search_similar` uses it as the query with no inference at all. Verify: an
   integration test asserts the neighbours of a known asset, and that no model
   was loaded to answer (the registry is asserted empty afterwards).
-- [ ] 3.2 The asset is never among its own neighbours, on any page: the query
-  asks for one row more than the page needs and drops the asset by identifier
-  (design decision 5). Verify: integration tests assert its absence on the first
-  page and on a later page, and that a full page still carries `limit` items.
-  Demonstrated failing input: dropping the extra row makes the page one item
-  short.
-- [ ] 3.3 `GET /api/v1/assets/{id}/similar`: 409 problem details when the asset
+- [ ] 3.2 The asset is never among its own neighbours, on any page, and the
+  pages are pages of the ranking it has already been taken out of:
+  `nearest_statement` takes the asset to exclude, the window (the index scan)
+  stays unfiltered and takes one row more than the page reaches, and the select
+  above it drops the asset before it orders, offsets and cuts (design decision
+  5). Verify: integration tests read consecutive pages of a ranking whose
+  nearest row is the asset itself and assert that each neighbour appears on
+  exactly one page, in order, with every page but the last full; the existing
+  plan test covers the excluding statement and still reads an index scan on the
+  model's partial index. Demonstrated failing input: dropping the asset in the
+  service after the page was cut makes the second page repeat the last
+  neighbour of the first — the defect Gate 1 round 1 named.
+- [ ] 3.3 A search that excludes an asset reaches one page-depth less, and says
+  so rather than searching shallower than the page needs: `check_depth` and
+  `effort_for` account for the excluded row, the bound is `MAX_SEARCH_EFFORT -
+  2`, and a page beyond it is refused with the problem details a too-deep page
+  already gets. Verify: unit tests assert that the effort granted to an
+  excluding search always covers the page, the excluded row and the row beyond
+  the page, and that the two bounds (998 excluding, 999 not) are each accepted
+  at their edge and refused one past it; api tests assert the refusal on
+  `/similar`. Demonstrated failing input: leaving the excluding bound at 999
+  makes the effort test fail, because 1001 candidates would be needed and the
+  index grants 1000.
+- [ ] 3.4 `GET /api/v1/assets/{id}/similar`: 409 problem details when the asset
   has no vector for the search model, 404 when no asset carries that
   identifier, and the ordinary envelope otherwise. Verify: api and integration
   tests for all three, including an asset whose work exists but has not finished.
@@ -85,20 +102,34 @@ check is removed, and that failure is demonstrated before the task is ticked.
 ## 5. Work for what is already stored
 
 - [ ] 5.1 `IndexingJobRepository` can queue the missing work for a model in one
-  statement — assets with neither a vector nor unfinished work for it —
-  `ON CONFLICT DO NOTHING` (design decision 6). Verify: integration tests assert
-  what is queued for a store where some assets have the vector, some have
-  unfinished work and some have neither; and that running it twice queues
-  nothing the second time.
-- [ ] 5.2 `semanticshelf index missing [--model KEY] [--no-index]` queues that
+  statement, under `pg_advisory_xact_lock` keyed on the model: assets that have,
+  for it, neither a vector nor work that is pending, running **or failed**
+  (design decision 6). It answers with what it queued and how many assets it
+  passed over because their work had failed. Verify: integration tests assert
+  what is queued for a store holding all four kinds of asset — vector, work
+  waiting, work failed, nothing — and that running it twice queues nothing the
+  second time. Demonstrated failing input: treating `failed` as work that is
+  simply not unfinished queues a fresh job with a fresh attempt budget for it,
+  which contradicts FR-IDX-5 and fails the test that asserts the failed asset is
+  passed over and counted.
+- [ ] 5.2 Two backfills of the same model cannot queue the same work twice.
+  Verify: an integration test runs the statement in two overlapping
+  transactions on real PostgreSQL and asserts that each asset ends with exactly
+  one new unit of work, and that the second transaction reports nothing queued.
+  Demonstrated failing input: removing the advisory lock makes that test find
+  two jobs per asset — the queue has no unique constraint on the pair to catch
+  it, which is what Gate 1 round 1 found.
+- [ ] 5.3 `semanticshelf index missing [--model KEY] [--no-index]` queues that
   work and then carries it out, reporting what it did — the shape
-  `index-folder` reports. Verify: a CLI test with the fake embedder asserts the
-  summary and that `--no-index` leaves the work queued.
-- [ ] 5.3 Nothing queues work by itself: not at start, not in the lifespan, not
+  `index-folder` reports, plus the assets passed over for failed work and the
+  command that runs them again (`POST /assets/{id}/reindex`). Verify: a CLI test
+  with the fake embedder asserts the summary, including the skipped count and
+  the hint, and that `--no-index` leaves the work queued.
+- [ ] 5.4 Nothing queues work by itself: not at start, not in the lifespan, not
   in a background task. Verify: a test asserts that building the application and
   running its lifespan against a store with missing vectors creates no work.
   Demonstrated failing input: queueing in the lifespan makes it fail.
-- [ ] 5.4 `make demo` ends with `index missing`, so the demo corpus is
+- [ ] 5.5 `make demo` ends with `index missing`, so the demo corpus is
   searchable by both kinds of query. Verify: `make -n demo` shows the three
   commands in order.
 
@@ -128,9 +159,13 @@ check is removed, and that failure is demonstrated before the task is ticked.
   that the demo now ends with `index missing`, and what the fifth page does.
   Verify: every command in both was run in the form shown.
 - [ ] 7.3 `docs/explanation/requirements.md`: FR-IMG-2's tag filters are not
-  delivered here (change 12 owns filters), and the row for this change says what
-  it did. Verify: the text reads as the implementation behaves, and
-  `openspec validate --all --strict` passes.
+  delivered here (change 12 owns filters); its 409 is owed to the absence of a
+  vector rather than to a job that is not `done`, the same correction change 8
+  made to FR-TXT-3 for the same reason (a reindex puts the work back while the
+  vector stays); the searchable depth of a self-excluding search is one page
+  shallower; and the row for this change says what it did. Verify: the text
+  reads as the implementation behaves, and `openspec validate --all --strict`
+  passes.
 
 ## 8. Evidence
 

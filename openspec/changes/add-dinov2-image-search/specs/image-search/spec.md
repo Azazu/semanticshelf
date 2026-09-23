@@ -47,6 +47,11 @@ the search model are nearest to that asset's own vector. It SHALL use the
 vector already stored rather than computing one again, and SHALL NOT include
 the asset itself in the answer — at any page of it.
 
+The pages of that answer SHALL be pages of the ranking the asset has already
+been taken out of: removing it SHALL NOT make a neighbour appear on two
+consecutive pages, SHALL NOT drop one between them, and SHALL NOT leave a full
+page short of what it asked for.
+
 An asset that has no vector for the search model SHALL be refused with 409
 problem details naming that, rather than answered with an empty page: nothing
 is known about what it looks like, which is not the same as nothing being like
@@ -61,6 +66,11 @@ it.
 #### Scenario: The asset itself is never its own neighbour
 - **WHEN** the neighbours of an asset are asked for, on any page
 - **THEN** it does not appear among them
+
+#### Scenario: One page after another
+- **WHEN** the neighbours of an asset are read page after page
+- **THEN** each neighbour appears on exactly one of those pages, in ranking
+  order, and every page but the last carries as many as it asked for
 
 #### Scenario: An asset that has no vector yet
 - **WHEN** the neighbours of an asset whose work for the search model has not
@@ -77,9 +87,15 @@ it.
 An answer to a picture SHALL carry what an answer to words carries: the items
 with their assets and scores, the page's size and offset, whether more exist,
 and the model that ranked them. The bounds SHALL be the same bounds — the same
-maximum page, the same searchable depth, the same threshold behaviour, the same
-order and the same promise about a page whose edge cuts a group of identical
-scores.
+maximum page, the same threshold behaviour, the same order and the same promise
+about a page whose edge cuts a group of identical scores.
+
+The searchable depth SHALL be the same for a picture sent as a query. For an
+answer that excludes an asset from its own neighbours it SHALL be one page
+shallower, because the excluded asset is itself one of the candidates the index
+is allowed to produce and the row beyond the page is another; that limit SHALL
+be a stated bound, refused like any other page beyond the searchable depth, and
+SHALL NOT be met by answering from a shallower search than the page needs.
 
 #### Scenario: The same envelope
 - **WHEN** a picture query and a text query are both answered
@@ -89,6 +105,12 @@ scores.
 - **WHEN** a picture query asks for a page beyond the searchable depth, or a
   page larger than the maximum
 - **THEN** it is refused exactly as a text query asking for the same is
+
+#### Scenario: The deepest page an asset's neighbours can reach
+- **WHEN** the neighbours of an asset are asked for at the deepest page that
+  bound allows, and then at one page deeper
+- **THEN** the first is answered, with whether more exist still exact, and the
+  second is refused as a page beyond the searchable depth
 
 ### Requirement: A picture query is answered by the model it names
 

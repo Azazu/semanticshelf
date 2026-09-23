@@ -45,8 +45,10 @@ the interface has four.
   not have yet and carry it out, the way `index-folder` finishes what it
   created. Existing assets have no DINOv2 vector, a second `make demo` will not
   give them one (the import sees duplicates and queues nothing), and a demo
-  where "find similar" answers 409 for every picture is not a demo. `make demo`
-  ends with it.
+  where "find similar" answers 409 for every picture is not a demo. It queues
+  nothing for work that already failed — FR-IDX-5 leaves that to `reindex` — and
+  says how many assets it passed over for that reason; two operators running it
+  at once queue the work once. `make demo` ends with it.
 - **The "Find similar" page** in the interface: a picture to upload, or the
   "similar" action from any thumbnail, with the same grid, scores and paging
   the search page has.
@@ -100,11 +102,14 @@ the interface has four.
   by-asset query, `ui/pages/similar.py`, `tests/models/test_dinov2.py`.
 - Changed: `app/domain.py` (`IMPLEMENTED_MODELS`), `app/ml/registry.py` (the
   second factory), `app/repositories/embeddings.py` (exclude an asset from its
-  own neighbours), `app/cli.py` (`index missing`), `Makefile` (`make demo`
-  ends with it), `docs/how-to/searching.md`, `docs/reference/settings.md`
-  (`DINOV2_MODEL_NAME`), `docs/explanation/requirements.md` if anything here
-  contradicts it.
-- Unchanged: the schema, every migration, the queue's mechanism, the upload
-  path. The storage rules are untouched: the query picture is decoded and
-  dropped.
+  own neighbours, above the index scan), `app/repositories/jobs.py` (queue the
+  missing work of a model), `app/cli.py` (`index missing`), `Makefile` (`make
+  demo` ends with it), `docs/how-to/searching.md`, `docs/reference/settings.md`
+  (`DINOV2_MODEL_NAME`), `docs/explanation/requirements.md` where it contradicts
+  what is built (FR-IMG-2's 409 and the searchable depth of a self-excluding
+  search).
+- Unchanged: the schema, every migration, the queue's own mechanism — claiming,
+  leases, retries and the reset — and the upload path. The backfill takes an
+  advisory lock, which declares nothing and migrates nothing. The storage rules
+  are untouched: the query picture is decoded and dropped.
 - No new dependency: `transformers` and `torch` already carry DINOv2.
