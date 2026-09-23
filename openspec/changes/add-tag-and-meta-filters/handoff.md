@@ -37,16 +37,20 @@ then `DEMO_COUNT=20 make demo`): 20 assets, 40 vectors, both models `done`.
 
 ## Next step
 
-Gate 1 confirmation of round 1: `/gate-review add-tag-and-meta-filters 1 confirm 1`.
-All four findings are `fixed`.
+Gate 1 confirmation 2 of round 1: `/gate-review add-tag-and-meta-filters 1 confirm 1`.
 
-What changed, briefly: the tier is `high` and `design.md` carries the
-applicability table; the report of a stopped scan is now decided by **how many
-candidate rows the search produced before the threshold**, not by the shape of
-the answer — which fixes both the full-page case (finding 1) and the
-threshold-shortened case (finding 2); the bounded question carries the search's
-model, its narrowing and the asking asset; and the measurement command is named
-with its arguments (finding 4).
+Confirmation 1 confirmed the tier (finding 3) and rejected the arithmetic of
+findings 1 and 2 — correctly, both times. Fixed: window reach
+(`offset + limit + 1 + excluding`) and what the answer needs
+(`offset + limit + 1`) are two named numbers rather than one confused one, and
+the count that decides everything is taken over the candidates **before** the
+offset and the threshold, so an empty page at a large offset no longer reads as
+an exhausted ranking. Six worked rows in `design.md`, each a unit test in task
+3.2.
+
+**This is the second confirmation on findings 1 and 2.** If it fails again on
+either, the process says to stop rather than loop: split the change or ask the
+user to arbitrate.
 
 ## Blockers
 
