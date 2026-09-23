@@ -46,3 +46,29 @@
 - The high tier is appropriate; the applicability table and implementation/verification task coverage support the four-page scope, with image search explicitly deferred to change 11. No blocker or major design finding identified.
 - Ran `scripts/pregate-verify.sh gate1 add-demo-ui`: passed, including strict OpenSpec validation, with zero warnings.
 - This is the retrospective Gate 1 artifact review required by the tier correction. It does not confirm the earlier Gate 2 findings or replace the required Gate 2 confirmation; application tests and browser runs were not repeated here.
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-23
+**Reviewed-Commit:** 09b9071b60236300f3ec8f14faf90f155c221585
+**Verdict:** changes-requested
+
+### Findings
+
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — The proposal now declares `high`, the design has an applicability table, the fix commits carry the security-sensitive flag, and the retrospective Gate 1 decision is `approved`. However, `openspec/changes/add-demo-ui/handoff.md:22–25` still declares `Tier medium` and repeats the rejected justification that touching nothing in the service makes this change not `high`. The handoff also lacks the required security-sensitive flag for dependencies, upload and deletion. Reconcile that paragraph with the corrected tier and explicitly flag the sensitive scope in the handoff, as the original finding and AGENTS.md require. |
+| 2 | confirmed — Successful More, Next page and Previous page transitions rerun before the user receives the updated screen. AppTest covers immediate rendering and removal of More on the final search page. |
+| 3 | confirmed — Changing the browse tag resets the offset and advances the widget generation, clearing the opened asset; Previous page provides a route back. The regression test filters after advancing and verifies a request at offset zero and a rendered match. |
+| 4 | confirmed — Successful deletion advances the widget generation and reruns, refetching tags and the listing and clearing the actual Open selection and confirmation. The regression test verifies immediate removal of the thumbnail and detail. An additional in-memory AppTest check verified deletion of the sole item on a later page: no stale image, detail or checkbox remains, and Previous page reaches the surviving earlier results. |
+| 5 | confirmed — Replacement search state is committed only after a successful request. The regression test preserves the previous image after a 422; an additional in-memory check after pagination verified that results, submitted parameters, offset, has_more, model and truncation state all survive a refused replacement. |
+| 6 | confirmed — Paging uses the saved submitted query, threshold and tag rather than current widget values. The regression test covers a query edit; the additional in-memory check changed all three controls, refused the replacement and verified that More still used the original query and threshold at offset 24 and retained the original tag filter. |
+| 7 | confirmed — More is rendered independently of nonempty filtered results. The regression test reaches a matching second page after the tag removes every item from the first page; the page explains that the filter applies to fetched results. |
+
+### Verification
+
+- Confirmed branch `change/add-demo-ui`, HEAD `09b9071b60236300f3ec8f14faf90f155c221585` and an initially clean working tree.
+- Reviewed the diff from `890da452bcbfe963fb51bb364b8be6faed42fe69` to the reviewed commit and the code, tests and artifacts reachable from Gate 2 round 1 findings 1–7. No unrelated findings were introduced; the optional minor finding 8 was not part of this confirmation.
+- Ran `.venv/bin/python -B -m pytest tests/ui -m ui -p no:cacheprovider -q`: **35 passed**.
+- Ran additional in-memory AppTest checks for a refused replacement after pagination, all submitted search parameters remaining stable, and deletion emptying a later browse page. All passed; no test files were written.
+- Full gate-floor, integration and browser screenshot runs were not repeated. Only this review file was modified; no git write commands were run.
