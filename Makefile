@@ -5,7 +5,7 @@ RUN     ?= uv run
 MSG     ?= change
 
 .DEFAULT_GOAL := help
-.PHONY: help init up down ps logs run migrate revision test test-models test-integration demo lock-check lint fmt fmt-check types check
+.PHONY: help init up down ps logs run migrate revision test test-models test-integration ui test-ui screenshots demo lock-check lint fmt fmt-check types check
 
 # Application targets are guarded until the scaffold exists: the change that
 # adds the FastAPI app brings alembic.ini together with app/main.py. A
@@ -60,7 +60,7 @@ else
 endif
 
 test: ## Unit and api tests (fake embedder, no database, no weights)
-	$(RUN) pytest -m "not integration and not models"
+	$(RUN) pytest -m "not integration and not models and not ui"
 
 test-models: ## Real-model smoke tests (downloads weights; on demand, never in CI)
 	$(RUN) pytest -m models
@@ -86,6 +86,28 @@ fmt-check: ## ruff format --check
 
 types: ## mypy on app/
 	$(RUN) mypy app
+
+ui: ## Run the Streamlit demo (needs the `ui` group: uv sync --group ui)
+ifdef APP_MISSING
+	@echo "$(SKIP_MSG)"
+else
+	@echo "the demo is at http://127.0.0.1:$${UI_PORT:-8501} — the service must be running ($(MAKE) run)"
+	uv run --group ui streamlit run ui/app.py --server.port $${UI_PORT:-8501} --server.headless true --browser.gatherUsageStats false
+endif
+
+test-ui: ## Smoke tests of the demo pages against a stubbed API (needs the `ui` group)
+ifdef APP_MISSING
+	@echo "$(SKIP_MSG)"
+else
+	uv run --group ui pytest -m ui
+endif
+
+screenshots: ## Capture the README screenshots (needs the `ui` and `screenshots` groups)
+ifdef APP_MISSING
+	@echo "$(SKIP_MSG)"
+else
+	uv run --group ui --group screenshots python scripts/screenshots.py
+endif
 
 demo: ## Fetch the demo corpus and index it, so a search has something to find
 ifdef APP_MISSING

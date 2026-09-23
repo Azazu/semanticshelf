@@ -122,7 +122,9 @@ asked for.
 
 ## Open Questions
 
-- Which multipage entry point the installed Streamlit wants (`st.navigation`
-  with `st.Page`, or the `pages/` directory convention). It decides the file
-  layout under `ui/` and nothing a person can observe; the first implementation
-  task reads the installed version and settles it.
+None. The one there was — which multipage entry point to use — was settled
+against the installed version during implementation: **Streamlit 1.64.0**, which
+has `st.navigation` and `st.Page`. So `ui/app.py` declares the four pages
+explicitly and each page is a plain module under `ui/pages/`, rather than
+relying on the directory convention's filename ordering. `streamlit.testing.v1`
+provides `AppTest`, which is what the smoke tests drive a page module with.

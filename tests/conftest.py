@@ -6,6 +6,7 @@ readiness tests rely on the connection failing fast. Integration tests build
 their own settings from the environment.
 """
 
+import importlib.util
 from collections.abc import AsyncIterator, Iterator
 
 import httpx
@@ -15,6 +16,14 @@ from PIL import Image
 
 from app.core.settings import Settings
 from app.main import create_app
+
+#: The demo interface's tests import Streamlit, which lives in a dependency
+#: group the gate floor does not install. Deselecting them by marker is not
+#: enough — collection imports a test module before it decides to skip it — so
+#: the directory is not even looked at unless the group is there. `make test-ui`
+#: installs it; `make check` and CI never do.
+if importlib.util.find_spec("streamlit") is None:
+    collect_ignore = ["ui"]
 
 UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://127.0.0.1:1/nowhere"
 

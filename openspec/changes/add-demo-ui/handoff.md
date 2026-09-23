@@ -29,10 +29,34 @@ Decided in the proposal rather than inherited:
 
 ## Next step
 
-Gate 2 only (tier `medium`), so implementation is next: `/opsx:apply
-add-demo-ui`. Twenty tasks in seven groups; the first settles which multipage
-entry point the installed Streamlit wants, which is the design's one open
-question.
+All 20 tasks. The interface exists, runs against the real service, and the three
+screenshots in `docs/images/` were taken from it on the demo corpus — not drawn,
+not cropped by hand.
+
+What the work found that the plan could not:
+
+- The gate floor would have gone red in CI the moment `tests/ui/` was collected,
+  because collection imports a test module before deciding to deselect it and
+  Streamlit is in a group CI does not install. The directory is now ignored when
+  the group is absent, and that was verified by pruning the group
+  (`uv run --exact`) and running the floor's own selection: 406 tests, the UI
+  directory not looked at.
+- The first `make ui` asked for an email address and blocked — Streamlit's
+  onboarding. The target runs headless and prints the address instead.
+- The integration suite empties the store, so the corpus has to be re-indexed
+  before capturing screenshots. The how-to says so, and the script refuses an
+  empty store rather than writing three pictures of nothing — checked by
+  emptying it.
+
+Evidence: `make check` 406 green and `make test-integration` 198 green, both
+under `FORCE_COLOR=1 CI=true`; `make test-ui` 31 green; `openspec validate --all
+--strict` 14/14; both `scripts/*_test.sh`; `sh -n` over every script. Five
+demonstrated failing inputs: importing `app` from a page, returning a refusal
+instead of raising it, paging from a fixed offset, deleting without the
+confirmation, and removing the screenshot script's cleanup (which leaves a
+server running — the probe killed what it leaked).
+
+The user pushes, then Gate 2: `/gate-review add-demo-ui 2`.
 
 ## Blockers
 
