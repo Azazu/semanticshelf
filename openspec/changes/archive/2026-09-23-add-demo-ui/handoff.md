@@ -1,7 +1,7 @@
 # Handoff — add-demo-ui
 
 **Updated:** 2026-09-23 · claude
-**State:** ready-to-merge
+**State:** merged
 **Branch:** change/add-demo-ui
 **Security-sensitive:** yes — this change adds dependencies (two groups:
 Streamlit and Playwright), uploads a file from a page, and deletes assets
@@ -35,17 +35,13 @@ Decided in the proposal rather than inherited:
 
 ## Next step
 
-**Both gates pass.** Gate 1 `approved` (the retrospective artifact review the
-tier correction owed), Gate 2 `confirmed` — all seven findings of round 1, plus
-the minor eighth fixed with them.
+Merged into `main` as `cbfa9d3` (`--no-ff`, 11 commits) and archived with its
+delta synced: `demo-ui` joins `openspec/specs/` as a new capability of five
+requirements.
 
-`/git:merge add-demo-ui`, then `/opsx:archive`. The three screenshots in
-`docs/images/` are committed; the corpus they were taken from is not, because
-`.data/` is gitignored and `make demo` rebuilds it.
-
-Local evidence, the way CI runs it (`FORCE_COLOR=1 CI=true`): `make check` 408
-green, `make test-integration` 198 green, `make test-ui` 35 green, strict
-validation 14/14, both `scripts/*_test.sh`, `sh -n` over every script.
+Next in the roadmap: stage 3 opens with change 11, `add-dinov2-image-search` —
+and with it the fifth page FR-UI-1 names, "Find similar", which this change
+deliberately left out.
 
 ## Blockers
 
