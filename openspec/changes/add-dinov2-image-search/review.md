@@ -102,3 +102,29 @@ Python supplied through `RUN`, was interrupted after it stopped making progress
 at the first API test; it did not produce a passing result. Integration and
 real-weight suites were inspected but not rerun, and remote CI was not queried.
 Only `review.md` was modified; no git write commands were run.
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-23
+**Reviewed-Commit:** 87e9de69fe5a18e7d10dc089b87fda30ca950586
+**Verdict:** confirmed
+
+### Findings
+
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The shared thumbnail grid keys each action by position and asset ID, so repeated IDs no longer collide. Both search pages discard repeated assets when accumulating subsequent pages while advancing the offset by the server's page limit and retaining its has_more value. Regression tests click More on overlapping text and picture search pages, verify rendering succeeds, and check that Find similar targets the selected asset. Direct grid tests also cover duplicate IDs and action targeting; the related documentation agrees with the accumulation behavior. |
+
+### Validation
+
+Reviewed only the diff from `f4aad30acfe9b3821ac8dfd991c00bacec11049f`
+to the Reviewed-Commit and collateral code, tests and requirements reachable
+from Gate 2 Round 1 finding 1. The branch and HEAD match the requested target;
+the working tree was initially clean and the source finding is marked fixed.
+
+The complete UI suite passed: 55 tests, including the overlapping-page and
+action-target regressions, using the installed environment with bytecode and
+pytest cache writes disabled. `openspec validate add-dinov2-image-search
+--strict` and the bounded diff's whitespace check passed. Backend, integration
+and real-weight suites were not rerun; remote CI was not queried. Only this
+confirmation was appended to `review.md`; no git write commands were run.
