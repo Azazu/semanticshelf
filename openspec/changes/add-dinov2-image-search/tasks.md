@@ -149,16 +149,16 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 6. The fifth page
 
-- [ ] 6.1 `ui/pages/similar.py`: a picture to upload, or an asset reached from
+- [x] 6.1 `ui/pages/similar.py`: a picture to upload, or an asset reached from
   the "similar" action, with the grid, scores, model and paging the search page
   has, and the service's own refusal for a 409 or a 422. Verify: `AppTest`
   covers a picture search, an asset search, a 409 and a refused picture, all
   against the stubbed service, asserting what is rendered after one click.
-- [ ] 6.2 The "similar" action appears under every thumbnail the interface
+- [x] 6.2 The "similar" action appears under every thumbnail the interface
   shows, and opens that asset's neighbours. Verify: `AppTest` asserts the action
   on the search and browse grids, and that clicking it asks the service for that
   asset's neighbours.
-- [ ] 6.3 The interface still imports nothing from the service. Verify: the
+- [x] 6.3 The interface still imports nothing from the service. Verify: the
   existing layering test covers the new module because it walks every file under
   `ui/`.
 

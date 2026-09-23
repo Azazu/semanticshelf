@@ -1,4 +1,4 @@
-"""The demo interface: four pages over the service's HTTP API.
+"""The demo interface: five pages over the service's HTTP API.
 
 Run it with `make ui`. It needs nothing but the address of the service
 (`API_BASE_URL`), and it can reach nothing else: no database, no media root, no
@@ -9,6 +9,7 @@ import streamlit as st
 
 PAGES = [
     st.Page("pages/search.py", title="Search", icon=":material/search:", default=True),
+    st.Page("pages/similar.py", title="Find similar", icon=":material/image_search:"),
     st.Page("pages/browse.py", title="Browse", icon=":material/photo_library:"),
     st.Page("pages/upload.py", title="Upload", icon=":material/upload:"),
     st.Page("pages/status.py", title="Status", icon=":material/monitor_heart:"),

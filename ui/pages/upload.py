@@ -25,6 +25,11 @@ if st.button("Upload", type="primary", disabled=picture is None) and picture is 
         refused(error)
     else:
         st.success(f"Stored as {created['id']}.")
+        # The one picture in the interface with no "Find similar" under it, and
+        # deliberately: its vectors are queued, not computed, so the question
+        # would be answered with "nothing is known about what it looks like"
+        # for as long as the runner takes. Browse and Search offer it once the
+        # work has run.
         st.image(address_of(created["links"]["thumbnail"]))
         st.write("**Indexing**", created["index_status"] or "queued")
         st.json(created)
