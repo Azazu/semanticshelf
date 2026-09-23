@@ -1,7 +1,7 @@
 # Handoff — add-tag-and-meta-filters
 
 **Updated:** 2026-09-23 · claude
-**State:** awaiting-gate-1
+**State:** implementing
 **Branch:** change/add-tag-and-meta-filters
 **Security-sensitive:** yes — this change handles client input: a shared
 parser for tag and metadata narrowings on four public surfaces, including the
@@ -37,20 +37,19 @@ then `DEMO_COUNT=20 make demo`): 20 assets, 40 vectors, both models `done`.
 
 ## Next step
 
-Gate 1 confirmation 2 of round 1: `/gate-review add-tag-and-meta-filters 1 confirm 1`.
+`/opsx:apply add-tag-and-meta-filters` — Gate 1 passed (Confirmation 2 of round
+1, all four findings confirmed or fixed). The order of `tasks.md` is the order
+to take: what a narrowing *is* before anything applies one.
 
-Confirmation 1 confirmed the tier (finding 3) and rejected the arithmetic of
-findings 1 and 2 — correctly, both times. Fixed: window reach
-(`offset + limit + 1 + excluding`) and what the answer needs
-(`offset + limit + 1`) are two named numbers rather than one confused one, and
-the count that decides everything is taken over the candidates **before** the
-offset and the threshold, so an empty page at a large offset no longer reads as
-an exhausted ranking. Six worked rows in `design.md`, each a unit test in task
-3.2.
+Three things the implementation must not soften, because each is a finding that
+was paid for twice:
 
-**This is the second confirmation on findings 1 and 2.** If it fails again on
-either, the process says to stop rather than loop: split the change or ask the
-user to arbitrate.
+- the scan's report is decided by `reached` against `needed`, never by the shape
+  of the answer;
+- `reached` is counted after the exclusion and **before** the offset and the
+  threshold — an empty page is not evidence of anything;
+- the window asks for one row more than the answer needs when an asset excludes
+  itself, and that row is the window's, not the page's.
 
 ## Blockers
 
