@@ -64,8 +64,9 @@ falls — which is the number change 14 needs and cannot get anywhere else.
 - **The measurement ADR-002 needs**, which this change now treats as half of its
   own point: at a range of selectivities, which plan PostgreSQL chooses, whether
   the page comes back full, and what each costs — with and without the iterative
-  scan, with and without statistics. The commands and the numbers are published
-  where change 14 picks them up rather than re-derives them.
+  scan, with and without statistics. It runs in a schema it creates and drops,
+  so the published command is safe against a working store. The commands and the
+  numbers go where change 14 picks them up rather than re-derives them.
 - **The demo interface's tag box becomes the service's own filter.** The page
   stops explaining that the filter applies only to what was fetched, because it
   no longer does.

@@ -209,7 +209,8 @@ reaches no further down, whichever layer performs either.
 
 7. **The measurement is a command, not a paragraph — and it is the half of this
    change that outlives it.** `scripts/filter_benchmark.py` builds a synthetic
-   corpus of a given size and selectivity in the database `DATABASE_URL` names,
+   corpus **in a schema it creates and drops**, inside the database
+   `DATABASE_URL` names but never in the tables the service uses,
    runs the same statement the service runs, and prints, per selectivity: which
    plan answered it, how many rows came back against how many were asked for,
    and how long it took — at `iterative_scan` off and `strict_order`, with
@@ -218,6 +219,13 @@ reaches no further down, whichever layer performs either.
    it. Synthetic on purpose: what is measured is the planner's choice against
    selectivity, and a real model's vectors would only add a variable nobody can
    control.
+
+   The schema of its own is not tidiness. A benchmark that truncated the
+   service's tables would be a published command that erases a corpus, and on a
+   machine where one database serves development and the integration suite it
+   would do exactly that — it did, to this machine's demo corpus, while the
+   measurements above were being taken. A test asserts that the documented
+   command leaves a populated store untouched.
 
    This is what change 14 needs from here, and it is what the first version of
    this design got wrong by measuring once, on a table without statistics, and
@@ -229,9 +237,9 @@ reaches no further down, whichever layer performs either.
 |---|---|
 | Empty / zero / null inputs | An empty narrowing is the search as it is today, and the parser treats "absent" and "empty after normalisation" alike — `tags_all=` is no narrowing, not a narrowing by nothing. A narrowing nothing satisfies is an empty page and never an error; an empty page with a narrowing still answers whether the scan stopped early, which is the case the probe exists for. Zero surviving rows after the threshold is *not* a stopped scan, and a test says so. |
 | Authorization boundary | n/a — the service has no authentication (D12), and a filter narrows what a caller already sees in full; nothing here hides or reveals anything a listing did not already show. |
-| Crash around an external effect | n/a — every path this change touches is a read. Nothing is written, so nothing can be half-written. |
+| Crash around an external effect | Every request path this change touches is a read: nothing is written, so nothing can be half-written. The benchmark is the exception, and a crash there leaves its own schema behind — visible, named after the run, and harmless to the service, which never reads it. |
 | Concurrent writers | n/a for correctness of a write; a search runs against whatever is committed, and an asset whose tags change between two pages is the pagination caveat the capability already states. |
-| Deletion / expiry | An asset deleted between the scan and the probe makes the probe count one fewer, which can only turn a "stopped early" into an "exhausted" — the answer is then correct for the store as it is. Nothing here deletes. |
+| Deletion / expiry | An asset deleted between the scan and the probe makes the probe count one fewer, which can only turn a "stopped early" into an "exhausted" — the answer is then correct for the store as it is. No request path deletes anything. The benchmark does: it creates a schema, fills it and drops it, and that schema is the only thing it may delete — a test asserts the documented command leaves a populated store as it found it (decision 7). |
 | Idempotent retries | A search is a read: asking twice costs two scans and changes nothing. The probe is a read too. |
 | Money rounding | n/a. |
 
@@ -242,7 +250,10 @@ reaches no further down, whichever layer performs either.
   the numbers are published, and a deployment that wants a different trade has
   one setting to turn. An unnarrowed search is untouched.
 - **The scan's bound, and therefore its report, belongs to one of the two plans
-  the planner may choose.** When a narrowing is answered exactly over the
+  the planner may choose** — which is why the delta spec requires that a
+  narrowed search never read every stored vector, rather than requiring the
+  vector index: demanding the index would forbid the better answer the database
+  gives a selective narrowing. When a narrowing is answered exactly over the
   narrowed rows there is no scan to bound and no report to make — the answer is
   complete by construction. Mitigation: `scan_limited` is computed from what the
   query returned rather than from which plan ran, so it is false exactly when

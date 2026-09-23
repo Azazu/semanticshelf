@@ -37,36 +37,28 @@ then `DEMO_COUNT=20 make demo`): 20 assets, 40 vectors, both models `done`.
 
 ## Next step
 
-Gate 1 round 2: `/gate-review add-tag-and-meta-filters 1`. Round 1 confirmed a
-design whose central evidence turned out to be conditional, and the artifacts
-now say what was measured instead.
+Gate 1 confirmation of round 2: `/gate-review add-tag-and-meta-filters 1 confirm 2`.
+All three findings are `fixed`, and each was a place where the rewrite had not
+been carried all the way through:
 
-What changed since that confirmation:
-
-- **The Context's evidence is two measurements, not one.** The first, on a table
-  that had never been `ANALYZE`d, is the empty page FR-FLT-2 forbids. The second,
-  after `ANALYZE`, is a full page at every selectivity from 1 in 2 to 1 in 100 —
-  because PostgreSQL leaves the vector index as soon as a narrowing is selective
-  and answers exactly over the narrowed rows. The first measurement was mine,
-  and generalising from it was my error, not the reviewer's.
-- **Decision 2 keeps the iterative scan for the reason that survives**: it is
-  what fills a page on the path where the index *is* used, which is broad
-  narrowings, stale statistics, and corpora where the exact plan stops being
-  cheap.
-- **Decision 7 is now half the point of the change**: the benchmark measures
-  which plan answers at each selectivity, with and without statistics, and what
-  each costs. That is the number change 14 needs and cannot get elsewhere.
-- **Task 3.5 no longer asks for an integration test of the scan's bound.** On
-  this corpus such a test can only fire by defeating the planner's statistics,
-  and would test the fixture. The rule stays in the unit tests of task 3.2, and
-  what the bound costs is the benchmark's question.
-
-Implementation state: 8 of 26 tasks done and committed (the narrowing value and
-its parser, the predicate inside the window, the iterative scan, the cut and the
-decision function with their unit tests). `make check` 511, integration 236, all
-green. Groups 4 to 7 are untouched and do not depend on this review.
+1. The delta spec still demanded the vector index for every narrowed search —
+   forbidding the exact plan the same rewrite had just accepted. It now requires
+   what actually matters (no narrowed search reads every stored vector, and the
+   answer does not depend on which plan ran) and keeps a targeted requirement
+   that the index path works when it is chosen.
+2. Removing the database-backed positive case left `scan_limited` with no test
+   that could catch a mis-wiring: the unit tests feed the arithmetic its own
+   inputs. Task 3.5 now asks for the positive path end to end, and it can be
+   built without touching the planner's statistics — measured: a narrowing over
+   half the corpus keeps the vector index *with* statistics, and a lowered scan
+   budget then leaves the page one row short of what it needed while fifteen
+   hundred matches remain.
+3. The benchmark was planned to empty the tables `DATABASE_URL` names. It now
+   builds in a schema it creates and drops, a test asserts the documented
+   command leaves a populated store untouched, and the applicability table stops
+   claiming that nothing here deletes — on this machine that mistake already
+   cost the demo corpus once.
 
 ## Blockers
 
-None — the question that blocked the apply was answered by the user: rewrite the
-justification around the measurement and ask Gate 1 again.
+None.

@@ -144,10 +144,16 @@ and the one item beyond the page that says whether more exist — so that a
 deeper page does not quietly return a worse ranking than a shallow one, and so
 that the answer about more items is read rather than assumed.
 
-A narrowed search SHALL also be answered from that index: the narrowing SHALL be
-part of what the index scan answers, not a filter applied to its result. The
-service SHALL keep looking, bounded, until the page is filled or that bound is
-reached.
+A narrowed search SHALL NOT be answered by reading every stored vector either.
+The narrowing SHALL be part of what the database plans, not a filter applied to
+a result already chosen, and the database MAY answer it in either of two ways:
+by that vector index, or by computing distances over exactly the assets the
+narrowing admits when it judges that cheaper. Both are correct, and which is
+used SHALL NOT change what the answer contains.
+
+When the vector index is used, the search SHALL keep looking, bounded, until the
+page is filled or that bound is reached; when the distances are computed
+exactly, the answer is complete and no bound applies.
 
 #### Scenario: The index answers the query
 - **WHEN** the execution plan of a search is inspected
@@ -159,7 +165,13 @@ reached.
 - **THEN** the search effort for that query is at least the size and offset it
   asks for, plus the item beyond them
 
-#### Scenario: The index answers a narrowed query too
+#### Scenario: A narrowed query is not answered by reading every vector
 - **WHEN** the execution plan of a narrowed search is inspected
-- **THEN** it shows a scan of the same vector index, with the narrowing inside
-  what that scan answers, and no sequential scan of the stored vectors
+- **THEN** it shows no sequential scan of the stored vectors, whichever of the
+  two ways the database chose
+
+#### Scenario: The vector index still answers a narrowed query when it is chosen
+- **WHEN** a narrowing broad enough for the database to use the vector index is
+  searched with
+- **THEN** the index answers it, the narrowing is part of what that scan
+  answers, and the page comes back full while matching assets remain

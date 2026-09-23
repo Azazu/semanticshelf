@@ -31,9 +31,10 @@ that is *full* can be just as wrong.
 - [x] 2.1 `EmbeddingRepository.nearest_statement` takes the filter and joins
   `assets` inside the **window**, above nothing and below the page (design
   decision 1). Verify: an integration test reads the plan of the narrowed
-  statement and asserts a scan of the model's partial index with no sequential
-  scan of `embeddings`; another asserts that the page and the threshold are
-  unchanged for an empty filter (the statement is the one change 8 and 11 left).
+  statement and asserts **no sequential scan of `embeddings`** — which of the two
+  plans the database picks is its own judgement (`design.md`, Context), and a
+  test that demanded one of them would forbid the other; that the vector index
+  is still available and correct under a narrowing is task 3.5's regression.
 - [x] 2.2 The search service sets `hnsw.iterative_scan = strict_order` for a
   narrowed query, beside the effort it already sets, and leaves it off
   otherwise (design decision 2). Verify: an integration test reads
@@ -91,16 +92,21 @@ two plans answered the query.
   it counts neither an asset without a vector of that model nor the asking
   asset. Demonstrated failing input: dropping the model makes an asset indexed
   only by the other model count as reachable.
-- [ ] 3.5 The report is about what the search found, not about which plan found
-  it. Verify: an integration test asserts `scan_limited` is false for every
-  answer a narrowed search gives over a store it can exhaust — a full page, a
-  short page, an empty page at an offset, and a page the threshold empties —
-  because in each the scan reached what the answer needed or the store held no
-  more. The case where it is true is held by the unit tests of task 3.2: on this
-  corpus the planner answers a selective narrowing exactly, so an integration
-  test that made the bound bite would have to defeat its statistics and would
-  then be testing the fixture (`design.md`, Risks). What the bound costs in
-  practice is the benchmark's question, not a test's.
+- [ ] 3.5 The whole positive path, against a real index and without touching the
+  planner's statistics: a narrowing broad enough that the database uses the
+  vector index (half the corpus, measured), a scan budget lowered so it cannot
+  reach what the page needs, and matching assets left over. Verify: an
+  integration test asserts the plan uses the model's vector index, that the
+  answer is a **full** page, and that `scan_limited` is true — the candidates,
+  the bounded question and the flag, wired together — paired with the same query
+  at the default budget, which must be false. Demonstrated failing inputs: never
+  asking the bounded question, and asking it with `needed` in place of
+  `reached`, each of which makes this test fail while every unit test still
+  passes.
+- [ ] 3.5a The negative cases, over a store the search can exhaust: a full page,
+  a short page, an empty page at an offset, and a page the threshold empties.
+  Verify: an integration test asserts `scan_limited` is false for each, because
+  in each the scan reached what the answer needed or the store held no more.
 - [ ] 3.6 The question is asked only when it is needed. Verify: an integration
   test counts the statements of an unnarrowed page, of a narrowed page that
   reached what it needed, and of a narrowed page that did not, and asserts only
@@ -148,15 +154,21 @@ two plans answered the query.
 
 ## 6. The numbers
 
-- [ ] 6.1 `scripts/filter_benchmark.py` builds a synthetic corpus of a given
-  size in the database `DATABASE_URL` names and measures, per selectivity,
-  **which plan answered**, how many rows came back against how many were asked
-  for, and how long it took — at `iterative_scan` off and `strict_order`, with
-  statistics fresh and without them (design decision 7). Verify: `uv run python
-  scripts/filter_benchmark.py --assets 3000 --seed 7` prints the table, and a
-  second run with the same arguments prints the same plans and rows. The script
-  empties the tables it uses and says so before it starts — on this machine that
-  database is also the one development uses.
+- [ ] 6.1 `scripts/filter_benchmark.py` builds its corpus **in a schema of its
+  own**, which it creates and drops: it never writes to, and never deletes from,
+  the tables the service uses, so the published command is safe to run against a
+  working store (design decision 7). It measures, per selectivity, which plan
+  answered, how many rows came back against how many were asked for, and how
+  long it took — at `iterative_scan` off and `strict_order`, with statistics
+  fresh and without them. Verify: `uv run python scripts/filter_benchmark.py
+  --assets 3000 --seed 7` prints the table, and a second run with the same
+  arguments prints the same plans and rows.
+- [ ] 6.1a The published command cannot empty a store. Verify: an integration
+  test seeds assets, embeddings and jobs, runs the benchmark's entry point with
+  its default arguments, and asserts every row is still there and the schema it
+  used is gone. Demonstrated failing input: pointing the script at the service's
+  own tables makes that test fail with the store emptied — which is exactly what
+  happened to this machine's demo corpus while this change was being measured.
 - [ ] 6.2 `docs/how-to/benchmarks.md` carries that output, the command that
   produced it, and what it means for a deployment: where the planner changes its
   mind, what each plan costs, what an iterative scan buys on the path that uses
