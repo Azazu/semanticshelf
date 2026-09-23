@@ -1,7 +1,7 @@
 # Handoff — add-dinov2-image-search
 
 **Updated:** 2026-09-23 · claude
-**State:** fixing-g1
+**State:** awaiting-gate-1
 **Branch:** change/add-dinov2-image-search
 **Security-sensitive:** yes — a picture arrives in a request body and is
 decoded (FR-IMG-1), a second model is downloaded and loaded on first use, and
@@ -11,7 +11,8 @@ file uploads and model downloads at `high`; the roadmap already declared it.
 ## Done this session
 
 Branch, scaffold and all four planning artifacts; Gate 1 round 1 requested and
-recorded: **changes-requested**, three `major` findings, all still `open`.
+recorded: **changes-requested**, three `major` findings — all three verified
+against the source, all three real, all three now `fixed`.
 
 One decision the user made before anything was written: **the backfill is an
 operator command** (`index missing`), not something the service does at start.
@@ -39,12 +40,21 @@ accepted, and each holds:
    "assets with no vector and no unfinished work" would queue a fresh job with a
    fresh attempt budget for work that already exhausted its retries.
 
+How each was resolved: (1) `pg_advisory_xact_lock` keyed on the model, plus the
+written-out argument that no other writer can race the selection — the
+partial-unique-index alternative is recorded as rejected, because `reset()`
+would then be unable to reindex an asset carrying two rows for a pair; (2) the
+exclusion moved into the statement above the index scan, before the OFFSET, and
+the two spent candidates cost one page of depth (998), stated and refused rather
+than met by searching shallower; (3) the selection asks for "no work pending,
+running or failed", and the command counts what it passed over and names
+`reindex`.
+
 ## Next step
 
-`/workflow:fix-findings add-dinov2-image-search` — all three are design-level:
-they change decisions 5 and 6, the `image-search` bounds requirement, the
-`indexing-jobs` delta and tasks 3.2, 5.1 and 5.2. Then Gate 1 confirmation of
-round 1.
+Gate 1 confirmation of round 1: `/gate-review add-dinov2-image-search 1 confirm 1`.
+All three findings are `fixed`; what the confirmation sees is the diff since
+`3001527`.
 
 ## Blockers
 
