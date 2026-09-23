@@ -1,10 +1,10 @@
 # Look at the service instead of curling it
 
-The demo interface is four pages over the same HTTP API everything else uses:
-search, browse, upload, and the service's own state. It holds no database
-session, reads no file and loads no model: there is nothing in it that could,
-and a test proves the part a test can — that it never imports the service's own
-code, not even inside a function.
+The demo interface is five pages over the same HTTP API everything else uses:
+search by words, search by picture, browse, upload, and the service's own
+state. It holds no database session, reads no file and loads no model: there
+is nothing in it that could, and a test proves the part a test can — that it
+never imports the service's own code, not even inside a function.
 
 Every command here was run in the form shown on 2026-09-23. Where a run printed
 this machine's addresses, only the local one is kept.
@@ -47,6 +47,20 @@ page while the ranking still holds matches further down, which is why **More**
 stays on the screen and the page says that the filter is what emptied it. On
 **Browse** the filter is the store's own (`tags_all`), and has no such gap.
 
+**Find similar** — the other half of the demo. Upload a picture and the service
+ranks what it has by how much it *looks like* that one; the picture is decoded
+under the upload's rules and never stored. The same page answers for a picture
+the store already holds, reached by **Find similar** under any thumbnail on
+Search or Browse — that costs no inference at all, because the vector is already
+there. It ranks with `dinov2-large`, which describes appearance rather than
+subject, so a score here and a score on the Search page are not comparable: they
+come from different models, and the page says so.
+
+An asset whose DINOv2 vector has not been computed yet is refused with the
+service's own 409 rather than shown as having no neighbours — a corpus imported
+before the model was enabled is the usual reason, and `semanticshelf index
+missing` is what fills those in.
+
 **Browse** — everything stored, newest first, narrowed by a tag from the tag
 census. Opening a picture shows what the service knows about it: its metadata,
 its indexing state per model and the full-size image. Deleting asks first, and
@@ -87,8 +101,11 @@ wrote docs/images/status.png
 ```
 
 It starts the API and the interface on ports it picks, drives a headless
-Chromium through the three pages and stops both servers afterwards — whatever
-happened. The first run downloads that browser:
+Chromium through those three pages and stops both servers afterwards — whatever
+happened. Find similar and Upload are not among them: both begin with a file
+chooser, and a screenshot of an empty one says nothing.
+
+The first run downloads that browser:
 
 ```console
 $ uv run --group screenshots playwright install chromium
@@ -102,7 +119,7 @@ truncate the tables), so run `make demo` again before capturing.
 
 ```console
 $ make test-ui
-35 passed, 618 deselected
+45 passed, 719 deselected in 3.27s
 ```
 
 They render the real pages against a service that answers from memory, so they

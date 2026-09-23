@@ -5,7 +5,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 1. The second model
 
-- [ ] 1.1 `app/ml/dinov2.py`: the adapter behind the `Embedder` protocol —
+- [x] 1.1 `app/ml/dinov2.py`: the adapter behind the `Embedder` protocol —
   `facebook/dinov2-large` from `DINOV2_MODEL_NAME`, the CLS token after the
   final layer norm, batches of `EMBED_BATCH_SIZE`, `TextNotSupportedError` from
   `embed_text`. Read the installed `transformers` for which attribute carries
