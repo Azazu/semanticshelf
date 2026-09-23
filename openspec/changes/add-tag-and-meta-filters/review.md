@@ -70,3 +70,30 @@ source-round findings were dispositioned. Checked the revised formulas against
 the prior counterexamples and the planned regressions. The Gate 1 mechanical
 floor passed, including strict OpenSpec validation. This confirms the design
 and verification plan; no implementation or database experiments were run.
+
+## Round 2 · Gate 1
+**Reviewer:** codex
+**Date:** 2026-09-23
+**Reviewed-Commit:** 0094306c58f7aa0f5a7f210526f1cd5855f265b4
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | specs/text-search/spec.md, requirement "Search is answered from the index, at the depth it is asked for"; design.md Context and decisions 1–2; tasks.md 2.1 | The revised architecture explicitly permits PostgreSQL to answer selective narrowings exactly without the vector index, and its measured table says this happens at selectivities from 1 in 5 to 1 in 100. The delta specification still requires every narrowed search to use that index, with a scenario requiring its scan in the execution plan; task 2.1 retains the same unconditional acceptance criterion. The newly accepted normal execution path therefore violates the proposed normative contract. Revise the delta requirement and verification tasks to permit both plans, distinguishing result correctness from a targeted regression proving the HNSW path remains available and correctly filtered. Preserve the separate unnarrowed-search requirement if intended, and reconcile sibling claims with the revised contract. | open |
+| 2 | major | tasks.md 3.2, 3.5–3.7; design.md Risks / Trade-offs, scan-bound report | Task 3.5 explicitly removes every database-backed positive scan-limit case and delegates that outcome to unit tests of the arithmetic function. Those tests supply `reached`, `needed` and `matching` themselves; they cannot establish that the service obtains the right counts from a limited scan and its real probe or propagates a true result. The retained integration cases all expect false, while the API field test does not require a real limited scan. Consequently, miswiring the positive service path can pass the planned evidence despite defeating this change's principal guarantee. Add a deterministic positive service/repository regression exercising candidate retrieval, the bounded probe and `scan_limited=true` together, alongside the negative cases. A controlled HNSW-plan fixture with an asserted plan and reduced scan budget is valid coverage of the stale-statistics/index path the design explicitly supports; alternatively define an equally effective controlled boundary test. Demonstrate that disabling the positive-path wiring makes it fail, rather than testing only the Boolean formula. | open |
+| 3 | major | tasks.md 6.1; design.md decision 7, Applicability and Migration Plan | The runnable benchmark is planned to empty the tables named by ordinary `DATABASE_URL`, explicitly including the development database, and merely print that fact before proceeding. The applicability table nevertheless says every touched path is a read and that nothing deletes, and the plan supplies neither isolation nor an explicit destructive opt-in or a preservation test. Running the published reproduction command can therefore erase an existing corpus and its associated database state. Specify an isolated disposable benchmark database/schema, or an explicit destructive opt-in with a verified target boundary; make the default invocation preserve existing data or refuse before mutation. Cover the benchmark's deletion/crash effects in applicability and add a failing-input test proving an ordinary populated target cannot be emptied by the documented default command. | open |
+
+### Validation
+
+Confirmed branch `change/add-tag-and-meta-filters` and HEAD
+`0094306c58f7aa0f5a7f210526f1cd5855f265b4`; the working tree was clean before
+review. Read AGENTS.md, openspec/config.yaml, the change proposal, design,
+tasks, delta specifications, handoff and previous review records. Examined the
+revised artifacts since the prior confirmation and the current repository,
+service and test boundaries relevant to the revised verification plan.
+`scripts/pregate-verify.sh gate1 add-tag-and-meta-filters` passed, including
+strict OpenSpec validation. This is a review of the renewed Gate 1 contract and
+verification plan, not Gate 2 approval of the partial implementation. No
+benchmark, database mutation or implementation test suite was run. Only this
+review file was modified; no git write commands were run.
