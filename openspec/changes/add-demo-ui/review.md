@@ -25,3 +25,24 @@
 - Ran `.venv/bin/python -B -m pytest tests/ui -m ui -p no:cacheprovider -q`: **31 passed**. These tests do not assert the failing state transitions above.
 - Ran in-memory AppTest reproductions using the existing MockTransport stub for findings 2–7; no test files were added or modified.
 - Full gate-floor, integration and browser screenshot runs were not repeated during this review. Finding 8 is based on source inspection.
+
+## Round 1 · Gate 1
+**Reviewer:** codex
+**Date:** 2026-09-23
+**Reviewed-Commit:** 3f8b6dd96aee85e700dc786e969e348237414b20
+**Verdict:** approved
+
+### Findings
+
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | minor | openspec/changes/add-demo-ui/design.md: Decisions 3; openspec/changes/add-demo-ui/specs/demo-ui/spec.md: Search shows what was found and how well | Document the search tag filter as a client-side filter of fetched ranking pages. The current API accepts no tag parameter, and ui/client.py filters returned items locally; consequently a page can be empty while later pages contain matches, and has_more describes the unfiltered ranking. Task 3.6 already covers that case, but the design's claim that the grid never fetches more than it shows and the spec's wording about not fetching and hiding results obscure this deliberate limitation. Reconcile the design/spec/how-to wording while retaining the existing offset and empty-page verification. | open |
+| 2 | minor | openspec/changes/add-demo-ui/design.md: Goals and Decision 6 | Narrow the claimed reach guarantee to what the proposed mechanism establishes. Walking UI import statements for app imports guards the direct service-code dependency; it does not prove that the UI cannot access a database, filesystem or model through another library or a dynamic import. Keep the HTTP-only architectural requirement, but identify source review as the verification for those other restrictions and state the static test's limits rather than describing it as a capability boundary. | open |
+
+### Verification
+
+- Confirmed branch `change/add-demo-ui`, the requested HEAD and an initially clean working tree.
+- Read AGENTS.md, openspec/config.yaml, all change artifacts, the roadmap and relevant normative requirements; checked the existing search API and the UI client/import guard to assess the proposed mechanisms.
+- The high tier is appropriate; the applicability table and implementation/verification task coverage support the four-page scope, with image search explicitly deferred to change 11. No blocker or major design finding identified.
+- Ran `scripts/pregate-verify.sh gate1 add-demo-ui`: passed, including strict OpenSpec validation, with zero warnings.
+- This is the retrospective Gate 1 artifact review required by the tier correction. It does not confirm the earlier Gate 2 findings or replace the required Gate 2 confirmation; application tests and browser runs were not repeated here.
