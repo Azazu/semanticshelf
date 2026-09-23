@@ -86,6 +86,9 @@ of which model is better (change 14), and any change to how vectors are stored.
    gives page 1 `[A, B]` and page 2 `[B, C]` — a repeated neighbour with no tie
    anywhere in sight. Filtering above the window instead of inside it leaves the
    index scan the plan of ADR-001 requires, which the existing plan test reads.
+   What the window can promise about a page whose edge cuts a group of identical
+   scores is neither improved nor weakened by the exclusion: change 8's answer
+   holds unchanged, and the spec inherits it rather than restating it.
 
    Two of the candidates the index produces are therefore spent on something
    other than the page: the asset itself, and the row beyond the page that is

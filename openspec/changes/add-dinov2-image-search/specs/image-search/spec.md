@@ -48,9 +48,13 @@ vector already stored rather than computing one again, and SHALL NOT include
 the asset itself in the answer — at any page of it.
 
 The pages of that answer SHALL be pages of the ranking the asset has already
-been taken out of: removing it SHALL NOT make a neighbour appear on two
-consecutive pages, SHALL NOT drop one between them, and SHALL NOT leave a full
-page short of what it asked for.
+been taken out of: removing it SHALL NOT, by itself, make a neighbour appear on
+two consecutive pages, drop one between them, or leave a full page short of what
+it asked for. What an approximate index promises about pages is otherwise
+unchanged and inherited whole (`text-search`: for a store that has not changed
+and a page across which no group of identical scores falls, two requests return
+the same items; where such a group is cut by a page's edge, nothing is promised
+about which of its members that page holds).
 
 An asset that has no vector for the search model SHALL be refused with 409
 problem details naming that, rather than answered with an empty page: nothing
@@ -68,9 +72,16 @@ it.
 - **THEN** it does not appear among them
 
 #### Scenario: One page after another
-- **WHEN** the neighbours of an asset are read page after page
+- **WHEN** the neighbours of an asset are read page after page over a store that
+  has not changed, and no group of identical scores falls across any of those
+  pages' edges
 - **THEN** each neighbour appears on exactly one of those pages, in ranking
   order, and every page but the last carries as many as it asked for
+
+#### Scenario: A page of neighbours whose edge cuts a group of identical scores
+- **WHEN** such a group is cut by the edge of a page of an asset's neighbours
+- **THEN** the promise is the one the search surface already makes about that
+  case, no weaker and no stronger, and the asset itself is still absent
 
 #### Scenario: An asset that has no vector yet
 - **WHEN** the neighbours of an asset whose work for the search model has not

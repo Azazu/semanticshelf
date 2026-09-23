@@ -77,7 +77,18 @@ check is removed, and that failure is demonstrated before the task is ticked.
   `/similar`. Demonstrated failing input: leaving the excluding bound at 999
   makes the effort test fail, because 1001 candidates would be needed and the
   index grants 1000.
-- [ ] 3.4 `GET /api/v1/assets/{id}/similar`: 409 problem details when the asset
+- [ ] 3.4 The deepest page `/similar` accepts is answered from the whole of it,
+  and not one candidate short — arithmetic about the effort is not evidence that
+  the statement asks for it. Verify: an integration test asks for
+  `limit + offset = 998` against a corpus built with the fake embedder and
+  asserts the items of that page and `has_more` twice — once over a corpus that
+  holds a further neighbour, where it must be true, and once over a corpus whose
+  last neighbour is the page's last item, where it must be false — and asserts
+  that `limit + offset = 999` is refused. Demonstrated failing input: taking one
+  candidate fewer into the window (the row the exclusion pays for) makes the
+  first case report that nothing follows while a neighbour does, which is the
+  way a granted effort of 1000 and a fetch of 999 would look from outside.
+- [ ] 3.5 `GET /api/v1/assets/{id}/similar`: 409 problem details when the asset
   has no vector for the search model, 404 when no asset carries that
   identifier, and the ordinary envelope otherwise. Verify: api and integration
   tests for all three, including an asset whose work exists but has not finished.
