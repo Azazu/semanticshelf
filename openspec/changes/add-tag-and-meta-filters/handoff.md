@@ -1,7 +1,7 @@
 # Handoff — add-tag-and-meta-filters
 
 **Updated:** 2026-09-23 · claude
-**State:** proposing
+**State:** awaiting-gate-1
 **Branch:** change/add-tag-and-meta-filters
 **Security-sensitive:** yes — this change handles client input: a shared
 parser for tag and metadata narrowings on four public surfaces, including the
