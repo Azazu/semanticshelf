@@ -23,6 +23,8 @@ storage_app = typer.Typer(help="The media root.", no_args_is_help=True)
 app.add_typer(storage_app, name="storage")
 demo_app = typer.Typer(help="The demo corpus.", no_args_is_help=True)
 app.add_typer(demo_app, name="demo-dataset")
+index_app = typer.Typer(help="Work for assets that are already stored.", no_args_is_help=True)
+app.add_typer(index_app, name="index")
 
 
 @models_app.command("warm")
@@ -162,6 +164,85 @@ async def _run_import(
                     on_progress=advance,
                 )
         return folder.describe(report)
+    finally:
+        pool.shutdown(wait=True)
+        await engine.dispose()
+
+
+@index_app.command("missing")
+def index_missing(
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="Only this model. The default is every enabled model."),
+    ] = None,
+    no_index: Annotated[
+        bool, typer.Option("--no-index", help="Leave the work queued instead of carrying it out.")
+    ] = False,
+) -> None:
+    """Queue the work stored assets have none of, and then carry it out.
+
+    What a model that arrived after the pictures needs. An asset is queued when
+    it has no vector for that model and no work for it waiting, running or
+    failed — so asking twice costs nothing, and work that already gave up is
+    passed over and reported rather than quietly retried: `reindex` is what runs
+    that again.
+    """
+    # Values come from the environment; mypy cannot see that the required field is read there.
+    settings = Settings()  # type: ignore[call-arg]
+    chosen = (model,) if model is not None else settings.enabled_models
+    if model is not None and model not in settings.enabled_models:
+        typer.echo(
+            f"model {model!r} is not enabled in this build; "
+            f"enabled: {', '.join(settings.enabled_models) or 'none'}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    for line in asyncio.run(_run_backfill(settings, models=chosen, index=not no_index)):
+        typer.echo(line)
+
+
+async def _run_backfill(settings: Settings, *, models: Sequence[str], index: bool) -> list[str]:
+    from app.db.engine import create_engine, create_session_factory
+    from app.ml.pool import create_pool
+    from app.services import indexing
+    from app.storage import MediaStorage
+
+    engine = create_engine(settings)
+    pool = create_pool(settings)
+    reports = []
+    try:
+        factory = create_session_factory(engine)
+        storage = MediaStorage.at(settings.media_root)
+        for model in models:
+            queued = await indexing.queue_missing(
+                session_factory=factory, settings=settings, model=model
+            )
+            report = indexing.BackfillReport(
+                model=model, queued=queued.queued, skipped_failed=queued.skipped_failed
+            )
+            if index:
+                progress: Any
+                with typer.progressbar(
+                    label=f"index {model}", length=len(queued.queued)
+                ) as progress:
+                    done = 0
+
+                    def advance(finished: int, progress: Any = progress) -> None:
+                        nonlocal done
+                        progress.update(max(0, finished - done))
+                        done = finished
+
+                    report.work = await indexing.finish_work(
+                        queued.queued,
+                        session_factory=factory,
+                        storage=storage,
+                        settings=settings,
+                        pool=pool,
+                        on_progress=advance,
+                    )
+            reports.append(report)
+        return indexing.describe_backfill(reports)
     finally:
         pool.shutdown(wait=True)
         await engine.dispose()

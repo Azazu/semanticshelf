@@ -115,7 +115,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 5. Work for what is already stored
 
-- [ ] 5.1 `IndexingJobRepository` can queue the missing work for a model in one
+- [x] 5.1 `IndexingJobRepository` can queue the missing work for a model in one
   statement, under `pg_advisory_xact_lock` keyed on the model: assets that have,
   for it, neither a vector nor work that is pending, running **or failed**
   (design decision 6). It answers with what it queued and how many assets it
@@ -126,24 +126,24 @@ check is removed, and that failure is demonstrated before the task is ticked.
   simply not unfinished queues a fresh job with a fresh attempt budget for it,
   which contradicts FR-IDX-5 and fails the test that asserts the failed asset is
   passed over and counted.
-- [ ] 5.2 Two backfills of the same model cannot queue the same work twice.
+- [x] 5.2 Two backfills of the same model cannot queue the same work twice.
   Verify: an integration test runs the statement in two overlapping
   transactions on real PostgreSQL and asserts that each asset ends with exactly
   one new unit of work, and that the second transaction reports nothing queued.
   Demonstrated failing input: removing the advisory lock makes that test find
   two jobs per asset — the queue has no unique constraint on the pair to catch
   it, which is what Gate 1 round 1 found.
-- [ ] 5.3 `semanticshelf index missing [--model KEY] [--no-index]` queues that
+- [x] 5.3 `semanticshelf index missing [--model KEY] [--no-index]` queues that
   work and then carries it out, reporting what it did — the shape
   `index-folder` reports, plus the assets passed over for failed work and the
   command that runs them again (`POST /assets/{id}/reindex`). Verify: a CLI test
   with the fake embedder asserts the summary, including the skipped count and
   the hint, and that `--no-index` leaves the work queued.
-- [ ] 5.4 Nothing queues work by itself: not at start, not in the lifespan, not
+- [x] 5.4 Nothing queues work by itself: not at start, not in the lifespan, not
   in a background task. Verify: a test asserts that building the application and
   running its lifespan against a store with missing vectors creates no work.
   Demonstrated failing input: queueing in the lifespan makes it fail.
-- [ ] 5.5 `make demo` ends with `index missing`, so the demo corpus is
+- [x] 5.5 `make demo` ends with `index missing`, so the demo corpus is
   searchable by both kinds of query. Verify: `make -n demo` shows the three
   commands in order.
 

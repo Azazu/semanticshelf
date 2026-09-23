@@ -601,7 +601,7 @@ async def test_work_that_will_be_attempted_again_is_reported_as_queued(
     )
     assert work.indexed == 0
     assert work.failed == []
-    assert work.queued == [(report.created_assets[0], folder.QUEUED_WAITING)]
+    assert work.queued == [(report.created_assets[0], indexing.QUEUED_WAITING)]
     async with engine.connect() as connection:
         row = (
             await connection.execute(
@@ -676,7 +676,7 @@ async def test_the_three_states_of_the_work_are_reported_apart(
 
     assert work.indexed == 1
     assert work.failed == [(doomed, "RuntimeError")]
-    assert work.queued == [(held, folder.QUEUED_HELD)]
+    assert work.queued == [(held, indexing.QUEUED_HELD)]
     assert good not in [asset for asset, _ in work.queued + work.failed]
 
 

@@ -24,8 +24,21 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain import EMBEDDING_MODELS, IndexingJob
+from app.models import Asset as AssetRow
+from app.models import Embedding as EmbeddingRow
 from app.models import IndexingJob as IndexingJobRow
 from app.repositories.embeddings import UnknownModelError
+
+#: The namespace of every advisory lock this application takes, so a key of
+#: ours can never collide with one an extension or another application uses.
+#: Arbitrary and permanent; the second half of the key says what is locked.
+ADVISORY_LOCK_NAMESPACE = 0x5342  # "SS"
+
+#: A unit of work is not "unfinished" once it has failed for good, and it is
+#: not eligible to be created again either: FR-IDX-5 makes an explicit reset
+#: the only thing that runs failed work a second time.
+OPEN_STATUSES = ("pending", "running")
+BLOCKING_STATUSES = ("pending", "running", "failed")
 
 
 def to_domain(row: IndexingJobRow) -> IndexingJob:
@@ -42,6 +55,20 @@ def to_domain(row: IndexingJobRow) -> IndexingJob:
         started_at=row.started_at,
         finished_at=row.finished_at,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class MissingWork:
+    """What a backfill did: the assets it queued, and the ones it passed over.
+
+    Passed over because their work for that model has failed for good. They are
+    named rather than counted away: an operator who asked for the missing work
+    and got less than they expected needs to know that `reindex` is what runs
+    those again.
+    """
+
+    queued: list[UUID]
+    skipped_failed: list[UUID]
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +104,79 @@ class IndexingJobRepository:
         """Queue every enabled model for one asset, in registry order."""
         keys = list(models) if models is not None else list(EMBEDDING_MODELS)
         return [await self.add(asset_id=asset_id, model=key) for key in keys]
+
+    async def queue_missing(self, *, model: str) -> MissingWork:
+        """Queue one model's work for every stored asset that has none.
+
+        Every asset with no vector for the model and no work for it that is
+        waiting, running or failed. One statement, so it either queued the work
+        or it did not, and a query of the same shape first for what it will
+        pass over.
+
+        **Two backfills of one model cannot double-queue**, because they cannot
+        run at the same time: the transaction takes
+        `pg_advisory_xact_lock(<namespace>, hashtext(model))` before it selects
+        anything and holds it until it commits, so the second reads the rows the
+        first wrote and finds nothing left to do. The lock is keyed on the model,
+        so a backfill of another one is not blocked. It cannot be replaced by
+        `ON CONFLICT DO NOTHING`: `indexing_jobs` has no unique constraint on the
+        pair — change 5 left open whether a pair keeps one row or a history of
+        them — so there is no conflict for it to name.
+
+        No other writer can race it. An upload creates an asset and its work in
+        one transaction, so no asset is ever visible without its work; a reset
+        only moves a row this selection already skips; and a deletion takes the
+        asset's work with it.
+
+        It must therefore run inside one transaction — the caller's — or the
+        lock would be released the moment it was taken.
+        """
+        if model not in EMBEDDING_MODELS:
+            raise UnknownModelError(f"unknown embedding model: {model!r}")
+        await self._session.execute(
+            sa.select(
+                sa.func.pg_advisory_xact_lock(
+                    ADVISORY_LOCK_NAMESPACE, sa.func.hashtext(sa.literal(model, sa.Text))
+                )
+            )
+        )
+
+        def work_in(statuses: Sequence[str]) -> sa.ColumnElement[bool]:
+            return (
+                sa.select(sa.literal(1))
+                .where(
+                    IndexingJobRow.asset_id == AssetRow.id,
+                    IndexingJobRow.model == model,
+                    IndexingJobRow.status.in_(tuple(statuses)),
+                )
+                .exists()
+            )
+
+        has_vector = (
+            sa.select(sa.literal(1))
+            .where(EmbeddingRow.asset_id == AssetRow.id, EmbeddingRow.model == model)
+            .exists()
+        )
+        skipped = (
+            await self._session.execute(
+                sa.select(AssetRow.id)
+                .where(~has_vector, ~work_in(OPEN_STATUSES), work_in(("failed",)))
+                .order_by(AssetRow.created_at, AssetRow.id)
+            )
+        ).scalars()
+        queued = (
+            await self._session.execute(
+                sa.insert(IndexingJobRow)
+                .from_select(
+                    ["asset_id", "model"],
+                    sa.select(AssetRow.id, sa.literal(model, sa.Text)).where(
+                        ~has_vector, ~work_in(BLOCKING_STATUSES)
+                    ),
+                )
+                .returning(IndexingJobRow.asset_id)
+            )
+        ).scalars()
+        return MissingWork(queued=list(queued), skipped_failed=list(skipped))
 
     async def fail_for_asset(self, asset_id: UUID, reason: str) -> int:
         """Finish every unfinished job of one asset as failed, with a reason.
