@@ -1,7 +1,7 @@
 # Handoff — add-tag-and-meta-filters
 
 **Updated:** 2026-09-23 · claude
-**State:** implementing
+**State:** blocked
 **Branch:** change/add-tag-and-meta-filters
 **Security-sensitive:** yes — this change handles client input: a shared
 parser for tag and metadata narrowings on four public surfaces, including the
@@ -37,20 +37,46 @@ then `DEMO_COUNT=20 make demo`): 20 assets, 40 vectors, both models `done`.
 
 ## Next step
 
-`/opsx:apply add-tag-and-meta-filters` — Gate 1 passed (Confirmation 2 of round
-1, all four findings confirmed or fixed). The order of `tasks.md` is the order
-to take: what a narrowing *is* before anything applies one.
+**A design question the user has to settle before the rest of the apply.**
+Measured on the integration database, 3 000 assets, a page of 21 candidates,
+`ef_search` 40, statistics fresh (`ANALYZE`):
 
-Three things the implementation must not soften, because each is a finding that
-was paid for twice:
+| narrowing | matches | `iterative_scan = off` | `strict_order` | plan |
+|---|---|---|---|---|
+| 1 in 2 | 1 500 | 21 rows | 21 rows | the vector index |
+| 1 in 5 | 600 | 21 rows | 21 rows | driven from `assets`, exact |
+| 1 in 10 | 300 | 21 rows | 21 rows | driven from `assets`, exact |
+| 1 in 20 | 150 | 21 rows | 21 rows | driven from `assets`, exact |
+| 1 in 50 | 60 | 21 rows | 21 rows | driven from `assets`, exact |
+| 1 in 100 | 30 | 21 rows | 21 rows | driven from `assets`, exact |
 
-- the scan's report is decided by `reached` against `needed`, never by the shape
-  of the answer;
-- `reached` is counted after the exclusion and **before** the offset and the
-  threshold — an empty page is not evidence of anything;
-- the window asks for one row more than the answer needs when an asset excludes
-  itself, and that row is the window's, not the page's.
+Every one of them answers a full page, with or without the iterative scan,
+because PostgreSQL leaves the vector index as soon as the narrowing is at all
+selective and computes the distances exactly over the narrowed rows.
+
+The empty page recorded in `design.md` — `0 of 20` at `iterative_scan = off` —
+is real but conditional: that probe never ran `ANALYZE`, so the planner believed
+the narrowing was broad and stayed on the index, where post-filtering emptied
+the page. With statistics, on this corpus, it does not happen.
+
+What still stands: when the planner *does* choose the vector index — a broad
+narrowing, or a corpus large enough that the exact plan is too expensive — the
+iterative scan is what keeps the page full, and `scan_limited` is what keeps a
+budget-stopped answer from reading as the end of a ranking. The code for both is
+written, and the unit tests hold their arithmetic exactly.
+
+What this costs: the three integration tests for the scan's own bound were
+removed, because on this corpus they can only fire by defeating the planner's
+statistics. `tests/unit/test_search_cut.py` still holds every rule they checked.
+
+The question: is that acceptable, or should the change carry its evidence
+differently — a corpus big enough for the planner to keep the index (which makes
+the integration suite much slower), or an explicit statement in the spec that
+the bound's report is best-effort on the path the planner chooses?
 
 ## Blockers
 
-None.
+The above. No code is blocked by it — groups 4 to 7 (the four surfaces, the
+interface, the benchmark, the documentation) do not depend on the answer — but
+the benchmark in group 6 is now the more interesting half of this change, and
+its shape depends on what is decided here.
