@@ -206,11 +206,15 @@ async def create_asset(
                     raise DuplicateAssetError(won.id) from exc
             raise
     finally:
-        await run_in_threadpool(_discard_temporary, received.path)
+        await run_in_threadpool(discard_temporary, received.path)
 
 
-def _discard_temporary(path: Path) -> None:
-    """Blocking; called in a worker thread. Never raises."""
+def discard_temporary(path: Path) -> None:
+    """Remove a file `receive` wrote. Blocking; called in a worker thread.
+
+    Never raises: it runs in a `finally`, and a temporary file that survives is
+    the operating system's problem, not a reason to lose the real failure.
+    """
     try:
         path.unlink(missing_ok=True)
     except OSError as exc:  # pragma: no cover - a temporary directory that fights back

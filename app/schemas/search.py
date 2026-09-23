@@ -10,7 +10,14 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.domain import DINOV2_LARGE
 from app.schemas.assets import AssetRead
+
+#: The page's bounds, so that paging feels the same everywhere. Here rather
+#: than in the router, because one of the two searches takes them as form
+#: fields and validates them with the model below.
+DEFAULT_LIMIT = 20
+MAX_LIMIT = 100
 
 
 class SearchHit(BaseModel):
@@ -74,3 +81,22 @@ SEARCH_PAGE_EXAMPLE: dict[str, Any] = {
     "model": "clip-vit-l14",
     "query_truncated": False,
 }
+
+
+class ImageSearchQuery(BaseModel):
+    """The page fields of a search whose query is an uploaded picture.
+
+    They arrive as form fields beside the file, which is why they are validated
+    by a model rather than by query parameters: a form field is a string, and
+    the bounds have to hold all the same. The refusal a client sees is the
+    framework's usual 422 problem details, with the field that was wrong.
+    """
+
+    limit: int = Field(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT)
+    offset: int = Field(default=0, ge=0)
+    min_score: float | None = Field(default=None, ge=-1.0, le=1.0)
+    model: str = Field(
+        default=DINOV2_LARGE,
+        description="Which model answers. It must be one this build runs, and one that takes "
+        "pictures.",
+    )

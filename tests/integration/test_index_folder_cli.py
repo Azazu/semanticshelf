@@ -39,12 +39,19 @@ async def empty_store(engine: AsyncEngine) -> None:
 @pytest.fixture(autouse=True)
 def environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, db_settings: Settings) -> None:
     """The command builds its own settings, so the test speaks to it the way an
-    operator does: through the environment."""
+    operator does: through the environment.
+
+    Every setting the assertions depend on is written here, including which
+    models are enabled: inherited, it would be whatever the machine's
+    environment file says, and how many units of work a folder creates would
+    differ between a laptop and CI.
+    """
     media_root = tmp_path / "media"
     media_root.mkdir()
     monkeypatch.setenv("DATABASE_URL", db_settings.database_url)
     monkeypatch.setenv("MEDIA_ROOT", str(media_root))
     monkeypatch.setenv("LOG_LEVEL", "warning")
+    monkeypatch.setenv("ENABLED_MODELS", ",".join(db_settings.enabled_models))
 
 
 @pytest.fixture

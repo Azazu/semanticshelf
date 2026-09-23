@@ -99,6 +99,7 @@ class EmbeddingRepository:
         limit: int,
         offset: int = 0,
         max_distance: float | None = None,
+        exclude_asset_id: UUID | None = None,
     ) -> sa.Select[Any]:
         """The statement `nearest()` runs. Exposed so a test can read its plan.
 
@@ -131,6 +132,15 @@ class EmbeddingRepository:
         distance inside the window would instead make this a filtered vector
         search: a different problem, with a different plan and a measurement of
         its own (change 12).
+
+        **An excluded asset** — the one whose neighbours are being asked for —
+        is dropped in the page select, above the window, and the window takes
+        one row more to pay for it. Above, because the OFFSET is applied here:
+        an asset removed after the page was cut would shift every later page by
+        the row it removed, and a ranking of `[self, A, B, C, D]` read two at a
+        time would give `[A, B]` and then `[B, C]`. Above rather than inside the
+        window, because a predicate inside it is a filtered index scan, which is
+        change 12's question and not this one's.
         """
         dimension = checked_dimension(model, vector)
         distance = sa.cast(EmbeddingRow.vector, Vector(dimension)).cosine_distance(list(vector))
@@ -138,12 +148,14 @@ class EmbeddingRepository:
             sa.select(EmbeddingRow.asset_id, distance.label("distance"))
             .where(EmbeddingRow.model == model)
             .order_by(distance)
-            .limit(limit + offset)
+            .limit(limit + offset + (1 if exclude_asset_id is not None else 0))
             .subquery("window")
         )
+        rows = sa.select(window.c.asset_id, window.c.distance)
+        if exclude_asset_id is not None:
+            rows = rows.where(window.c.asset_id != exclude_asset_id)
         page = (
-            sa.select(window.c.asset_id, window.c.distance)
-            .order_by(window.c.distance, window.c.asset_id)
+            rows.order_by(window.c.distance, window.c.asset_id)
             .limit(limit)
             .offset(offset)
             .subquery("page")
@@ -163,6 +175,7 @@ class EmbeddingRepository:
         limit: int,
         offset: int = 0,
         max_distance: float | None = None,
+        exclude_asset_id: UUID | None = None,
     ) -> list[NeighbourHit]:
         """The closest assets under one model, nearest first."""
         rows = await self._session.execute(
@@ -172,6 +185,7 @@ class EmbeddingRepository:
                 limit=limit,
                 offset=offset,
                 max_distance=max_distance,
+                exclude_asset_id=exclude_asset_id,
             )
         )
         return [NeighbourHit(asset_id=row.asset_id, distance=float(row.distance)) for row in rows]

@@ -18,6 +18,7 @@ from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.core.settings import Settings
+from app.domain import CLIP_VIT_L14, DINOV2_LARGE
 from app.main import create_app
 from app.repositories.assets import AssetRepository
 from app.services import assets as assets_service
@@ -291,25 +292,46 @@ async def test_a_failed_write_of_the_original_leaves_nothing_behind(
     assert (await client.get(ASSETS)).json()["items"] == []
 
 
-async def test_an_upload_queues_one_job_per_enabled_model(
-    client: httpx.AsyncClient, engine: AsyncEngine
-) -> None:
-    response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
-    assert response.status_code == 201
-    created = response.json()
-
+async def queued_models(engine: AsyncEngine, asset_id: str) -> list[str]:
     async with engine.connect() as connection:
         rows = (
             await connection.execute(
-                sa.text("SELECT model, status, attempts FROM indexing_jobs WHERE asset_id = :id"),
-                {"id": created["id"]},
+                sa.text("SELECT model FROM indexing_jobs WHERE asset_id = :id ORDER BY model"),
+                {"id": asset_id},
             )
         ).all()
+    return [model for (model,) in rows]
 
-    # One row per enabled model is what the upload owes. What state the row is
-    # in a moment later belongs to the runner that drains the queue
+
+async def test_an_upload_queues_one_job_per_enabled_model(
+    client: httpx.AsyncClient, engine: AsyncEngine, db_settings: Settings
+) -> None:
+    response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+    assert response.status_code == 201
+
+    # One row per enabled model is what the upload owes — derived from the
+    # settings rather than written out, because that is the rule. What state
+    # the row is in a moment later belongs to the runner that drains the queue
     # (`test_indexing_runner.py`), which in this process has already run.
-    assert [model for model, _, _ in rows] == ["clip-vit-l14"]
+    assert await queued_models(engine, response.json()["id"]) == sorted(db_settings.enabled_models)
+
+
+async def test_an_upload_under_two_models_queues_work_for_both(
+    db_settings: Settings, media_root: Path, engine: AsyncEngine
+) -> None:
+    """The scenario the capability names: an asset stored while two models are
+    enabled has exactly two units of work, each naming one model."""
+    both = (CLIP_VIT_L14, DINOV2_LARGE)
+    app = create_app(
+        db_settings.model_copy(update={"media_root": media_root, "enabled_models": both})
+    )
+
+    async for client in make_client(app):
+        response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+
+    assert response.status_code == 201
+    assert await queued_models(engine, response.json()["id"]) == sorted(both)
+    assert response.json()["index_status"].keys() == set(both), "and the answer says so"
 
 
 async def test_a_failed_store_leaves_neither_the_asset_nor_its_work(

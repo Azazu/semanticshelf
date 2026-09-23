@@ -28,20 +28,23 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 2. Asking with a picture
 
-- [ ] 2.1 `app/services/search.py` gains `search_image`: the query vector comes
+- [x] 2.1 `app/services/search.py` gains `search_image`: the query vector comes
   from a picture, everything after it is the path `search_text` already takes —
   the same effort, the same page, the same threshold, the same envelope.
   Verify: integration tests with the planar fake embedder assert the ordering,
   the threshold and `has_more` for a picture query, reusing the ranking fixture
   change 8 wrote.
-- [ ] 2.2 The picture is decoded under the upload rules and never stored: a
+- [x] 2.2 The picture is decoded under the upload rules and never stored: a
   temporary file outside the media root, `images.inspect`, and an unlink in a
   `finally` (design decision 3). Verify: an api test asserts the refusals an
   upload gives (undecodable, unsupported format, too large, too small) and an
   integration test asserts that after a search no asset exists and the media
-  root is unchanged. Demonstrated failing input: writing the temporary file
-  under the media root makes the "nothing is left" test fail.
-- [ ] 2.3 `POST /api/v1/search/image` in the API: multipart `file` plus the page
+  root is unchanged. Demonstrated failing input: dropping the unlink in the
+  `finally` leaves the query picture in the temporary directory, which that
+  test sees. (Writing it under the media root instead — the input this task
+  first named — cannot be reached: `receive` refuses that configuration before
+  it writes anything, which is the guard change 6 put there.)
+- [x] 2.3 `POST /api/v1/search/image` in the API: multipart `file` plus the page
   fields as form fields, the envelope of `/search/text`, and the body bound the
   upload path already enforces. Verify: api tests for the shape, for each
   refusal, and for the same page bounds as the text endpoint; the OpenAPI
@@ -50,11 +53,11 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 3. Asking with an asset
 
-- [ ] 3.1 `EmbeddingRepository` can read one asset's vector for a model, and
+- [x] 3.1 `EmbeddingRepository` can read one asset's vector for a model, and
   `search_similar` uses it as the query with no inference at all. Verify: an
   integration test asserts the neighbours of a known asset, and that no model
   was loaded to answer (the registry is asserted empty afterwards).
-- [ ] 3.2 The asset is never among its own neighbours, on any page, and the
+- [x] 3.2 The asset is never among its own neighbours, on any page, and the
   pages are pages of the ranking it has already been taken out of:
   `nearest_statement` takes the asset to exclude, the window (the index scan)
   stays unfiltered and takes one row more than the page reaches, and the select
@@ -66,7 +69,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
   model's partial index. Demonstrated failing input: dropping the asset in the
   service after the page was cut makes the second page repeat the last
   neighbour of the first — the defect Gate 1 round 1 named.
-- [ ] 3.3 A search that excludes an asset reaches one page-depth less, and says
+- [x] 3.3 A search that excludes an asset reaches one page-depth less, and says
   so rather than searching shallower than the page needs: `check_depth` and
   `effort_for` account for the excluded row, the bound is `MAX_SEARCH_EFFORT -
   2`, and a page beyond it is refused with the problem details a too-deep page
@@ -77,7 +80,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
   `/similar`. Demonstrated failing input: leaving the excluding bound at 999
   makes the effort test fail, because 1001 candidates would be needed and the
   index grants 1000.
-- [ ] 3.4 The deepest page `/similar` accepts is answered from the whole of it,
+- [x] 3.4 The deepest page `/similar` accepts is answered from the whole of it,
   and not one candidate short — arithmetic about the effort is not evidence that
   the statement asks for it. Verify: an integration test asks for
   `limit + offset = 998` against a corpus built with the fake embedder and
@@ -88,7 +91,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
   candidate fewer into the window (the row the exclusion pays for) makes the
   first case report that nothing follows while a neighbour does, which is the
   way a granted effort of 1000 and a fetch of 999 would look from outside.
-- [ ] 3.5 `GET /api/v1/assets/{id}/similar`: 409 problem details when the asset
+- [x] 3.5 `GET /api/v1/assets/{id}/similar`: 409 problem details when the asset
   has no vector for the search model, 404 when no asset carries that
   identifier, and the ordinary envelope otherwise. Verify: api and integration
   tests for all three, including an asset whose work exists but has not finished.
@@ -97,7 +100,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 4. Choosing the model
 
-- [ ] 4.1 All three searches take `model`, defaulting to the model that kind of
+- [x] 4.1 All three searches take `model`, defaulting to the model that kind of
   query is answered by today. A key this build does not run answers 503 naming
   it; a key that cannot take that kind of query answers 422 naming what it can
   take (design decision 2). Verify: api tests for every combination — text with
@@ -105,7 +108,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
   either with a key that does not exist (503) — asserting the problem type each
   time. Demonstrated failing input: removing the modality check lets a text
   query reach an image-only model and fail deeper, with a different problem.
-- [ ] 4.2 The answer always names the model that ranked it, and the query is
+- [x] 4.2 The answer always names the model that ranked it, and the query is
   embedded by that same model. Verify: an integration test with vectors of both
   models over the same assets asserts that a search of one never returns a
   result ranked by the other's vectors.

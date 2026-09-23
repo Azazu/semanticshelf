@@ -17,9 +17,8 @@ from sqlalchemy.sql.expression import ClauseElement, Executable
 
 from app.core.settings import Settings
 from app.db.engine import create_engine, create_session_factory
-from app.domain import CLIP_VIT_L14, dimension_of
-from app.ml import registry
-from app.ml.fake import FakeEmbedder
+from app.domain import CLIP_VIT_L14
+from tests.fake_models import fake_models
 
 TABLES = "assets, embeddings, indexing_jobs"
 
@@ -28,30 +27,37 @@ TABLES = "assets, embeddings, indexing_jobs"
 def fake_model() -> Iterator[None]:
     """No integration test loads real weights — not even by accident.
 
-    An upload now drains the queue in the background, so any test that posts a
-    picture would reach the model registry and pull down a checkpoint. The
-    factory is replaced rather than the registry's contents, so the lazy load
-    inside the application still runs its normal path; only what it builds is
-    fake. The real adapter has its own suite (`-m models`), which does not run
-    here.
+    An upload drains the queue in the background, so any test that posts a
+    picture reaches the model registry and would pull down a checkpoint. Every
+    implemented key is replaced, not only the one a test names: both are
+    enabled by default, so an upload queues work for both, and CI sets no
+    `ENABLED_MODELS` at all. The real adapters have their own suite
+    (`-m models`), which does not run here.
     """
-    registry.clear()
-    original = dict(registry.FACTORIES)
-    registry.FACTORIES[CLIP_VIT_L14] = lambda settings: FakeEmbedder(
-        CLIP_VIT_L14, dimension_of(CLIP_VIT_L14)
-    )
-    yield
-    registry.FACTORIES.clear()
-    registry.FACTORIES.update(original)
-    registry.clear()
+    with fake_models():
+        yield
 
 
 @pytest.fixture(scope="session")
 def db_settings() -> Settings:
+    """The environment's database, and one model.
+
+    One model on purpose, whatever the environment says: most of this suite is
+    about the queue, the store and the pages, and a second enabled model only
+    doubles every job row it counts. What two models actually change — two
+    units of work per upload, two rankings, an `index_status` with two keys —
+    is asserted where it belongs, by tests that ask for both
+    (`test_asset_upload.py`, `test_search_image.py`).
+
+    Pinning it here also makes the suite say what it runs rather than inherit
+    it: CI sets no `ENABLED_MODELS` at all, and the default is every model this
+    build implements.
+    """
     try:
-        return Settings(log_json=True, log_level="warning")
+        settings = Settings(log_json=True, log_level="warning")
     except ValidationError:
         pytest.skip("DATABASE_URL is not set: start the database and set it (see the how-to)")
+    return settings.model_copy(update={"enabled_models": (CLIP_VIT_L14,)})
 
 
 @pytest.fixture
