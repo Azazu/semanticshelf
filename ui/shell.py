@@ -45,6 +45,37 @@ def open_similar(asset_id: str) -> None:
     st.switch_page(SIMILAR_PAGE)
 
 
+def asset_of(item: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The asset inside a search hit, or the asset itself when it is one."""
+    return item["asset"] if "asset" in item else item
+
+
+def without_repeats(
+    shown: Sequence[Mapping[str, Any]], page: Sequence[Mapping[str, Any]]
+) -> list[Mapping[str, Any]]:
+    """What is on screen, plus a page of it, with each asset appearing once.
+
+    The service may legitimately hand back an asset that is already on screen:
+    a group of identical scores that straddles a page's edge is not promised to
+    be cut the same way twice, and the corpus can change between two requests.
+    Showing the same picture twice would be the smaller problem — the action
+    under each thumbnail needs a key of its own, and two cells claiming one key
+    is how Streamlit stops rendering altogether.
+
+    The offset is *not* adjusted for what is dropped: it is the service's place
+    in the ranking, not a count of what survived here.
+    """
+    seen = {asset_of(item)["id"] for item in shown}
+    kept = []
+    for item in page:
+        identifier = asset_of(item)["id"]
+        if identifier in seen:
+            continue
+        seen.add(identifier)
+        kept.append(item)
+    return [*shown, *kept]
+
+
 def thumbnails(
     items: Sequence[Mapping[str, Any]],
     *,
@@ -59,12 +90,19 @@ def thumbnails(
     Every picture carries the one action that starts from a picture rather than
     from words. `on_similar` is how the page that already answers that question
     keeps it from navigating to itself; `None` leaves the action off entirely.
+
+    Each action is keyed by where it is drawn as well as by what it is about,
+    so a list that holds one asset twice still renders. A caller that
+    accumulates pages should also drop the repeat (`without_repeats`); this
+    keeps the *component* from failing on input no caller promised not to give
+    it, which is what it did until Gate 2 found it.
     """
     for row in range(0, len(items), COLUMNS):
         cells = st.columns(COLUMNS)
         for offset, item in enumerate(items[row : row + COLUMNS]):
-            asset = item["asset"] if "asset" in item else item
-            caption = captions[row + offset] if captions else asset["original_filename"]
+            asset = asset_of(item)
+            position = row + offset
+            caption = captions[position] if captions else asset["original_filename"]
             with cells[offset]:
                 st.image(
                     address_of(asset["links"]["thumbnail"]),
@@ -72,7 +110,7 @@ def thumbnails(
                     width="stretch",
                 )
                 if on_similar is not None and st.button(
-                    SIMILAR_LABEL, key=f"similar-{asset['id']}", width="stretch"
+                    SIMILAR_LABEL, key=f"similar-{position}-{asset['id']}", width="stretch"
                 ):
                     on_similar(asset["id"])
 

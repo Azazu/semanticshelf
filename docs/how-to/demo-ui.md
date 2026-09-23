@@ -38,7 +38,9 @@ is to your words. The score beside each result is `1 − cosine distance`, so it
 is comparable within one model and one query and nowhere else; the page names
 the model for that reason. The slider is the API's `min_score`, which cuts the
 tail of a page rather than reaching deeper for replacements, and **More** asks
-the service for the next page by offset.
+the service for the next page by offset. A picture the service hands back twice
+— which a group of identical scores at a page's edge allows — is shown once:
+the page keeps the service's offset and drops the repeat from the screen.
 
 The **tag box on this page is a filter of what has been fetched**, not part of
 the search: `GET /search/text` takes no tag — filtered vector search is its own

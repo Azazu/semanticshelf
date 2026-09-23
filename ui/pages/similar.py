@@ -18,7 +18,7 @@ from typing import Any
 import streamlit as st
 
 from ui.client import ServiceError
-from ui.shell import SIMILAR_ASKED, asset_caption, refused, service, thumbnails
+from ui.shell import SIMILAR_ASKED, asset_caption, refused, service, thumbnails, without_repeats
 
 PAGE_SIZE = 12
 
@@ -131,7 +131,10 @@ if asked is not None:
         except ServiceError as error:
             refused(error)
         else:
-            st.session_state.similar_results = results + page["items"]
+            # As on the search page: a repeat between pages is the service's
+            # right, and two cells for one asset is not something the grid can
+            # draw.
+            st.session_state.similar_results = without_repeats(results, page["items"])
             st.session_state.similar_offset += page["limit"]
             st.session_state.similar_has_more = page["has_more"]
             st.rerun()

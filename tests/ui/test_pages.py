@@ -14,9 +14,11 @@ from pathlib import Path
 
 import httpx
 import pytest
+import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from tests.ui.conftest import Service, asset, page_of, problem
+from ui import shell
 
 pytestmark = pytest.mark.ui
 
@@ -124,6 +126,51 @@ def test_more_shows_the_next_page_immediately(service: Service) -> None:
     assert not [candidate for candidate in test.button if candidate.label == "More"], (
         "the last page offers no more"
     )
+
+
+def test_more_over_a_page_that_repeats_an_asset_still_renders(service: Service) -> None:
+    """The service may hand back an asset that is already on screen — a group of
+    identical scores straddling a page edge is not promised to be cut the same
+    way twice — and until Gate 2 that made the page stop rendering altogether:
+    two thumbnails claimed one widget key.
+    """
+    searching(
+        service,
+        [found([hit("1"), hit("2")], has_more=True), found([hit("2"), hit("3")], has_more=False)],
+    )
+    test = run("search.py")
+    test.text_input[0].set_value("dragon").run()
+    button(test, "Search").click().run()
+
+    button(test, "More").click().run()
+
+    assert not test.exception, [str(error.value) for error in test.exception]
+    assert pictures(test) == 3, "the repeat is shown once, and the new one is shown"
+    assert [query["offset"] for query in service.queries("/api/v1/search/text")] == ["0", "12"], (
+        "and the offset is still the service's place in the ranking"
+    )
+
+
+def test_the_action_after_such_a_page_still_names_its_own_asset(
+    service: Service, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    switched: list[str] = []
+    monkeypatch.setattr(st, "switch_page", lambda page: switched.append(str(page)))
+    searching(
+        service,
+        [found([hit("1"), hit("2")], has_more=True), found([hit("2"), hit("3")], has_more=False)],
+    )
+    test = run("search.py")
+    test.text_input[0].set_value("dragon").run()
+    button(test, "Search").click().run()
+    button(test, "More").click().run()
+
+    actions = [candidate for candidate in test.button if candidate.label == shell.SIMILAR_LABEL]
+    assert len(actions) == 3
+    actions[2].click().run()
+
+    assert test.session_state[shell.SIMILAR_ASKED] == "3"
+    assert switched == [shell.SIMILAR_PAGE]
 
 
 def test_a_refused_search_keeps_the_results_that_were_there(service: Service) -> None:

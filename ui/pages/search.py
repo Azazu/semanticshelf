@@ -13,7 +13,7 @@ learned the hard way at Gate 2:
 import streamlit as st
 
 from ui.client import ServiceError
-from ui.shell import asset_caption, refused, service, thumbnails
+from ui.shell import asset_caption, refused, service, thumbnails, without_repeats
 
 PAGE_SIZE = 12
 
@@ -87,7 +87,10 @@ if asked is not None:
         except ServiceError as error:
             refused(error)
         else:
-            st.session_state.results = results + page["items"]
+            # Without the drop, an asset the service repeats between pages —
+            # which it is allowed to do — would be drawn twice, and two
+            # thumbnails claiming one widget key stop the page rendering.
+            st.session_state.results = without_repeats(results, page["items"])
             st.session_state.offset += page["limit"]
             st.session_state.has_more = page["has_more"]
             st.rerun()

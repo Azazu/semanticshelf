@@ -137,6 +137,55 @@ def test_more_shows_the_next_page_of_neighbours_immediately(service: Service) ->
     assert not [candidate for candidate in test.button if candidate.label == "More"]
 
 
+def test_more_over_a_page_that_repeats_an_asset_still_renders(service: Service) -> None:
+    """The picture consumer of the same grid, against the same defect: a repeat
+    between two pages must be shown once rather than stop the page rendering.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        first = _offset_of(request) == 0
+        body = (
+            neighbours([hit("1"), hit("2")], has_more=True)
+            if first
+            else neighbours([hit("2"), hit("3")])
+        )
+        return httpx.Response(200, json=body)
+
+    service.on(IMAGE_SEARCH, handler)
+    test = run("similar.py")
+    test.file_uploader[0].set_value(("query.png", picture_bytes(), "image/png")).run()
+    button(test, "Search by picture").click().run()
+
+    button(test, "More").click().run()
+
+    assert not test.exception, [str(error.value) for error in test.exception]
+    assert pictures(test) == 3, "the repeat is shown once, and the new one is shown"
+
+
+def test_the_action_after_such_a_page_still_names_its_own_asset(service: Service) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        first = _offset_of(request) == 0
+        body = (
+            neighbours([hit("1"), hit("2")], has_more=True)
+            if first
+            else neighbours([hit("2"), hit("3")])
+        )
+        return httpx.Response(200, json=body)
+
+    service.on(IMAGE_SEARCH, handler)
+    service.answer(SIMILAR.format(id="3"), neighbours([hit("44444444")]))
+    test = run("similar.py")
+    test.file_uploader[0].set_value(("query.png", picture_bytes(), "image/png")).run()
+    button(test, "Search by picture").click().run()
+    button(test, "More").click().run()
+
+    actions = [candidate for candidate in test.button if candidate.label == shell.SIMILAR_LABEL]
+    assert len(actions) == 3
+    actions[2].click().run()
+
+    assert service.paths()[-1] == SIMILAR.format(id="3"), "the third thumbnail, not the second"
+
+
 def _offset_of(request: httpx.Request) -> int:
     """The `offset` form field of a multipart body, without parsing it whole."""
     marker = b'name="offset"\r\n\r\n'
