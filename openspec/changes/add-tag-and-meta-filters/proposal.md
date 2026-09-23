@@ -1,18 +1,21 @@
 # Narrowing a search without lying about it
 
-**Risk-Tier:** medium
+**Risk-Tier:** high
 
-Ordinary search behaviour, by the table in `AGENTS.md`: no authorization, no
-money, no concurrency, no deletion, no migration, no network egress. A filter
-value does reach SQL, but as a bound parameter in a containment test — `@>`,
-`&&`, `meta @> '{"k":"v"}'` — with the key checked against a pattern before it
-is used, which is the same handling the listing has had since change 5.
+Declared `medium` at first, on the project-specific table's "search logic" row,
+and raised at Gate 1 round 1 (finding 3), which is right: §Security-Sensitive
+Code of `AGENTS.md` says a change touching **input handling** is `high`, and
+this one adds a validator for client input on four public surfaces, including
+the multipart picture search, and reads parameters whose names the caller
+invents. Binding the values into the SQL is the correct handling; it is not an
+exemption from the rule.
 
-**The executor asks for Gate 1 anyway**, which the tier does not require. This
-change's risk is not in its code but in one design decision — how a filter and
-an approximate index scan are made to agree — and a wrong answer there is a
-search that quietly returns less than it has. Gate 1 costs one review and is
-the cheapest place to be told the answer is wrong.
+So: Gate 1 on the artifacts, Gate 2 on the code, an applicability table in
+`design.md`, a demonstrated failing input for every new or changed check, and
+the security-sensitive flag in the commit bodies and in `handoff.md`. The
+executor had asked for Gate 1 voluntarily before the tier was raised, for its
+own reason — the risk of this change is in the design rather than in the code
+that follows it — and that reason still holds.
 
 ## Why
 
@@ -71,10 +74,12 @@ and measured.
   different fields, no search inside `meta` beyond top-level string equality —
   FR-FLT-3 fixes that shape deliberately, and anything wider is a new proposal
   with its own index question.
-- **Moving the threshold into the query.** `min_score` stays outside the page
-  (change 8, design decision): it removes results the page already holds rather
-  than reaching further down for replacements. A filter is not a threshold, and
-  this change does not blur them.
+- **Changing what the threshold does.** `min_score` keeps removing results the
+  page already holds rather than reaching further down for replacements (change
+  8). Where that removal *happens* moves one layer — out of the outermost select
+  and into the service — because the count of rows before it is what tells a
+  budget-limited answer from an exhausted ranking (design decision 3); the
+  behaviour a caller sees is unchanged, and a test holds it so.
 - **A schema change.** `ix_assets_tags` (GIN) and `ix_assets_meta` (GIN,
   `jsonb_path_ops`) have been there since change 3. If the measurement says the
   service wants a different index, that is a finding handed to change 14, not a
@@ -114,9 +119,7 @@ None.
   `ui/pages/search.py` and `ui/shell.py`, `docs/how-to/searching.md`,
   `docs/how-to/demo-ui.md`, `docs/explanation/requirements.md` where it
   describes what was built.
-- Unchanged: the schema and every migration; the queue; the upload path; the
-  threshold's place; the depth bounds, unless the measurement says an iterative
-  scan makes them mean something different — in which case the design says so
-  before any code is written.
+- Unchanged: the schema and every migration; the queue; the upload path; what
+  the threshold does to a page; the depth bounds (design decision 6).
 - No new dependency: PostgreSQL's own containment operators and a pgvector
   setting the installed 0.8.5 already has.

@@ -3,6 +3,11 @@
 **Updated:** 2026-09-23 · claude
 **State:** proposing
 **Branch:** change/add-tag-and-meta-filters
+**Security-sensitive:** yes — this change handles client input: a shared
+parser for tag and metadata narrowings on four public surfaces, including the
+multipart picture search, with parameters whose names the caller invents.
+§Security-Sensitive Code of `AGENTS.md` puts that at `high`, which is why the
+tier was raised at Gate 1 round 1.
 
 ## Done this session
 
@@ -32,11 +37,16 @@ then `DEMO_COUNT=20 make demo`): 20 assets, 40 vectors, both models `done`.
 
 ## Next step
 
-The tier is `medium`, so the process requires only Gate 2. **The executor asks
-for Gate 1 anyway** — the risk of this change is in `design.md`, not in the
-code that follows it, and the last change's Gate 1 found three real design
-errors. If the user agrees: `/gate-review add-tag-and-meta-filters 1`.
-Otherwise straight to `/opsx:apply add-tag-and-meta-filters`.
+Gate 1 confirmation of round 1: `/gate-review add-tag-and-meta-filters 1 confirm 1`.
+All four findings are `fixed`.
+
+What changed, briefly: the tier is `high` and `design.md` carries the
+applicability table; the report of a stopped scan is now decided by **how many
+candidate rows the search produced before the threshold**, not by the shape of
+the answer — which fixes both the full-page case (finding 1) and the
+threshold-shortened case (finding 2); the bounded question carries the search's
+model, its narrowing and the asking asset; and the measurement command is named
+with its arguments (finding 4).
 
 ## Blockers
 

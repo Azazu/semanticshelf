@@ -1,9 +1,14 @@
 # Tasks — add-tag-and-meta-filters
 
-Tier `medium`: Gate 2 on the code. Every new check below still names the input
-that makes it fail when the check is removed, because the failure this change
-prevents is silent — a page that is short for the wrong reason looks exactly
-like a page that is short for the right one.
+Tier `high` (raised at Gate 1 round 1, finding 3: this change handles client
+input): Gate 1 on the artifacts, Gate 2 on the code, and **a demonstrated
+failing input for every new or changed check** — the one below, and every
+refusal in group 1. Each commit that touches the parser or the surfaces carries
+the security-sensitive flag, and so does `handoff.md`.
+
+The failure this change prevents is silent: a page that is short for the wrong
+reason looks exactly like a page that is short for the right one, and a page
+that is *full* can be just as wrong.
 
 ## 1. What a narrowing is
 
@@ -46,25 +51,46 @@ like a page that is short for the right one.
 
 ## 3. What the answer says when the scan stops
 
-- [ ] 3.1 A narrowed page that comes back short asks one bounded question —
-  do more matching assets exist than this answer holds? — and the envelope says
-  whether the search stopped at its bound (design decision 3). Verify: unit
-  tests of the decision itself (short page + more exist → limited; short page +
-  nothing more → not limited; full page → the question is never asked).
-- [ ] 3.2 The field is in the API's answer and in the OpenAPI document, absent
-  in substance for an unnarrowed search. Verify: api tests assert it on a
-  narrowed and an unnarrowed answer; the document carries it with a description
-  and the example shows it.
-- [ ] 3.3 Against a real index, a narrowing that outruns the scan's budget is
-  reported rather than presented as the end of the ranking. Verify: an
-  integration test lowers `hnsw.max_scan_tuples` for its transaction so the
-  bound is reached deliberately, and asserts a short page that says it stopped
-  early while the store holds more matches. Demonstrated failing input:
-  answering `has_more: false` with nothing else makes that test read the answer
-  as the end of the ranking.
-- [ ] 3.4 The extra question is asked only when it is needed. Verify: an
-  integration test counts the statements of a full narrowed page and of an
-  unnarrowed page and asserts neither pays for it.
+- [ ] 3.1 The repository reports how many candidate rows the page produced
+  **before** the threshold, and the threshold moves out of the outermost select
+  into the service (design decision 3). Verify: an integration test asserts that
+  a threshold shortens a page exactly as it did before the move — same items,
+  same `has_more` — reusing change 8's own threshold tests unchanged; another
+  asserts the candidate count is the pre-threshold number for a page the
+  threshold empties. Demonstrated failing input: counting after the threshold
+  makes the empty-page-after-threshold test report a stopped scan.
+- [ ] 3.2 The decision itself: the search is reported as stopped at its bound
+  when the page produced fewer candidates than the answer asked for
+  (`limit + 1`, plus one more when an asset excludes itself, beyond `offset`)
+  **and** more matching rows exist than `offset + candidates`; otherwise not.
+  Verify: unit tests over the decision function for — the page produced
+  everything asked (never limited, no question asked); it produced fewer and
+  nothing more exists (exhausted); it produced fewer and more exist (limited);
+  it produced exactly `limit` while more exist (limited, although the page is
+  full). Demonstrated failing input: deciding from the rendered page instead of
+  the candidate count makes the fourth case report the end of the ranking —
+  the defect Gate 1 named.
+- [ ] 3.3 The bounded question is asked with the search's own inputs: its model,
+  its narrowing, and the asking asset excluded for `/similar`, bounded by
+  `offset + candidates + 1`. Verify: integration tests assert it counts neither
+  assets without a vector of that model nor the asking asset, and that a nonzero
+  offset compares against the prefix the scan consumed rather than against the
+  page. Demonstrated failing input: dropping the model from the question makes
+  an asset indexed only by the other model count as reachable.
+- [ ] 3.4 Against a real index, a narrowing that outruns the scan's budget is
+  reported. Verify: an integration test lowers `hnsw.max_scan_tuples` for its
+  transaction so the bound is reached deliberately, and asserts both shapes —
+  a short page and a page of exactly `limit` — say that the search stopped
+  early while the store holds more matches. Demonstrated failing input: leaving
+  the report to `has_more` alone makes both read as the end of the ranking.
+- [ ] 3.5 The question is asked only when it is needed. Verify: an integration
+  test counts the statements of an unnarrowed page, of a narrowed page that got
+  everything it asked for, and of a narrowed page that did not, and asserts only
+  the last pays for it.
+- [ ] 3.6 The envelope carries the report, and the OpenAPI document describes
+  it. Verify: api tests assert it on a narrowed answer that was cut short, on a
+  narrowed answer that was not, and on an unnarrowed answer; the document
+  carries the field with a description and the example shows it.
 
 ## 4. The three searches and the listing
 
@@ -104,10 +130,14 @@ like a page that is short for the right one.
 
 ## 6. The numbers
 
-- [ ] 6.1 A script builds a synthetic corpus of a given size and selectivity in
-  the integration database and measures the same statement the service runs, at
-  each setting (design decision 7). Verify: `uv run python scripts/…` prints the
-  table, and running it twice on the same seed prints the same rows-returned.
+- [ ] 6.1 `scripts/filter_benchmark.py` builds a synthetic corpus of a given
+  size and selectivity in the database `DATABASE_URL` names and measures the
+  same statement the service runs, at each setting (design decision 7). Verify:
+  `uv run python scripts/filter_benchmark.py --assets 3000 --rare-every 300
+  --seed 7` prints the table, and a second run with the same arguments prints
+  the same rows-returned. The script empties the tables it uses and says so
+  before it starts — on this machine that database is also the one development
+  uses.
 - [ ] 6.2 `docs/how-to/benchmarks.md` carries that output, the command that
   produced it, and what it means for a deployment — including the cost of an
   iterative scan against a single one, and the bound at which a narrowed search

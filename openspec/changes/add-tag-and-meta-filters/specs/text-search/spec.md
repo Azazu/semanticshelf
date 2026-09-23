@@ -79,6 +79,12 @@ SHALL say in the answer when it stopped at that bound rather than at the end of
 the ranking. It SHALL NOT present such an answer as though the ranking held
 nothing more.
 
+That report SHALL be decided by what the search itself found — whether it
+produced the results the answer needed, including the one beyond the page that
+says whether more exist — and NOT by how the answer looks afterwards. A full
+page SHALL NOT be taken as proof that the search was not cut short, and a page
+shortened by the threshold SHALL NOT be reported as a search that was.
+
 #### Scenario: More results exist
 - **WHEN** a page is requested and the ranking holds more results beyond it
 - **THEN** the answer says so, and carries no total count
@@ -107,6 +113,19 @@ nothing more.
   may look, before it has filled the page
 - **THEN** the answer says that it stopped there, so that a short page is not
   read as the end of the ranking
+
+#### Scenario: A full page that the search was cut short of completing
+- **WHEN** a narrowed search stops at its bound having found exactly as many
+  results as the page holds, while more satisfying the narrowing exist beyond
+  what it reached
+- **THEN** the answer still says that it stopped at its bound, rather than
+  saying that nothing follows the page
+
+#### Scenario: A page the threshold shortened
+- **WHEN** a narrowed search completes and the threshold then removes some or
+  all of its results
+- **THEN** the answer does not say that the search stopped at any bound: the
+  threshold removing results is not the search failing to find them
 
 ### Requirement: Search is answered from the index, at the depth it is asked for
 
