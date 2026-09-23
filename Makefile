@@ -115,6 +115,7 @@ ifdef APP_MISSING
 else
 	$(RUN) semanticshelf demo-dataset download --count $${DEMO_COUNT:-500} --into $${DEMO_ROOT:-.data/demo}
 	$(RUN) semanticshelf demo-dataset index --into $${DEMO_ROOT:-.data/demo}
+	$(RUN) semanticshelf index missing
 endif
 
 check: lock-check lint fmt-check types test ## The gate floor: lock + lint + format + types + tests

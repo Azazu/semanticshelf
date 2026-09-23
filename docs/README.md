@@ -27,9 +27,10 @@ implementing change)_
   orphan files
 - [`how-to/indexing.md`](how-to/indexing.md) — the indexing queue: the state
   of an asset's work, finding what failed and why, and running it again
-- [`how-to/searching.md`](how-to/searching.md) — searching by description: what
-  a score means, paging and its depth bound, thresholds, and what is not
-  filterable yet
+- [`how-to/searching.md`](how-to/searching.md) — the three ways to ask: words,
+  a picture you send, a picture the store holds. What a score means, paging and
+  its depth bounds, thresholds, which model answers, and what is not filterable
+  yet
 
 ## Reference (facts)
 

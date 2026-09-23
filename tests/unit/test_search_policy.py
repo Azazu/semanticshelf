@@ -10,11 +10,13 @@ import pytest
 from app.core.settings import Settings
 from app.services.search import (
     MAX_PAGE_DEPTH,
+    MAX_PAGE_DEPTH_EXCLUDING,
     MAX_SEARCH_EFFORT,
     QUERY_MAX_LENGTH,
     InvalidQueryError,
     PageTooDeepError,
     check_depth,
+    depth_bound,
     effort_for,
     normalised_query,
     score_of,
@@ -77,6 +79,54 @@ def test_a_page_within_the_depth_is_allowed() -> None:
 def test_a_page_one_item_too_deep_is_refused() -> None:
     with pytest.raises(PageTooDeepError, match=str(MAX_PAGE_DEPTH)):
         check_depth(limit=101, offset=MAX_PAGE_DEPTH - 100)
+
+
+# --- a search that leaves an asset out of its own answer ----------------------
+
+
+def test_leaving_a_row_out_costs_one_page_of_depth() -> None:
+    assert MAX_PAGE_DEPTH_EXCLUDING == MAX_PAGE_DEPTH - 1 == depth_bound(excluded=1)
+
+
+def test_the_effort_covers_the_page_the_sentinel_and_the_excluded_row() -> None:
+    # Deep enough that the page decides rather than the configured floor.
+    assert effort_for(settings=settings(), limit=100, offset=100, excluded=1) == 202
+
+
+def test_the_deepest_excluding_page_still_has_both_rows_it_cannot_use() -> None:
+    """The test that ties the excluding bound to the index's ceiling. Raise
+    `MAX_PAGE_DEPTH_EXCLUDING` to the ordinary depth and this fails: the page
+    would need candidate 1001 of the 1000 the index will produce, and
+    `has_more` would become a guess at exactly the depth a client is most
+    likely to be paging towards.
+    """
+    limit, offset = 100, MAX_PAGE_DEPTH_EXCLUDING - 100
+
+    check_depth(limit=limit, offset=offset, excluded=1)
+    effort = effort_for(settings=settings(), limit=limit, offset=offset, excluded=1)
+
+    assert effort >= limit + offset + 2
+    assert effort <= MAX_SEARCH_EFFORT
+
+
+def test_every_accepted_excluding_page_is_within_the_effort_it_is_granted() -> None:
+    """Not only the deepest one: the invariant is that the index is always
+    asked for at least the page, the row beyond it and the excluded asset."""
+    for limit, offset in [(1, 0), (20, 0), (100, 0), (1, MAX_PAGE_DEPTH_EXCLUDING - 1), (50, 948)]:
+        check_depth(limit=limit, offset=offset, excluded=1)
+        assert (
+            effort_for(settings=settings(), limit=limit, offset=offset, excluded=1)
+            >= limit + offset + 2
+        ), (limit, offset)
+
+
+def test_the_page_a_text_query_may_ask_for_is_one_too_deep_here() -> None:
+    limit, offset = 100, MAX_PAGE_DEPTH - 100
+
+    check_depth(limit=limit, offset=offset)  # allowed without an exclusion
+
+    with pytest.raises(PageTooDeepError, match=str(MAX_PAGE_DEPTH_EXCLUDING)):
+        check_depth(limit=limit, offset=offset, excluded=1)
 
 
 def test_the_query_bound_is_the_one_the_requirements_fix() -> None:

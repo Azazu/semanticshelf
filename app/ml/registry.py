@@ -9,7 +9,7 @@ import threading
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from app.domain import CLIP_VIT_L14, UnknownModelError
+from app.domain import CLIP_VIT_L14, DINOV2_LARGE, UnknownModelError
 from app.ml.base import Embedder
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only
@@ -26,10 +26,17 @@ def load_clip(settings: "Settings") -> Embedder:
     return ClipEmbedder.load(settings)
 
 
+def load_dinov2(settings: "Settings") -> Embedder:
+    """Imported inside the function for the same reason as CLIP's."""
+    from app.ml.dinov2 import Dinov2Embedder
+
+    return Dinov2Embedder.load(settings)
+
+
 #: The models this build can actually run. `app.domain.IMPLEMENTED_MODELS`
 #: declares the same set for configuration validation; a unit test holds them
 #: together, so adding an adapter without enabling it — or the reverse — fails.
-FACTORIES: dict[str, Factory] = {CLIP_VIT_L14: load_clip}
+FACTORIES: dict[str, Factory] = {CLIP_VIT_L14: load_clip, DINOV2_LARGE: load_dinov2}
 
 _registry_lock = threading.Lock()
 _key_locks: dict[str, threading.Lock] = {}

@@ -38,6 +38,7 @@ from app.domain import FILE_EXTENSIONS
 from app.repositories.assets import AssetRepository
 from app.services import images, indexing
 from app.services.assets import DuplicateAssetError, create_asset, receive
+from app.services.indexing import WorkReport
 from app.services.tagging import MetadataError, TagError, check_metadata, normalise_tags
 from app.storage import MediaStorage
 
@@ -359,19 +360,6 @@ class FileOutcome:
     asset_id: UUID | None = None
 
 
-QUEUED_WAITING = "waiting in the queue"
-QUEUED_HELD = "held by a runner"
-
-
-@dataclass(slots=True)
-class WorkReport:
-    """What became of the work the import created."""
-
-    indexed: int = 0
-    queued: list[tuple[UUID, str]] = field(default_factory=list)
-    failed: list[tuple[UUID, str]] = field(default_factory=list)
-
-
 @dataclass(slots=True)
 class ImportReport:
     """Everything a run did, in the order it did it."""
@@ -669,14 +657,6 @@ async def _import(
 # --- finishing the work the import created ------------------------------------
 
 
-def _unfinished(statuses: Mapping[UUID, Mapping[str, str]]) -> list[UUID]:
-    return [
-        asset_id
-        for asset_id, per_model in statuses.items()
-        if any(state in ("pending", "running") for state in per_model.values())
-    ]
-
-
 async def index_imported(
     report: ImportReport,
     *,
@@ -688,66 +668,22 @@ async def index_imported(
 ) -> WorkReport:
     """Carry out the work this run created — and only that work.
 
-    The queue may hold anything else, however old and however much of it: the
-    claims here name the assets this run created, so an import finishes what it
-    started instead of being satisfied by someone else's backlog.
-
-    It stops when none of its own work is unfinished, or when a pass claims
-    nothing while some still is — work another runner holds, or work waiting
-    out the delay before its next attempt. It does not sleep to outlast that
-    delay: what it could not do is reported, not waited for.
+    The loop belongs to the queue, not to the import: `index missing` finishes
+    what it queued the same way (`app/services/indexing.py`). What is this
+    module's is which assets to name — the ones this run created, so an import
+    finishes what it started instead of being satisfied by someone else's
+    backlog.
     """
-    created = report.created_assets
-    work = WorkReport()
-    report.work = work
-    if not created:
-        return work  # nothing was created, so there is nothing of ours to do
-
-    passes = len(created) * settings.job_max_attempts + 1
-    for _ in range(passes):
-        async with session_factory() as session:
-            statuses = await indexing.status_of(session, created)
-        unfinished = _unfinished(statuses)
-        if on_progress is not None:
-            on_progress(len(created) - len(unfinished))
-        if not unfinished:
-            break
-        taken = await indexing.run_batch(
-            session_factory=session_factory,
-            storage=storage,
-            settings=settings,
-            pool=pool,
-            asset_ids=unfinished,
-        )
-        if not taken:
-            break
-
-    async with session_factory() as session:
-        statuses = await indexing.status_of(session, created)
-        for asset_id in created:
-            states = statuses.get(asset_id, {})
-            if all(state == "done" for state in states.values()) and states:
-                work.indexed += 1
-                continue
-            for model, state in sorted(states.items()):
-                if state == "done":
-                    continue
-                if state == "failed":
-                    work.failed.append((asset_id, await _reason(session, asset_id, model)))
-                else:
-                    work.queued.append(
-                        (asset_id, QUEUED_HELD if state == "running" else QUEUED_WAITING)
-                    )
+    work = await indexing.finish_work(
+        report.created_assets,
+        session_factory=session_factory,
+        storage=storage,
+        settings=settings,
+        pool=pool,
+        on_progress=on_progress,
+    )
     report.work = work
     return work
-
-
-async def _reason(session: AsyncSession, asset_id: UUID, model: str) -> str:
-    """What the queue recorded about a job that failed for good."""
-    for job in await indexing.jobs_of(session, asset_id):
-        if job.model == model and job.last_error:
-            return job.last_error
-    return "no reason recorded"
 
 
 def describe(report: ImportReport) -> list[str]:

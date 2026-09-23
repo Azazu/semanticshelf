@@ -283,6 +283,23 @@ async def test_the_index_answers_a_page_with_a_threshold(session: AsyncSession) 
     assert "Seq Scan on embeddings" not in plan, plan
 
 
+async def test_the_model_index_still_answers_when_an_asset_is_excluded(
+    session: AsyncSession,
+) -> None:
+    """Leaving an asset out of its own answer must not turn the index scan into
+    a filtered one: the predicate sits above the window, not inside it, so the
+    plan is the same plan (design decision 5 of change 11)."""
+    a, _, _ = await seed_two_models(session)
+    statement = EmbeddingRepository(session).nearest_statement(
+        model=CLIP, vector=plane_vector(CLIP_DIM, 1.0, 0.0), limit=3, exclude_asset_id=a.id
+    )
+
+    plan = await explain(session, statement, no_seqscan=True)
+
+    assert vector_index_name(CLIP) in plan, plan
+    assert "Seq Scan on embeddings" not in plan, plan
+
+
 async def test_a_page_holding_a_whole_tie_orders_it_by_identifier(
     session: AsyncSession,
 ) -> None:

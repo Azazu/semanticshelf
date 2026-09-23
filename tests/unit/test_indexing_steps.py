@@ -21,12 +21,13 @@ import pytest
 from PIL import Image
 
 from app.core.settings import Settings
-from app.domain import CLIP_VIT_L14, Asset, IndexingJob, dimension_of
+from app.domain import CLIP_VIT_L14, DINOV2_LARGE, Asset, IndexingJob, dimension_of
 from app.ml import registry
 from app.ml.fake import FakeEmbedder
 from app.repositories.jobs import ClaimedJob
 from app.services import indexing
 from app.storage import MediaStorage
+from tests.fake_models import fake_models
 
 CLIP_WIDTH = dimension_of(CLIP_VIT_L14)
 NOW = datetime.now(UTC)
@@ -131,13 +132,8 @@ def doubles(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 @pytest.fixture(autouse=True)
 def fake_model() -> Iterator[None]:
-    registry.clear()
-    original = dict(registry.FACTORIES)
-    registry.FACTORIES[CLIP_VIT_L14] = lambda settings: FakeEmbedder(CLIP_VIT_L14, CLIP_WIDTH)
-    yield
-    registry.FACTORIES.clear()
-    registry.FACTORIES.update(original)
-    registry.clear()
+    with fake_models():
+        yield
 
 
 @pytest.fixture
@@ -262,14 +258,17 @@ async def test_a_greyscale_original_is_converted_before_the_model_sees_it(
 async def test_a_job_naming_a_model_this_build_does_not_run_is_refused(
     storage: MediaStorage, settings: Settings, pool: ThreadPoolExecutor
 ) -> None:
+    # A deployment may run fewer models than the build implements, and a job
+    # queued before that narrowing is still in the queue.
     asset = stored(storage)
+    only_clip = settings.model_copy(update={"enabled_models": (CLIP_VIT_L14,)})
 
-    with pytest.raises(indexing.ModelNotEnabled, match="dinov2-large"):
+    with pytest.raises(indexing.ModelNotEnabled, match=DINOV2_LARGE):
         await indexing.execute(
-            claimed_job(asset_id=asset.id, model="dinov2-large"),
+            claimed_job(asset_id=asset.id, model=DINOV2_LARGE),
             session_factory=sessions(),
             storage=storage,
-            settings=settings,
+            settings=only_clip,
             pool=pool,
         )
 

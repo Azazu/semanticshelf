@@ -14,18 +14,23 @@ quietly getting a worse ranking than a shallow one.
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
+from typing import BinaryIO, Literal
 from uuid import UUID
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.core.settings import Settings
-from app.domain import CLIP_VIT_L14, Asset
+from app.domain import CLIP_VIT_L14, DINOV2_LARGE, Asset, modality_of
 from app.ml.base import TextNotSupportedError
 from app.ml.pool import acquire, run_in_pool
 from app.repositories.assets import AssetRepository
 from app.repositories.embeddings import EmbeddingRepository
-from app.services import indexing
+from app.services import images, indexing
+from app.services.assets import discard_temporary, receive
+from app.storage import MediaStorage
 
 #: What a query may be. Fixed by the requirements rather than configured: a
 #: bound no deployment turns is not a setting.
@@ -39,11 +44,28 @@ RAW_QUERY_MAX_LENGTH = 4 * QUERY_MAX_LENGTH
 #: candidates one index scan will produce: past it the index cannot answer
 #: accurately at all.
 MAX_SEARCH_EFFORT = 1000
-#: How deep a page may reach. One of the candidates above is the row beyond the
-#: page, and that row is the whole of `has_more`; a page that used the last
-#: candidate for itself would leave the question to be guessed at, so the page
-#: stops one short of the index's ceiling.
-MAX_PAGE_DEPTH = MAX_SEARCH_EFFORT - 1
+
+
+def depth_bound(*, excluded: int = 0) -> int:
+    """How deep a page may reach.
+
+    One of the candidates above is the row beyond the page, and that row is the
+    whole of `has_more`; a page that used the last candidate for itself would
+    leave the question to be guessed at. `excluded` counts the further rows the
+    index will produce that the page may not use — an asset left out of its own
+    answer is one — and each of them costs a page of depth.
+    """
+    return MAX_SEARCH_EFFORT - 1 - excluded
+
+
+#: The deepest `limit + offset` an ordinary search may ask for, and the deepest
+#: one that leaves an asset out of its own answer. Both from the one rule
+#: above, so they cannot drift apart.
+MAX_PAGE_DEPTH = depth_bound()
+MAX_PAGE_DEPTH_EXCLUDING = depth_bound(excluded=1)
+
+#: What a query is made of. A model answers one kind or both (`MODEL_MODALITIES`).
+QueryKind = Literal["text", "picture"]
 
 
 class SearchUnavailableError(Exception):
@@ -56,6 +78,22 @@ class InvalidQueryError(ValueError):
 
 class PageTooDeepError(ValueError):
     """The page asked for lies beyond the depth the index can answer."""
+
+
+class WrongModalityError(ValueError):
+    """The model named cannot be asked that kind of question."""
+
+
+class AssetUnknownError(LookupError):
+    """No asset carries that identifier."""
+
+
+class NotIndexedError(LookupError):
+    """The asset has no vector of the search model, so it has no neighbours yet.
+
+    Not an empty page: nothing is known about what it looks like, which is not
+    the same as nothing being like it.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,16 +115,16 @@ class SearchPage:
     query_truncated: bool
 
 
-def effort_for(*, settings: Settings, limit: int, offset: int) -> int:
+def effort_for(*, settings: Settings, limit: int, offset: int, excluded: int = 0) -> int:
     """How hard the index should look for this page.
 
     At least the configured effort, at least the depth the page reaches — the
-    row beyond it included, since that row is what says whether more exist —
-    and never beyond what pgvector accepts. `check_depth` keeps the two
-    compatible: the deepest page it allows still leaves a candidate for the row
-    beyond it.
+    row beyond it included, since that row is what says whether more exist, and
+    any row the search will discard — and never beyond what pgvector accepts.
+    `check_depth` keeps the two compatible: the deepest page it allows still
+    leaves a candidate for every row the page cannot use.
     """
-    return min(MAX_SEARCH_EFFORT, max(settings.hnsw_ef_search, limit + offset + 1))
+    return min(MAX_SEARCH_EFFORT, max(settings.hnsw_ef_search, limit + offset + 1 + excluded))
 
 
 def score_of(distance: float) -> float:
@@ -111,31 +149,119 @@ def normalised_query(raw: str) -> str:
     return query
 
 
-def check_depth(*, limit: int, offset: int) -> None:
+def check_depth(*, limit: int, offset: int, excluded: int = 0) -> None:
     """Refuse a page the index cannot answer, before anything is embedded.
 
-    The bound is one short of the index's ceiling on purpose: the row beyond
-    the page answers `has_more`, and it has to be one of the candidates the
-    index is willing to produce.
+    The bound is short of the index's ceiling on purpose: the row beyond the
+    page answers `has_more` and an excluded asset takes another, and both have
+    to be candidates the index is willing to produce. Answering such a page
+    from a shallower search instead would make `has_more` a guess.
     """
-    if limit + offset > MAX_PAGE_DEPTH:
-        raise PageTooDeepError(
-            f"limit + offset must be at most {MAX_PAGE_DEPTH}, got {limit + offset}"
-        )
+    bound = depth_bound(excluded=excluded)
+    if limit + offset > bound:
+        raise PageTooDeepError(f"limit + offset must be at most {bound}, got {limit + offset}")
+
+
+def check_model(model: str, *, settings: Settings, kind: QueryKind) -> None:
+    """Refuse a model that cannot answer this query, before anything is loaded.
+
+    Two different refusals, in this order. A model this build does not run is
+    unavailable — which is also the answer for a key the application has never
+    heard of, since configuration cannot name one. A model this build does run
+    but that cannot take this kind of question is a bad request: it names what
+    that model can be asked, because a client can act on that.
+
+    The order matters when both hold: what a deployment runs is the fact about
+    *this* service, and it is the one worth reporting.
+    """
+    if model not in settings.enabled_models:
+        raise SearchUnavailableError(f"model {model!r} is not enabled in this build")
+    modality = modality_of(model)
+    if kind == "text" and not modality.text:
+        raise WrongModalityError(f"model {model!r} takes {modality.described}, not text")
+    if kind == "picture" and not modality.images:
+        raise WrongModalityError(f"model {model!r} takes {modality.described}, not pictures")
 
 
 async def embed_query(
     query: str, *, model: str, settings: Settings, pool: ThreadPoolExecutor
 ) -> tuple[Sequence[float], bool]:
     """The query as a vector, and whether the model had to cut it short."""
-    if model not in settings.enabled_models:
-        raise SearchUnavailableError(f"model {model!r} is not enabled in this build")
+    check_model(model, settings=settings, kind="text")
     embedder = await acquire(pool, model, settings)
     try:
         result = await run_in_pool(pool, embedder.embed_text, [query])
     except TextNotSupportedError as error:
+        # Unreachable through `check_model`, and kept anyway: an adapter is
+        # free to refuse text the table thought it took, and that is a
+        # disagreement to report rather than a stack trace.
         raise SearchUnavailableError(str(error)) from error
     return [float(value) for value in result.vectors[0]], bool(result.truncated[0])
+
+
+async def embed_picture(
+    path: Path, *, model: str, settings: Settings, pool: ThreadPoolExecutor
+) -> Sequence[float]:
+    """One picture as a vector, decoded and embedded on the inference pool."""
+    # Inspected before the model is asked for: a picture the service refuses
+    # must not first cost a checkpoint load on a cold process.
+    await run_in_threadpool(images.inspect, path, settings)
+    embedder = await acquire(pool, model, settings)
+    # Which inspects again, deliberately: that is its contract for a file that
+    # may have changed under it, and here it costs one open of a small file.
+    picture = await run_in_threadpool(images.open_for_inference, path, settings)
+    try:
+        result = await run_in_pool(pool, embedder.embed_images, [picture])
+    finally:
+        await run_in_threadpool(picture.close)
+    return [float(value) for value in result.vectors[0]]
+
+
+async def _set_effort(session: AsyncSession, effort: int) -> None:
+    """`SET LOCAL hnsw.ef_search`, for this transaction only.
+
+    `SET LOCAL` takes no parameters; `set_config(..., true)` is the same thing
+    with a bind, and the `true` is what makes it local to this transaction
+    rather than to the connection the pool hands on.
+    """
+    await session.execute(sa.select(sa.func.set_config("hnsw.ef_search", str(effort), True)))
+
+
+async def _page_of(
+    vector: Sequence[float],
+    *,
+    session: AsyncSession,
+    model: str,
+    limit: int,
+    offset: int,
+    min_score: float | None,
+    exclude_asset_id: UUID | None = None,
+) -> tuple[list[Hit], bool, Mapping[UUID, Mapping[str, str]]]:
+    """One page of the ranking around a vector, whatever made that vector.
+
+    Called inside an open transaction whose search effort is already set. One
+    row beyond the page is asked for: that row is the whole of `has_more`. With
+    a threshold it stays exact — the ranking is ordered by distance, so a row
+    the threshold removes has only further rows after it.
+    """
+    neighbours = await EmbeddingRepository(session).nearest(
+        model=model,
+        vector=vector,
+        limit=limit + 1,
+        offset=offset,
+        max_distance=None if min_score is None else score_of(min_score),
+        exclude_asset_id=exclude_asset_id,
+    )
+    has_more = len(neighbours) > limit
+    page = neighbours[:limit]
+    assets = await AssetRepository(session).by_ids([one.asset_id for one in page])
+    statuses = await indexing.status_of(session, list(assets))
+    hits = [
+        Hit(asset=assets[one.asset_id], score=score_of(one.distance))
+        for one in page
+        if one.asset_id in assets
+    ]
+    return hits, has_more, statuses
 
 
 async def search_text(
@@ -154,42 +280,120 @@ async def search_text(
     vector, truncated = await embed_query(query, model=model, settings=settings, pool=pool)
 
     async with session.begin():
-        # `SET LOCAL` takes no parameters; `set_config(..., true)` is the same
-        # thing with a bind, and the `true` is what makes it local to this
-        # transaction rather than to the connection the pool hands on.
-        await session.execute(
-            sa.select(
-                sa.func.set_config(
-                    "hnsw.ef_search",
-                    str(effort_for(settings=settings, limit=limit, offset=offset)),
-                    True,
-                )
-            )
-        )
-        # One row beyond the page: that row is the whole of `has_more`. With a
-        # threshold it stays exact — the ranking is ordered by distance, so a
-        # row the threshold removes has only further rows after it.
-        neighbours = await EmbeddingRepository(session).nearest(
+        await _set_effort(session, effort_for(settings=settings, limit=limit, offset=offset))
+        hits, has_more, statuses = await _page_of(
+            vector,
+            session=session,
             model=model,
-            vector=vector,
-            limit=limit + 1,
+            limit=limit,
             offset=offset,
-            max_distance=None if min_score is None else score_of(min_score),
+            min_score=min_score,
         )
-        has_more = len(neighbours) > limit
-        page = neighbours[:limit]
-        assets = await AssetRepository(session).by_ids([one.asset_id for one in page])
-        statuses = await indexing.status_of(session, list(assets))
 
-    hits = [
-        Hit(asset=assets[one.asset_id], score=score_of(one.distance))
-        for one in page
-        if one.asset_id in assets
-    ]
     return SearchPage(
         hits=hits,
         statuses=statuses,
         has_more=has_more,
         model=model,
         query_truncated=truncated,
+    )
+
+
+async def search_image(
+    picture: BinaryIO,
+    *,
+    session: AsyncSession,
+    storage: MediaStorage,
+    settings: Settings,
+    pool: ThreadPoolExecutor,
+    limit: int,
+    offset: int = 0,
+    min_score: float | None = None,
+    model: str = DINOV2_LARGE,
+) -> SearchPage:
+    """One page of the assets that look most like the picture in the request.
+
+    The picture is written to a temporary file outside the media root, decoded
+    under the rules an upload is decoded under, embedded, and unlinked in a
+    `finally`. Nothing is stored: no asset row, no file under the media root,
+    no lookup by hash. A search is not an upload that forgot to save.
+    """
+    check_depth(limit=limit, offset=offset)
+    check_model(model, settings=settings, kind="picture")
+
+    received = await run_in_threadpool(receive, storage, picture)
+    try:
+        vector = await embed_picture(received.path, model=model, settings=settings, pool=pool)
+    finally:
+        await run_in_threadpool(discard_temporary, received.path)
+
+    async with session.begin():
+        await _set_effort(session, effort_for(settings=settings, limit=limit, offset=offset))
+        hits, has_more, statuses = await _page_of(
+            vector,
+            session=session,
+            model=model,
+            limit=limit,
+            offset=offset,
+            min_score=min_score,
+        )
+
+    return SearchPage(
+        hits=hits,
+        statuses=statuses,
+        has_more=has_more,
+        model=model,
+        query_truncated=False,
+    )
+
+
+async def search_similar(
+    asset_id: UUID,
+    *,
+    session: AsyncSession,
+    settings: Settings,
+    limit: int,
+    offset: int = 0,
+    min_score: float | None = None,
+    model: str = DINOV2_LARGE,
+) -> SearchPage:
+    """One page of the assets that look most like a stored one.
+
+    The asset's own stored vector is the query, so no model is loaded and no
+    inference runs — which is what makes this answerable on a build whose
+    weights were never downloaded. The asset is never among its own neighbours,
+    at any page: the exclusion happens inside the query, above the index scan
+    and before the offset is applied (design decision 5), and it costs one of
+    the candidates the index may produce, which is why the page may not reach
+    as deep as a text or picture query.
+    """
+    check_depth(limit=limit, offset=offset, excluded=1)
+    check_model(model, settings=settings, kind="picture")
+
+    async with session.begin():
+        assets = AssetRepository(session)
+        if await assets.get(asset_id) is None:
+            raise AssetUnknownError(f"no asset {asset_id}")
+        embedding = await EmbeddingRepository(session).get(asset_id=asset_id, model=model)
+        if embedding is None:
+            raise NotIndexedError(f"asset {asset_id} has no {model!r} vector yet")
+        await _set_effort(
+            session, effort_for(settings=settings, limit=limit, offset=offset, excluded=1)
+        )
+        hits, has_more, statuses = await _page_of(
+            embedding.vector,
+            session=session,
+            model=model,
+            limit=limit,
+            offset=offset,
+            min_score=min_score,
+            exclude_asset_id=asset_id,
+        )
+
+    return SearchPage(
+        hits=hits,
+        statuses=statuses,
+        has_more=has_more,
+        model=model,
+        query_truncated=False,
     )

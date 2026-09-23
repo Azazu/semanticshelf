@@ -12,10 +12,11 @@ file next to `pyproject.toml` (the environment wins). Source of truth:
 | `LOG_LEVEL` | no | `info` | API | `debug`, `info`, `warning` or `error`; applies to the application and to the uvicorn / SQLAlchemy loggers. |
 | `LOG_JSON` | no | `true` | API | `true`: one JSON object per log line on stdout. `false`: a coloured console renderer for local development. |
 | `READINESS_TIMEOUT_SECONDS` | no | `3` | API | Budget for each database check of `GET /ready`; a slower database reports `not-ready`. The `SELECT 1` runs first, then the revision and model checks together under the same budget, so the probe answers within about twice this value. |
-| `ENABLED_MODELS` | no | `clip-vit-l14` | API, CLI | Comma-separated model keys the service may use. Only keys this build has an adapter for are accepted; anything else refuses at start, naming the offender. |
+| `ENABLED_MODELS` | no | `clip-vit-l14,dinov2-large` | API, CLI | Comma-separated model keys the service may use. The default is every key this build implements, so an upload is queued for both and both kinds of search answer. Only keys this build has an adapter for are accepted; anything else refuses at start, naming the offender. A deployment that runs one model halves what an upload costs and gives up the search the other one answers — without `dinov2-large` a picture query and `GET /assets/{id}/similar` are 503. |
 | `MODEL_WARMUP` | no | empty | API | Comma-separated keys loaded at start, on the inference pool. Must be a subset of `ENABLED_MODELS`. Empty means a model is loaded on its first use. |
-| `MODEL_CACHE` | no | `.data/models` | API, CLI | Directory the weights are cached in; about 1.6 GB for CLIP. Gitignored, and mountable into a container. |
+| `MODEL_CACHE` | no | `.data/models` | API, CLI | Directory the weights are cached in: about 1.6 GB for CLIP and 1.2 GB for DINOv2, downloaded on first use. Gitignored, and mountable into a container. |
 | `CLIP_MODEL_NAME` | no | `openai/clip-vit-large-patch14` | API, CLI | The checkpoint behind the `clip-vit-l14` key. A mirror or compatible fine-tune may be substituted; one of another width is refused at load. |
+| `DINOV2_MODEL_NAME` | no | `facebook/dinov2-large` | API, CLI | The checkpoint behind the `dinov2-large` key, under the same rule. It has no text tower: asking it for words is refused rather than approximated. |
 | `TORCH_NUM_THREADS` | no | `0` | API, CLI | Threads for one forward pass. `0` leaves torch its own default; set it to the CPU quota in a container. |
 | `EMBED_BATCH_SIZE` | no | `8` | API, CLI | Inputs per forward pass. Memory, not speed, sets this: a batch is one tensor. |
 | `INFERENCE_WORKERS` | no | `2` | API | Threads that load models and run inference, away from the event loop. |
@@ -37,10 +38,11 @@ DATABASE_URL=postgresql+asyncpg://<DB_USER>:<DB_PASSWORD>@127.0.0.1:5433/<DB_NAM
 LOG_LEVEL=info
 LOG_JSON=false
 READINESS_TIMEOUT_SECONDS=3
-ENABLED_MODELS=clip-vit-l14
+ENABLED_MODELS=clip-vit-l14,dinov2-large
 MODEL_WARMUP=
 MODEL_CACHE=.data/models
 CLIP_MODEL_NAME=openai/clip-vit-large-patch14
+DINOV2_MODEL_NAME=facebook/dinov2-large
 TORCH_NUM_THREADS=0
 EMBED_BATCH_SIZE=8
 INFERENCE_WORKERS=2

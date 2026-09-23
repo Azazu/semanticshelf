@@ -101,6 +101,40 @@ class Client:
             found = {**found, "items": kept}
         return found
 
+    def search_image(
+        self,
+        *,
+        name: str,
+        data: bytes,
+        content_type: str,
+        limit: int,
+        offset: int,
+        min_score: float | None,
+    ) -> dict[str, Any]:
+        """A picture as the query. The page fields travel beside the file."""
+        form = {"limit": str(limit), "offset": str(offset)}
+        if min_score is not None:
+            form["min_score"] = str(min_score)
+        found: dict[str, Any] = self._ask(
+            "POST",
+            f"{API}/search/image",
+            files={"file": (name, data, content_type)},
+            data=form,
+        )
+        return found
+
+    def similar(
+        self, identifier: str, *, limit: int, offset: int, min_score: float | None
+    ) -> dict[str, Any]:
+        """The neighbours of a stored asset, under the service's own default model."""
+        parameters: dict[str, Any] = {"limit": limit, "offset": offset}
+        if min_score is not None:
+            parameters["min_score"] = min_score
+        found: dict[str, Any] = self._ask(
+            "GET", f"{API}/assets/{identifier}/similar", params=parameters
+        )
+        return found
+
     def assets(self, *, limit: int, offset: int, tags_all: str | None = None) -> dict[str, Any]:
         parameters: dict[str, Any] = {"limit": limit, "offset": offset}
         if tags_all:

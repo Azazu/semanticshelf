@@ -13,9 +13,9 @@ ownership the claim handed out — if the job has since been reclaimed, reset, o
 deleted with its asset, nothing lands at all.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 import structlog
@@ -26,7 +26,7 @@ from app.domain import EMBEDDING_MODELS, IndexingJob, UnknownModelError
 from app.ml.pool import acquire, run_in_pool
 from app.repositories.assets import AssetRepository
 from app.repositories.embeddings import EmbeddingRepository
-from app.repositories.jobs import ClaimedJob, IndexingJobRepository
+from app.repositories.jobs import ClaimedJob, IndexingJobRepository, MissingWork
 from app.services import images
 from app.storage import MediaStorage
 
@@ -38,6 +38,10 @@ BACKOFF_BASE_SECONDS = 10
 #: What `indexing_jobs.last_error` may hold. The column allows two kilobytes.
 REASON_MAX_BYTES = 2 * 1024
 TRUNCATION_MARK = "…[truncated]"
+
+#: Why a unit of work is still queued when a runner has stopped waiting for it.
+QUEUED_WAITING = "waiting in the queue"
+QUEUED_HELD = "held by a runner"
 
 log = structlog.stdlib.get_logger(__name__)
 
@@ -258,6 +262,191 @@ async def drain(
             log.info("indexing batch finished", jobs=taken)
     except Exception:
         log.exception("indexing batch failed")
+
+
+# --- finishing a named set of work -------------------------------------------
+
+
+@dataclass(slots=True)
+class WorkReport:
+    """What became of a named set of work: done, still queued, or given up on."""
+
+    indexed: int = 0
+    queued: list[tuple[UUID, str]] = field(default_factory=list)
+    failed: list[tuple[UUID, str]] = field(default_factory=list)
+
+
+def unfinished(statuses: Mapping[UUID, Mapping[str, str]]) -> list[UUID]:
+    """The assets among these whose work is still waiting or running."""
+    return [
+        asset_id
+        for asset_id, per_model in statuses.items()
+        if any(state in ("pending", "running") for state in per_model.values())
+    ]
+
+
+async def finish_work(
+    asset_ids: Sequence[UUID],
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    pool: ThreadPoolExecutor,
+    on_progress: Callable[[int], None] | None = None,
+) -> WorkReport:
+    """Carry out the work of these assets — and only theirs.
+
+    The queue may hold anything else, however old and however much of it: the
+    claims here name these assets, so a command that created work finishes what
+    it started instead of being satisfied by someone else's backlog.
+
+    It stops when none of this work is unfinished, or when a pass claims nothing
+    while some still is — work another runner holds, or work waiting out the
+    delay before its next attempt. It does not sleep to outlast that delay: what
+    it could not do is reported, not waited for.
+    """
+    work = WorkReport()
+    if not asset_ids:
+        return work  # nothing was named, so there is nothing of ours to do
+
+    passes = len(asset_ids) * settings.job_max_attempts + 1
+    for _ in range(passes):
+        async with session_factory() as session:
+            statuses = await status_of(session, asset_ids)
+        still_going = unfinished(statuses)
+        if on_progress is not None:
+            on_progress(len(asset_ids) - len(still_going))
+        if not still_going:
+            break
+        taken = await run_batch(
+            session_factory=session_factory,
+            storage=storage,
+            settings=settings,
+            pool=pool,
+            asset_ids=still_going,
+        )
+        if not taken:
+            break
+
+    async with session_factory() as session:
+        statuses = await status_of(session, asset_ids)
+        for asset_id in asset_ids:
+            states = statuses.get(asset_id, {})
+            if all(state == "done" for state in states.values()) and states:
+                work.indexed += 1
+                continue
+            for model, state in sorted(states.items()):
+                if state == "done":
+                    continue
+                if state == "failed":
+                    work.failed.append((asset_id, await recorded_reason(session, asset_id, model)))
+                else:
+                    work.queued.append(
+                        (asset_id, QUEUED_HELD if state == "running" else QUEUED_WAITING)
+                    )
+    return work
+
+
+async def recorded_reason(session: AsyncSession, asset_id: UUID, model: str) -> str:
+    """What the queue recorded about a job that failed for good.
+
+    The other way round from `reason_for`, which turns an exception into the
+    text that is stored: this reads that text back out.
+    """
+    for job in await jobs_of(session, asset_id):
+        if job.model == model and job.last_error:
+            return job.last_error
+    return "no reason recorded"
+
+
+# --- work for what is already stored ------------------------------------------
+
+
+@dataclass(slots=True)
+class BackfillReport:
+    """What `index missing` did for one model."""
+
+    model: str
+    queued: list[UUID] = field(default_factory=list)
+    skipped_failed: list[UUID] = field(default_factory=list)
+    #: `None` when the run was asked to leave the work queued.
+    work: WorkReport | None = None
+
+
+async def queue_missing(
+    *, session_factory: async_sessionmaker[AsyncSession], settings: Settings, model: str
+) -> MissingWork:
+    """Queue the work a model has none of, for assets that are already stored.
+
+    An operator's act, never the service's own: nothing here is called at start,
+    in the lifespan or from a background task, because a service that began
+    writing rows and burning CPU because someone restarted it would be a worse
+    service than one that waits to be asked.
+    """
+    if model not in settings.enabled_models:
+        raise ModelNotEnabled(f"model {model!r} is not enabled in this build")
+    async with session_factory() as session, session.begin():
+        return await IndexingJobRepository(session).queue_missing(model=model)
+
+
+async def backfill(
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    pool: ThreadPoolExecutor,
+    model: str,
+    index: bool = True,
+    on_progress: Callable[[int], None] | None = None,
+) -> BackfillReport:
+    """Queue one model's missing work and then carry it out.
+
+    The same drain `index-folder` uses, over the assets this run queued. It
+    claims by asset rather than by model, so an asset that also had another
+    model's work waiting gets that done too — which is the queue doing its job,
+    and is reported as it happens.
+    """
+    missing = await queue_missing(session_factory=session_factory, settings=settings, model=model)
+    report = BackfillReport(
+        model=model, queued=missing.queued, skipped_failed=missing.skipped_failed
+    )
+    if index:
+        report.work = await finish_work(
+            missing.queued,
+            session_factory=session_factory,
+            storage=storage,
+            settings=settings,
+            pool=pool,
+            on_progress=on_progress,
+        )
+    return report
+
+
+def describe_backfill(reports: Sequence[BackfillReport]) -> list[str]:
+    """The reports as lines for a terminal, in the shape `index-folder` uses."""
+    lines: list[str] = []
+    for report in reports:
+        lines.append(f"model: {report.model}")
+        lines.append(f"queued: {len(report.queued)}")
+        lines.append(f"skipped (failed work): {len(report.skipped_failed)}")
+        if report.skipped_failed:
+            lines.append(
+                "  their work for this model gave up; "
+                "POST /api/v1/assets/{id}/reindex runs it again"
+            )
+        work = report.work
+        if work is None:
+            lines.append("indexing: not run")
+            continue
+        if not report.queued:
+            lines.append("indexing: nothing to do")
+            continue
+        lines.append(f"indexed: {work.indexed}")
+        lines.append(f"still queued: {len(work.queued)}")
+        lines.extend(f"  queued  {asset_id} — {why}" for asset_id, why in work.queued)
+        lines.append(f"failed: {len(work.failed)}")
+        lines.extend(f"  failed  {asset_id} — {reason}" for asset_id, reason in work.failed)
+    return lines
 
 
 # --- what the API shows -------------------------------------------------------

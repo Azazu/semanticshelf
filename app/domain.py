@@ -52,7 +52,38 @@ EMBEDDING_MODELS: Final[Mapping[str, int]] = {
 #: once; the code catches up one change at a time, and configuration may only
 #: enable what the code can actually run. `app/ml/registry.py` declares the same
 #: set as a table of factories, and a unit test holds the two together.
-IMPLEMENTED_MODELS: Final[frozenset[str]] = frozenset({CLIP_VIT_L14})
+IMPLEMENTED_MODELS: Final[frozenset[str]] = frozenset({CLIP_VIT_L14, DINOV2_LARGE})
+
+
+@dataclass(frozen=True, slots=True)
+class Modality:
+    """What a model can be asked for: words, pictures, or both."""
+
+    text: bool
+    images: bool
+
+    def __post_init__(self) -> None:
+        if not (self.text or self.images):
+            raise ValueError("a model that takes neither text nor images embeds nothing")
+
+    @property
+    def described(self) -> str:
+        """What this model takes, for a refusal a client can act on."""
+        if self.text and self.images:
+            return "text and pictures"
+        return "text" if self.text else "pictures"
+
+
+#: Which kinds of query each model can answer. One table, because the router
+#: refuses an impossible pair before anything is loaded and the service must
+#: never have to ask a model what it cannot do — loading a model to find that
+#: out is exactly the cost the refusal exists to avoid. Every key of
+#: `EMBEDDING_MODELS` appears here, so a model cannot be added without the
+#: question being answered; a unit test holds the two tables together.
+MODEL_MODALITIES: Final[Mapping[str, Modality]] = {
+    CLIP_VIT_L14: Modality(text=True, images=True),  # one joint space
+    DINOV2_LARGE: Modality(text=False, images=True),  # no text tower at all
+}
 
 
 class UnknownModelError(LookupError):
@@ -71,6 +102,18 @@ def vector_index_name(model: str) -> str:
 def dimension_of(model: str) -> int:
     """The declared dimension of a model key, or `KeyError` for an unknown key."""
     return EMBEDDING_MODELS[model]
+
+
+def modality_of(model: str) -> Modality:
+    """What a model key can be asked for.
+
+    Raises `UnknownModelError` rather than `KeyError`, because the key usually
+    arrives from a request: every layer reports an unknown model the same way.
+    """
+    try:
+        return MODEL_MODALITIES[model]
+    except KeyError as exc:
+        raise UnknownModelError(f"unknown embedding model: {model!r}") from exc
 
 
 # --- immutable objects -------------------------------------------------------

@@ -19,6 +19,7 @@ LogLevel = Literal["debug", "info", "warning", "error"]
 
 DEFAULT_MODEL_CACHE = Path(".data/models")
 DEFAULT_CLIP_CHECKPOINT = "openai/clip-vit-large-patch14"
+DEFAULT_DINOV2_CHECKPOINT = "facebook/dinov2-large"
 DEFAULT_MEDIA_ROOT = Path(".data/media")
 MIB = 1024 * 1024
 
@@ -47,6 +48,10 @@ class Settings(BaseSettings):
     #: The checkpoint behind the `clip-vit-l14` key. A compatible fine-tune or
     #: mirror may be substituted; one of a different width is refused at load.
     clip_model_name: str = DEFAULT_CLIP_CHECKPOINT
+    #: The checkpoint behind the `dinov2-large` key, under the same rule: a
+    #: mirror or compatible fine-tune is fine, a different width is refused at
+    #: load rather than stored.
+    dinov2_model_name: str = DEFAULT_DINOV2_CHECKPOINT
     #: 0 leaves torch its own default of one thread per physical core.
     torch_num_threads: int = Field(default=0, ge=0)
     embed_batch_size: int = Field(default=8, gt=0)
@@ -137,4 +142,11 @@ class Settings(BaseSettings):
         return self
 
 
-__all__ = ["CLIP_VIT_L14", "DEFAULT_CLIP_CHECKPOINT", "DEFAULT_MODEL_CACHE", "LogLevel", "Settings"]
+__all__ = [
+    "CLIP_VIT_L14",
+    "DEFAULT_CLIP_CHECKPOINT",
+    "DEFAULT_DINOV2_CHECKPOINT",
+    "DEFAULT_MODEL_CACHE",
+    "LogLevel",
+    "Settings",
+]

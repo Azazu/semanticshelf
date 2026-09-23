@@ -4,8 +4,10 @@ A search engine with nothing in it cannot be shown to anyone. `make demo`
 fetches a few hundred pictures, indexes them, and leaves a corpus you can type
 a description at.
 
-Every number and every output on this page came from a real run on 2026-09-22;
-the commands are in the form they were run in.
+Every number and every output on this page came from a real run — the corpus
+and the licence counts on 2026-09-22, the third command and the picture search
+below on 2026-09-23, after the second model arrived. The commands are in the
+form they were run in.
 
 ## The dataset
 
@@ -132,7 +134,27 @@ still queued: 0
 failed: 0
 ```
 
-`make demo` is those two in order, with `DEMO_COUNT` (500) and `DEMO_ROOT`
+A third command ends the run:
+
+```console
+$ uv run semanticshelf index missing
+model: clip-vit-l14
+queued: 0
+skipped (failed work): 0
+indexing: nothing to do
+model: dinov2-large
+queued: 0
+skipped (failed work): 0
+indexing: nothing to do
+```
+
+Nothing to do, because the import above queued every enabled model — which is
+exactly what it should say. It earns its place for the corpus you imported
+*before* a model was enabled: those assets have no vector for it, nothing will
+give them one on its own, and this is the command that does. It is idempotent,
+so running it on a corpus that needs nothing costs one query per model.
+
+`make demo` is those three in order, with `DEMO_COUNT` (500) and `DEMO_ROOT`
 (`.data/demo`).
 
 Afterwards the corpus is searchable, through the ordinary endpoint. The answer
@@ -156,6 +178,24 @@ $ curl -s "http://127.0.0.1:8000/api/v1/search/text?q=a+red+stop+sign+at+a+junct
 
 Both pictures COCO tagged `stop-sign` come first, and they were found by the
 words, not by the tags: nothing about the query touches them.
+
+And by a picture, which is the other half of what the corpus is for — here one
+of those stop signs is the query, so it scores 1 against itself and the other
+one follows:
+
+```console
+$ curl -s -X POST "http://127.0.0.1:8010/api/v1/search/image" \
+    -F "file=@.data/demo/pictures/297343/000000297343.jpg" -F "limit=2" \
+    | jq -c '{items: [.items[] | {name: .asset.original_filename, tags: .asset.tags,
+                                  score: (.score * 1000 | round / 1000)}], model}'
+{"items":[{"name":"000000297343.jpg","tags":["stop-sign"],"score":1},
+          {"name":"000000122745.jpg","tags":["stop-sign"],"score":0.37}],
+ "model":"dinov2-large"}
+```
+
+That run had the service on `APP_PORT=8010`; the default is 8000. What each
+kind of search is *for*, and what a score means in each, is in
+[`../how-to/searching.md`](../how-to/searching.md).
 
 ## The layout on disk
 
