@@ -22,13 +22,14 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.core.settings import Settings
 from app.db.engine import create_session_factory
-from app.domain import CLIP_VIT_L14, DINOV2_LARGE, Narrowing, dimension_of
+from app.domain import CLIP_VIT_L14, DINOV2_LARGE, Narrowing, dimension_of, vector_index_name
 from app.ml import registry
 from app.ml.base import EmbeddingResult, normalise
 from app.ml.fake import FakeEmbedder
 from app.ml.pool import create_pool
 from app.repositories import EmbeddingRepository
 from app.services import search
+from tests.integration.conftest import explain
 
 pytestmark = pytest.mark.integration
 
@@ -428,3 +429,137 @@ async def test_the_bounded_question_is_asked_only_when_the_scan_ran_out(
         narrowing=Narrowing(tags_all=("nothing-carries-this",)),
     )
     assert len(counting) == 1, "only the one where the scan ran out"
+
+
+# --- the scan's own bound, where it exists --------------------------------------
+#
+# Which plan answers a narrowed query is the planner's choice, and on a corpus
+# this size it answers a selective narrowing exactly, over the narrowed rows,
+# where there is no scan to bound (`design.md`, Context). The path this change
+# is about is the other one — the vector index with the narrowing inside it —
+# which a large corpus gets by itself, because computing every matching distance
+# stops being cheap. These tests reach it deliberately, with `enable_sort = off`,
+# and say so; the alternative would be a fixture of a million rows.
+#
+# Measured, on the fixture below (3 000 assets, one match in a hundred, a page
+# needing 21 candidates): at a scan budget of 200 the index path reaches 2 of
+# them, and at the default 20 000 it reaches all 21.
+
+
+async def force_the_index_path(session: AsyncSession, *, tuples: int) -> None:
+    """The plan this change is about, and how far its scan may look.
+
+    Both are set for the session rather than for a transaction, because the
+    search opens its own. `enable_sort = off` is what keeps the planner from
+    answering the narrowing exactly; `hnsw.max_scan_tuples` is the bound whose
+    report is under test.
+    """
+    await session.execute(sa.text("SET enable_sort = off"))
+    await session.execute(sa.text(f"SET hnsw.max_scan_tuples = {tuples}"))
+    await session.commit()
+
+
+async def seed_analysed(session: AsyncSession, *, assets: int, rare_every: int) -> None:
+    """The corpus, with statistics, so nothing here depends on their absence."""
+    await seed(session, assets=assets, rare_every=rare_every)
+    async with session.begin():
+        await session.execute(sa.text("ANALYZE assets, embeddings"))
+
+
+async def test_the_vector_index_answers_the_narrowing_when_it_is_used(
+    session: AsyncSession,
+) -> None:
+    """The premise the tests below rest on, asserted rather than assumed."""
+    await seed_analysed(session, assets=3000, rare_every=100)
+    await force_the_index_path(session, tuples=200)
+    statement = EmbeddingRepository(session).nearest_statement(
+        model=CLIP_VIT_L14,
+        vector=plane_vector(CLIP_DIM, 1.0, 0.0),
+        limit=21,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    async with session.begin():
+        plan = await explain(session, statement, no_seqscan=False)
+
+    assert vector_index_name(CLIP_VIT_L14) in plan, plan
+
+
+async def test_a_full_page_the_scan_was_cut_short_of_completing(
+    session: AsyncSession,
+    db_settings: Settings,
+    pool: Any,
+    embedder: PlanarEmbedder,
+    counting: list[int],
+) -> None:
+    """The case a full page hides. The scan reaches two candidates; the page
+    asked for two and is therefore complete to look at, while the row that would
+    have said whether more exist was never reached and thirty matching assets
+    remain. Nothing about the answer's shape betrays it — only what the scan
+    reached does."""
+    await seed_analysed(session, assets=3000, rare_every=100)
+    await force_the_index_path(session, tuples=200)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=2,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert len(page.hits) == 2, "a full page"
+    assert page.has_more is False, "because the row beyond it was never reached"
+    assert page.scan_limited is True, "which is the only thing that says so"
+    assert counting == [3], "the bounded question, stopped at reached + 1"
+
+
+async def test_a_short_page_the_scan_was_cut_short_of_filling(
+    session: AsyncSession,
+    db_settings: Settings,
+    pool: Any,
+    embedder: PlanarEmbedder,
+    counting: list[int],
+) -> None:
+    await seed_analysed(session, assets=3000, rare_every=100)
+    await force_the_index_path(session, tuples=200)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=20,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert len(page.hits) == 2, "of the twenty it asked for"
+    assert page.scan_limited is True
+    assert counting == [3]
+
+
+async def test_the_same_query_at_the_default_budget_is_complete(
+    session: AsyncSession,
+    db_settings: Settings,
+    pool: Any,
+    embedder: PlanarEmbedder,
+    counting: list[int],
+) -> None:
+    """Same plan, same corpus, same narrowing — only the budget differs."""
+    await seed_analysed(session, assets=3000, rare_every=100)
+    await force_the_index_path(session, tuples=20000)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=2,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert len(page.hits) == 2
+    assert page.has_more is True, "the scan reached the row beyond the page"
+    assert page.scan_limited is False
+    assert counting == [], "and nothing had to be asked"

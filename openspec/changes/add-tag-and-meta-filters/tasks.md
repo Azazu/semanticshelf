@@ -92,10 +92,11 @@ two plans answered the query.
   it counts neither an asset without a vector of that model nor the asking
   asset. Demonstrated failing input: dropping the model makes an asset indexed
   only by the other model count as reachable.
-- [ ] 3.5 The whole positive path, against a real index and without touching the
-  planner's statistics: a narrowing broad enough that the database uses the
-  vector index (half the corpus, measured), a scan budget lowered so it cannot
-  reach what the page needs, and matching assets left over. Verify: an
+- [x] 3.5 The whole positive path, against a real index and without touching the
+  planner's statistics: the index path reached deliberately (`enable_sort = off`
+  — a narrowing broad enough to get it naturally turns out to be satisfied by
+  the first iteration of the scan, measured), a budget lowered so the scan
+  cannot reach what the page needs, and matching assets left over. Verify: an
   integration test asserts the plan uses the model's vector index, that the
   answer is a **full** page, and that `scan_limited` is true — the candidates,
   the bounded question and the flag, wired together — paired with the same query
@@ -103,11 +104,11 @@ two plans answered the query.
   asking the bounded question, and asking it with `needed` in place of
   `reached`, each of which makes this test fail while every unit test still
   passes.
-- [ ] 3.5a The negative cases, over a store the search can exhaust: a full page,
+- [x] 3.5a The negative cases, over a store the search can exhaust: a full page,
   a short page, an empty page at an offset, and a page the threshold empties.
   Verify: an integration test asserts `scan_limited` is false for each, because
   in each the scan reached what the answer needed or the store held no more.
-- [ ] 3.6 The question is asked only when it is needed. Verify: an integration
+- [x] 3.6 The question is asked only when it is needed. Verify: an integration
   test counts the statements of an unnarrowed page, of a narrowed page that
   reached what it needed, and of a narrowed page that did not, and asserts only
   the last pays for it.
