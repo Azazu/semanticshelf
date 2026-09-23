@@ -54,17 +54,15 @@ Two things found on the way, both fixed here:
 
 ## Next step
 
-Push the branch, watch CI, and then Gate 2:
-`/gate-review add-dinov2-image-search 2`.
+Push, watch CI, then the Gate 2 confirmation of round 1:
+`/gate-review add-dinov2-image-search 2 confirm 1`.
 
-Worth the reviewer's attention: the exclusion lives in
-`EmbeddingRepository.nearest_statement` above the window and pays for itself
-with one extra candidate and one page-depth (`depth_bound` is the single rule
-both bounds come from); the backfill's only concurrency guarantee is
-`pg_advisory_xact_lock` in the inserting transaction, because the queue has no
-uniqueness per (asset, model); and the drain loop moved from
-`app/services/folder.py` to `app/services/indexing.py` as `finish_work`, which
-`index-folder` now calls through a wrapper.
+Round 1 found one `major`, and it was real: the action this change put under
+every thumbnail was keyed by the asset alone, so a page that repeats an asset —
+which the search contract explicitly allows — made Streamlit refuse to render,
+on the text search page as well. Reproduced first, then fixed in the grid (a key
+per drawn cell) and in the two accumulating pages (a repeat is dropped, the
+service's offset is not), with both halves demonstrated by removing them.
 
 ## Blockers
 
