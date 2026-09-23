@@ -112,28 +112,28 @@ two plans answered the query.
   test counts the statements of an unnarrowed page, of a narrowed page that
   reached what it needed, and of a narrowed page that did not, and asserts only
   the last pays for it.
-- [ ] 3.7 The envelope carries the report, and the OpenAPI document describes
+- [x] 3.7 The envelope carries the report, and the OpenAPI document describes
   it. Verify: api tests assert it on a narrowed answer that was cut short, on a
   narrowed answer that was not, and on an unnarrowed answer; the document
   carries the field with a description and the example shows it.
 
 ## 4. The three searches and the listing
 
-- [ ] 4.1 `GET /api/v1/search/text` and `GET /api/v1/assets/{id}/similar` take
+- [x] 4.1 `GET /api/v1/search/text` and `GET /api/v1/assets/{id}/similar` take
   `tags_all`, `tags_any` and `meta.<key>`; `POST /api/v1/search/image` takes
   them as form fields beside the picture (design decision 5). Verify: api tests
   for each surface — a narrowing that is honoured, one that is refused, and the
   refusal's problem type; the OpenAPI document describes the `meta.<key>`
   convention in each operation.
-- [ ] 4.2 An asset may ask for its neighbours under a narrowing it does not
+- [x] 4.2 An asset may ask for its neighbours under a narrowing it does not
   itself satisfy. Verify: an integration test narrows to a tag the asking asset
   lacks and asserts it is answered, with the asset still absent from its own
   answer.
-- [ ] 4.3 `GET /api/v1/assets` gains `meta.<key>`, alongside the tag filters it
+- [x] 4.3 `GET /api/v1/assets` gains `meta.<key>`, alongside the tag filters it
   has had since change 5. Verify: an integration test asserts exactly the
   matching assets; an api test asserts the refusals; the plan test asserts the
   metadata index still answers it.
-- [ ] 4.4 Every refusal is the problem details this service uses, with a stable
+- [x] 4.4 Every refusal is the problem details this service uses, with a stable
   type. Verify: api tests assert the type and that the detail names the value
   that was wrong, for each of: a tag that is not a tag, a metadata key outside
   the shape, six conditions, a repeated key.

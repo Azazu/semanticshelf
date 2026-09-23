@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain import EMBEDDING_MODELS, Asset
+from app.domain import EMBEDDING_MODELS, Asset, Narrowing
 from app.repositories import AssetRepository, EmbeddingRepository, IndexingJobRepository
 from tests.integration.conftest import explain
 
@@ -115,6 +115,22 @@ async def test_an_index_answers_each_containment_query(session: AsyncSession) ->
     )
     assert "ix_assets_tags" in tags_plan, tags_plan
     assert "ix_assets_meta" in meta_plan, meta_plan
+
+    # And the statement the listing itself runs, which since change 12 carries
+    # the same filter object a search carries: the narrowing must still be a
+    # containment an index can answer, on both columns.
+    listed_tags = await explain(
+        session,
+        assets.page_statement(narrowing=Narrowing(tags_all=("dragon",))),
+        no_seqscan=True,
+    )
+    listed_meta = await explain(
+        session,
+        assets.page_statement(narrowing=Narrowing(meta={"dataset": "demo"})),
+        no_seqscan=True,
+    )
+    assert "ix_assets_tags" in listed_tags, listed_tags
+    assert "ix_assets_meta" in listed_meta, listed_meta
 
 
 async def test_removing_an_asset_removes_what_was_derived_from_it(

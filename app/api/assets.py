@@ -45,6 +45,7 @@ from app.api.deps import (
     SettingsDep,
     StorageDep,
 )
+from app.api.filters import INVALID_FILTER_TYPE, NARROWING_DESCRIPTION, narrowing_from
 from app.core.errors import instance_for_current_request, problem, problem_response
 from app.domain import ASSET_SOURCES, JOB_STATUSES, Asset, UnknownModelError
 from app.schemas.assets import (
@@ -68,6 +69,7 @@ from app.services.indexing import drain, jobs_of, known_models, reset_work, stat
 from app.services.tagging import (
     METADATA_MAX_BYTES,
     MetadataError,
+    NarrowingError,
     TagError,
     merge_metadata,
     normalise_filename,
@@ -98,7 +100,6 @@ INVALID_META_TYPE = "/errors/invalid-meta"
 UNSUPPORTED_TYPE = "/errors/unsupported-media-type"
 TOO_LARGE_TYPE = "/errors/image-too-large"
 TOO_SMALL_TYPE = "/errors/image-too-small"
-INVALID_FILTER_TYPE = "/errors/invalid-filter"
 UNKNOWN_MODEL_TYPE = "/errors/unknown-model"
 
 #: The listing's bounds, fixed by the requirements.
@@ -281,14 +282,15 @@ def _parse_index_status(value: str) -> tuple[str, str]:
     summary="List assets",
     description=(
         "Newest first, with the identifier as tie-break. `limit` defaults to 20 and is at "
-        "most 100, `offset` at most 10 000. Filter by `tags_all`, `tags_any` (comma-separated, "
-        "normalised like any tag), `source`, and `index_status` as `<model>:<state>` — the "
+        f"most 100, `offset` at most 10 000. {NARROWING_DESCRIPTION} Beside that narrowing, "
+        "filter by `source` and by `index_status` as `<model>:<state>` — the "
         "state of that model's newest indexing job. The page says whether more items exist; "
         "there is no total, which would be stale the moment it was read."
     ),
     response_model=AssetPage,
 )
 async def list_asset_page(
+    request: Request,
     session: SessionDep,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     offset: Annotated[int, Query(ge=0, le=MAX_OFFSET)] = 0,
@@ -300,10 +302,11 @@ async def list_asset_page(
     ] = None,
 ) -> Any:
     try:
-        required = split_tag_fields([tags_all]) if tags_all else ()
-        any_of = split_tag_fields([tags_any]) if tags_any else ()
-    except TagError as exc:
-        return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, INVALID_TAGS_TYPE, str(exc))
+        narrowing = narrowing_from(
+            request.query_params.multi_items(), tags_all=tags_all, tags_any=tags_any
+        )
+    except NarrowingError as exc:
+        return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, INVALID_FILTER_TYPE, str(exc))
     try:
         work = _parse_index_status(index_status) if index_status else None
     except (ValueError, UnknownModelError) as exc:
@@ -311,8 +314,7 @@ async def list_asset_page(
 
     assets, has_more = await list_assets(
         session,
-        tags_all=required,
-        tags_any=any_of,
+        narrowing=narrowing,
         source=source,
         index_status=work,
         limit=limit,

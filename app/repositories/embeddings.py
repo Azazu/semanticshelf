@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain import Embedding, Narrowing, NeighbourHit, UnknownModelError, dimension_of
 from app.models import Asset as AssetRow
 from app.models import Embedding as EmbeddingRow
+from app.repositories.narrowing import narrowing_clauses
 
 UNIQUE_CONSTRAINT = "uq_embeddings_asset_model"
 
@@ -44,23 +45,6 @@ def checked_dimension(model: str, vector: Sequence[float]) -> int:
             f"model {model!r} takes {dimension} dimensions, got {len(vector)}"
         )
     return dimension
-
-
-def narrowing_clauses(narrowing: Narrowing) -> list[sa.ColumnElement[bool]]:
-    """The narrowing as predicates on the `assets` row.
-
-    Containment in every case, so every one of them is answered by a GIN index:
-    `@>` for all of a set of tags, `&&` for any of them, and `@>` again for
-    top-level metadata equality. The values are bound, never rendered.
-    """
-    clauses: list[sa.ColumnElement[bool]] = []
-    if narrowing.tags_all:
-        clauses.append(AssetRow.tags.contains(list(narrowing.tags_all)))
-    if narrowing.tags_any:
-        clauses.append(AssetRow.tags.overlap(list(narrowing.tags_any)))
-    if narrowing.meta:
-        clauses.append(AssetRow.meta.contains(dict(narrowing.meta)))
-    return clauses
 
 
 class EmbeddingRepository:

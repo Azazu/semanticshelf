@@ -46,6 +46,15 @@ class SearchPage(BaseModel):
     query_truncated: bool = Field(
         description="True when the model could not represent the whole query and cut it."
     )
+    scan_limited: bool = Field(
+        default=False,
+        description=(
+            "True when the search stopped at the bound on how far it may look rather than at "
+            "the end of the ranking: there are more results matching the narrowing, and this "
+            "page is not the whole answer. Only a narrowed search can set it — narrow the "
+            "query further, or ask for a smaller page."
+        ),
+    )
 
 
 #: What one answer looks like, for the OpenAPI document (FR-OPS-4). Taken from
@@ -80,6 +89,7 @@ SEARCH_PAGE_EXAMPLE: dict[str, Any] = {
     "has_more": True,
     "model": "clip-vit-l14",
     "query_truncated": False,
+    "scan_limited": False,
 }
 
 
@@ -100,3 +110,8 @@ class ImageSearchQuery(BaseModel):
         description="Which model answers. It must be one this build runs, and one that takes "
         "pictures.",
     )
+    #: Carried as written and parsed afterwards, with the `meta.<key>` fields of
+    #: the same form: a narrowing is refused by its own problem type, naming the
+    #: value that was wrong, rather than as a field of the wrong shape.
+    tags_all: str | None = None
+    tags_any: str | None = None

@@ -7,9 +7,10 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain import Asset
+from app.domain import NO_NARROWING, Asset, Narrowing
 from app.models import Asset as AssetRow
 from app.repositories.jobs import IndexingJobRepository
+from app.repositories.narrowing import narrowing_clauses
 
 DEFAULT_LIMIT = 50
 
@@ -165,32 +166,29 @@ class AssetRepository:
         limit: int = DEFAULT_LIMIT,
     ) -> sa.Select[Any]:
         """The statement `find()` runs. Exposed so a test can read its plan."""
-        statement = sa.select(AssetRow)
-        if tags_all:
-            statement = statement.where(AssetRow.tags.contains(list(tags_all)))
-        if tags_any:
-            statement = statement.where(AssetRow.tags.overlap(list(tags_any)))
-        if meta:
-            statement = statement.where(AssetRow.meta.contains(dict(meta)))
+        narrowing = Narrowing(
+            tags_all=tuple(tags_all), tags_any=tuple(tags_any), meta=dict(meta or {})
+        )
+        statement = sa.select(AssetRow).where(*narrowing_clauses(narrowing))
         return statement.order_by(AssetRow.created_at.desc(), AssetRow.id.desc()).limit(limit)
 
     def page_statement(
         self,
         *,
-        tags_all: Sequence[str] = (),
-        tags_any: Sequence[str] = (),
+        narrowing: Narrowing = NO_NARROWING,
         source: str | None = None,
         index_status: tuple[str, str] | None = None,
         limit: int = DEFAULT_LIMIT,
         offset: int = 0,
     ) -> sa.Select[Any]:
         """One page of the listing, plus one row: the extra row is how the
-        caller knows more exist without a count that would be stale anyway."""
-        statement = sa.select(AssetRow)
-        if tags_all:
-            statement = statement.where(AssetRow.tags.contains(list(tags_all)))
-        if tags_any:
-            statement = statement.where(AssetRow.tags.overlap(list(tags_any)))
+        caller knows more exist without a count that would be stale anyway.
+
+        The narrowing is the same object a search carries and means the same
+        thing here (change 12, design decision 4); `source` and `index_status`
+        are the listing's own, because neither is a question about a ranking.
+        """
+        statement = sa.select(AssetRow).where(*narrowing_clauses(narrowing))
         if source is not None:
             statement = statement.where(AssetRow.source == source)
         if index_status is not None:
@@ -209,8 +207,7 @@ class AssetRepository:
     async def page(
         self,
         *,
-        tags_all: Sequence[str] = (),
-        tags_any: Sequence[str] = (),
+        narrowing: Narrowing = NO_NARROWING,
         source: str | None = None,
         index_status: tuple[str, str] | None = None,
         limit: int = DEFAULT_LIMIT,
@@ -221,8 +218,7 @@ class AssetRepository:
             (
                 await self._session.execute(
                     self.page_statement(
-                        tags_all=tags_all,
-                        tags_any=tags_any,
+                        narrowing=narrowing,
                         source=source,
                         index_status=index_status,
                         limit=limit,

@@ -182,10 +182,47 @@ async def test_the_tag_filters_select_exactly_what_they_say(client: httpx.AsyncC
 
 
 async def test_an_invalid_tag_in_a_filter_is_refused(client: httpx.AsyncClient) -> None:
+    """One type for every narrowing this service will not apply (change 12):
+    the listing and the three searches refuse the same filter the same way, and
+    the message is what names the value. `/errors/invalid-tags` stays what an
+    upload or an edit answers, where the tags are the asset's own."""
     response = await client.get(ASSETS, params={"tags_all": "not a tag!"})
 
     assert response.status_code == 422
-    assert response.json()["type"] == "/errors/invalid-tags"
+    assert response.json()["type"] == "/errors/invalid-filter"
+    assert "not a tag!" in response.json()["detail"]
+
+
+async def test_the_metadata_filter_selects_exactly_what_it_says(
+    client: httpx.AsyncClient,
+) -> None:
+    """The listing narrows by the same conditions a search narrows by, so that
+    a person who writes one writes the other (change 12, design decision 4)."""
+    coco = await upload(client, seed=11, meta='{"dataset": "coco", "licence": "by-2.0"}')
+    unsplash = await upload(client, seed=12, meta='{"dataset": "unsplash"}')
+    await upload(client, seed=13)
+
+    one = await client.get(ASSETS, params={"meta.dataset": "coco"})
+    two = await client.get(ASSETS, params={"meta.dataset": "coco", "meta.licence": "by-2.0"})
+    other = await client.get(ASSETS, params={"meta.dataset": "unsplash"})
+    neither = await client.get(ASSETS, params={"meta.dataset": "coco", "meta.licence": "cc0"})
+
+    assert [item["id"] for item in one.json()["items"]] == [coco["id"]]
+    assert [item["id"] for item in two.json()["items"]] == [coco["id"]], "both conditions"
+    assert [item["id"] for item in other.json()["items"]] == [unsplash["id"]]
+    assert neither.json()["items"] == [], "every condition has to hold"
+
+
+async def test_the_metadata_filter_combines_with_the_tag_filters(
+    client: httpx.AsyncClient,
+) -> None:
+    both = await upload(client, seed=14, tags="dragon", meta='{"dataset": "coco"}')
+    await upload(client, seed=15, tags="dragon", meta='{"dataset": "unsplash"}')
+    await upload(client, seed=16, meta='{"dataset": "coco"}')
+
+    response = await client.get(ASSETS, params={"tags_all": "dragon", "meta.dataset": "coco"})
+
+    assert [item["id"] for item in response.json()["items"]] == [both["id"]]
 
 
 async def test_the_source_filter_selects_uploads(client: httpx.AsyncClient) -> None:
