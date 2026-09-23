@@ -30,7 +30,8 @@ allowed to stop guessing about:
   Every one of them is a full page, with the iterative scan and without it,
   because **the planner leaves the vector index as soon as the narrowing is at
   all selective** and answers exactly over the narrowed rows — which is not a
-  worse answer than the index's, it is a better one.
+  worse answer than the index's, it is a better one: unbounded, and therefore
+  never short for a reason the caller has to be told about.
 
   So the empty page is real and conditional: it is what happens when the vector
   index is used *and* the narrowing removes what it produced. Stale statistics

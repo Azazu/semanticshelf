@@ -137,26 +137,32 @@ shortened by the threshold SHALL NOT be reported as a search that was.
 
 ### Requirement: Search is answered from the index, at the depth it is asked for
 
-Every search SHALL be answered from the vector index of the search model rather
-than by reading every stored vector. The index's search effort SHALL be set for
-each query to at least the depth that query needs — the page's size, its offset
-and the one item beyond the page that says whether more exist — so that a
-deeper page does not quietly return a worse ranking than a shallow one, and so
-that the answer about more items is read rather than assumed.
+A search that narrows nothing SHALL be answered from the vector index of the
+search model rather than by reading every stored vector. The index's search
+effort SHALL be set for each query to at least the depth that query needs — the
+page's size, its offset and the one item beyond the page that says whether more
+exist — so that a deeper page does not quietly return a worse ranking than a
+shallow one, and so that the answer about more items is read rather than
+assumed.
 
-A narrowed search SHALL NOT be answered by reading every stored vector either.
-The narrowing SHALL be part of what the database plans, not a filter applied to
-a result already chosen, and the database MAY answer it in either of two ways:
-by that vector index, or by computing distances over exactly the assets the
-narrowing admits when it judges that cheaper. Both are correct, and which is
-used SHALL NOT change what the answer contains.
+A narrowed search SHALL NOT be answered by reading every stored vector either,
+but SHALL NOT be required to use that index. The narrowing SHALL be part of what
+the database plans, never a filter applied to a result already chosen, and the
+database MAY answer it in either of two ways: by the vector index, or by
+computing distances over exactly the assets the narrowing admits when it judges
+that cheaper.
 
-When the vector index is used, the search SHALL keep looking, bounded, until the
-page is filled or that bound is reached; when the distances are computed
-exactly, the answer is complete and no bound applies.
+What the two ways SHALL share is the meaning of the answer: only assets that
+satisfy the narrowing, nearest first with the same tie-break, the same page
+bounds, the same threshold behaviour and the same rule for whether more exist.
+What they need NOT share is completeness. The index is bounded: it MAY stop
+before the page is filled, and MUST then say so (above). Computing the distances
+exactly is not bounded and always says nothing stopped it. So two answers to one
+question MAY differ in what they hold, and the one that is short SHALL say why —
+which is the difference a client can act on, and the only one it is told.
 
 #### Scenario: The index answers the query
-- **WHEN** the execution plan of a search is inspected
+- **WHEN** the execution plan of a search that narrows nothing is inspected
 - **THEN** it shows a scan of the search model's vector index and no sequential
   scan of the stored vectors
 
@@ -175,3 +181,10 @@ exactly, the answer is complete and no bound applies.
   searched with
 - **THEN** the index answers it, the narrowing is part of what that scan
   answers, and the page comes back full while matching assets remain
+
+#### Scenario: The same question answered two ways
+- **WHEN** one narrowed query is answered by the index within a bound it reaches,
+  and the same query is answered by computing the distances exactly
+- **THEN** both hold only assets satisfying the narrowing, in the same order,
+  and the bounded one may hold fewer — and says that it stopped at its bound,
+  which the other never does
