@@ -74,10 +74,10 @@ and measured.
   different fields, no search inside `meta` beyond top-level string equality —
   FR-FLT-3 fixes that shape deliberately, and anything wider is a new proposal
   with its own index question.
-- **Changing what the threshold does.** `min_score` keeps removing results the
-  page already holds rather than reaching further down for replacements (change
-  8). Where that removal *happens* moves one layer — out of the outermost select
-  and into the service — because the count of rows before it is what tells a
+- **Changing what a page means.** `min_score` keeps removing results the page
+  already holds rather than reaching further down for replacements (change 8),
+  and the offset keeps skipping. Where those two steps *happen* moves one layer
+  up, because the count of candidate rows before them is what tells a
   budget-limited answer from an exhausted ranking (design decision 3); the
   behaviour a caller sees is unchanged, and a test holds it so.
 - **A schema change.** `ix_assets_tags` (GIN) and `ix_assets_meta` (GIN,

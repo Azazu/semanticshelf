@@ -51,43 +51,56 @@ that is *full* can be just as wrong.
 
 ## 3. What the answer says when the scan stops
 
-- [ ] 3.1 The repository reports how many candidate rows the page produced
-  **before** the threshold, and the threshold moves out of the outermost select
-  into the service (design decision 3). Verify: an integration test asserts that
-  a threshold shortens a page exactly as it did before the move — same items,
-  same `has_more` — reusing change 8's own threshold tests unchanged; another
-  asserts the candidate count is the pre-threshold number for a page the
-  threshold empties. Demonstrated failing input: counting after the threshold
-  makes the empty-page-after-threshold test report a stopped scan.
-- [ ] 3.2 The decision itself: the search is reported as stopped at its bound
-  when the page produced fewer candidates than the answer asked for
-  (`limit + 1`, plus one more when an asset excludes itself, beyond `offset`)
-  **and** more matching rows exist than `offset + candidates`; otherwise not.
-  Verify: unit tests over the decision function for — the page produced
-  everything asked (never limited, no question asked); it produced fewer and
-  nothing more exists (exhausted); it produced fewer and more exist (limited);
-  it produced exactly `limit` while more exist (limited, although the page is
-  full). Demonstrated failing input: deciding from the rendered page instead of
-  the candidate count makes the fourth case report the end of the ranking —
-  the defect Gate 1 named.
-- [ ] 3.3 The bounded question is asked with the search's own inputs: its model,
-  its narrowing, and the asking asset excluded for `/similar`, bounded by
-  `offset + candidates + 1`. Verify: integration tests assert it counts neither
-  assets without a vector of that model nor the asking asset, and that a nonzero
-  offset compares against the prefix the scan consumed rather than against the
-  page. Demonstrated failing input: dropping the model from the question makes
-  an asset indexed only by the other model count as reachable.
-- [ ] 3.4 Against a real index, a narrowing that outruns the scan's budget is
+The four numbers of design decision 3 — window reach, candidates, reached,
+needed — are the vocabulary of this group. None of these tasks may decide
+anything from the shape of the answer.
+
+- [ ] 3.1 The repository returns the candidates in order — after the exclusion,
+  **before** the offset and **before** the threshold — up to the window reach,
+  and the service applies the offset and the threshold over them. Verify: change
+  8's own threshold tests and change 11's own paging tests pass unchanged
+  against the same fixtures (same items, same `has_more`, same order); an
+  integration test asserts `reached` is the pre-offset, pre-threshold count for
+  a page the threshold empties **and** for a page the offset empties.
+  Demonstrated failing input: counting after the offset makes the second of
+  those report an exhausted ranking for a scan that stopped early.
+- [ ] 3.2 The decision: cut short when `reached < needed` and more matching rows
+  exist than `reached`, where `needed = offset + limit + 1`. Verify: unit tests
+  over the decision function, one per row of design decision 3's worked table —
+  25 reached at offset 0 (complete, nothing asked); exactly 20 with more in the
+  store (cut short, although the page is full); exactly 20 with 20 in the store
+  (complete); 10 reached at offset 50 with 40 in the store (cut short); the
+  threshold keeping none of 25 (complete); an asset's own search with 21
+  neighbours after the exclusion (complete, nothing asked). Demonstrated failing
+  input: comparing against `offset + reached` instead of `reached` turns the
+  fourth row into "exhausted" — the defect confirmation 1 named.
+- [ ] 3.3 The window asks for `offset + limit + 1 + excluding` rows, and the
+  page needs `offset + limit + 1` of them: the exclusion's extra row belongs to
+  the window and never to what the answer requires. Verify: a unit test asserts
+  both numbers for an ordinary search and for an asset's own search; an
+  integration test asserts that an asset's search with exactly `limit + 1`
+  neighbours after the exclusion asks no bounded question — both when the asset
+  itself satisfies the narrowing and when it does not. Demonstrated failing
+  input: requiring one more usable row makes every such search pay for the
+  question.
+- [ ] 3.4 The bounded question carries the search's own model, its narrowing and
+  the asking asset, and stops at `reached + 1`. Verify: integration tests assert
+  it counts neither an asset without a vector of that model nor the asking
+  asset. Demonstrated failing input: dropping the model makes an asset indexed
+  only by the other model count as reachable.
+- [ ] 3.5 Against a real index, a narrowing that outruns the scan's budget is
   reported. Verify: an integration test lowers `hnsw.max_scan_tuples` for its
-  transaction so the bound is reached deliberately, and asserts both shapes —
-  a short page and a page of exactly `limit` — say that the search stopped
-  early while the store holds more matches. Demonstrated failing input: leaving
-  the report to `has_more` alone makes both read as the end of the ranking.
-- [ ] 3.5 The question is asked only when it is needed. Verify: an integration
-  test counts the statements of an unnarrowed page, of a narrowed page that got
-  everything it asked for, and of a narrowed page that did not, and asserts only
+  transaction so the bound is reached deliberately, and asserts it for three
+  shapes — a short page, a page of exactly `limit`, and an empty page at a
+  nonzero offset — each paired with the same shape over a store that genuinely
+  holds no more, which must **not** be reported. Demonstrated failing input:
+  leaving the report to `has_more` alone makes all three read as the end of the
+  ranking.
+- [ ] 3.6 The question is asked only when it is needed. Verify: an integration
+  test counts the statements of an unnarrowed page, of a narrowed page that
+  reached what it needed, and of a narrowed page that did not, and asserts only
   the last pays for it.
-- [ ] 3.6 The envelope carries the report, and the OpenAPI document describes
+- [ ] 3.7 The envelope carries the report, and the OpenAPI document describes
   it. Verify: api tests assert it on a narrowed answer that was cut short, on a
   narrowed answer that was not, and on an unnarrowed answer; the document
   carries the field with a description and the example shows it.

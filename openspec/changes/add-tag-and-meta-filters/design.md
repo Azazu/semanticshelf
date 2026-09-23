@@ -22,9 +22,10 @@ allowed to stop guessing about:
   held ten matches.
 - The search statement already has three layers and a place for a predicate in
   each: the **window** the index answers, the **page** cut from it (which since
-  change 11 carries the self-exclusion), and the **threshold** outside both —
-  the last of which this design moves one layer up, for the reason decision 3
-  gives.
+  change 11 carries the self-exclusion), and the **threshold** outside both. Two
+  of those steps — the offset and the threshold — move one layer up in this
+  design, for the reason decision 3 gives; the window, the exclusion and the
+  order stay where they are.
 - `assets.tags` has a GIN index and `assets.meta` a GIN `jsonb_path_ops` index,
   both since change 3. The listing has used the first since change 5.
 - The listing's repository can already express a metadata filter
@@ -41,9 +42,9 @@ Goals beyond the proposal's scope statement:
 - The numbers change 14 needs, produced by a command anyone can re-run.
 
 Non-goals at the design level: choosing the index or its parameters (change 14),
-any filter shape beyond FR-FLT-2/3, and changing what a threshold does to a page
-— it still removes what the page already holds and still reaches no further
-down, whichever layer performs the removal.
+any filter shape beyond FR-FLT-2/3, and changing what a page means — the offset
+still skips, the threshold still removes what the page already holds and still
+reaches no further down, whichever layer performs either.
 
 ## Decisions
 
@@ -69,69 +70,81 @@ down, whichever layer performs the removal.
    Set per query rather than in the configuration: an unnarrowed search does not
    need it, and it is one more thing a deployment could get wrong.
 
-3. **The scan's bound is part of the contract, and what reports it is the
-   candidate count — not the shape of the answer.** `hnsw.max_scan_tuples`
-   (20 000 by default) is what keeps a narrowing nothing satisfies from walking
-   the whole index. When the scan stops there, the answer is missing rows it
-   would otherwise have had, and the service has to say so rather than let a
-   client read it as the end of the ranking.
+3. **The scan's bound is part of the contract, and what reports it is how far
+   the scan actually reached.** `hnsw.max_scan_tuples` (20 000 by default) is
+   what keeps a narrowing nothing satisfies from walking the whole index. When
+   the scan stops there, the answer is missing rows it would otherwise have had,
+   and the service has to say so rather than let a client read it as the end of
+   the ranking.
 
-   Gate 1 round 1 rejected the first version of this decision twice, and both
-   rejections were right. It proposed to run a probe "when the page comes back
-   short", and to compare the probe against what the answer held:
+   Gate 1 rejected two earlier versions of this decision, and each rejection was
+   arithmetic, not opinion. What they ruled out:
 
-   - **A full page proves nothing** (finding 1). The service asks for
-     `limit + 1` rows and reads `has_more` from the extra one. A scan that finds
-     exactly `limit` matching rows while more exist beyond its budget returns a
-     *full* page with `has_more: false` — the end-of-ranking lie, with nothing
-     short about it.
-   - **The threshold shortens the answer for an honest reason** (finding 2).
-     `min_score` removes rows after the page is cut, so ten tagged assets all
-     below the threshold give an empty answer after a scan that was never
-     limited at all. A probe comparing against the *answer* would call that a
-     budget limit.
+   - **the shape of the answer** (round 1, finding 1): a scan that finds exactly
+     `limit` matching rows while more exist beyond its budget returns a *full*
+     page with `has_more: false`;
+   - **the answer after the threshold** (round 1, finding 2): `min_score`
+     shortens a page for an honest reason, and a scan that was never limited
+     would be reported as limited;
+   - **`limit + 2` usable rows for an asset's own search** (confirmation 1,
+     finding 1): the extra row an exclusion needs belongs to the *window*, not
+     to the page — the page has always been capped at what the service asked
+     for, so requiring one more would probe on every such search;
+   - **`offset + candidates` as the prefix the scan consumed** (confirmation 1,
+     finding 2): an empty page after a large offset says nothing about how many
+     rows the scan produced, so a budget-limited answer could be declared
+     exhausted.
 
-   So the signal is taken before either of those effects, from the query itself:
-   **how many candidate rows the page produced, before the threshold**. The
-   service asks the repository for `asked` rows — `limit + 1`, and one more
-   again when an asset excludes itself — beyond `offset`. If the page produced
-   `asked` rows, the scan supplied everything the answer needed and **no probe
-   runs**: that is the fast path, and it covers every unnarrowed search and
-   every narrowing the index satisfies comfortably.
+   Four numbers, then, and each is defined before it is used:
 
-   If it produced fewer, the scan ran out — of matching rows, or of budget, and
-   only then does one bounded question tell them apart:
+   | | |
+   |---|---|
+   | **window reach** | `offset + limit + 1 + excluding` — what the index scan is asked for. The `+ 1` is the row beyond the page; `excluding` is 1 for an asset's own search, paying for the asset's own row, which the next layer removes. |
+   | **candidates** | the rows that survive the exclusion, in order, **before** the offset and **before** the threshold. |
+   | **reached** | how many candidates there were. Known in every case, including when the page is empty. |
+   | **needed** | `offset + limit + 1` — the candidates an answer at this offset requires, the row beyond the page included. |
+
+   The rule: **the scan was cut short when `reached < needed` and more matching
+   rows exist than `reached`.** The first half alone cannot tell a short store
+   from a stopped scan, so when it holds — and only then — one bounded question
+   is asked:
 
    ```sql
    SELECT count(*) FROM (
      SELECT 1 FROM assets a JOIN embeddings e ON e.asset_id = a.id
      WHERE e.model = :model AND <narrowing> AND a.id <> :asking   -- for /similar
-     LIMIT :offset + :candidates + 1
+     LIMIT :reached + 1
    ) reachable
    ```
 
-   The scan reached `offset + candidates` matching rows. If more exist than
-   that, it stopped early and the answer says so; if not, the ranking is
-   genuinely exhausted. The `LIMIT` is what keeps this from being a count of the
-   corpus. It is a GIN read, it runs only on the path where the scan ran out,
-   and it never runs for a search with no narrowing.
+   It carries the search's own model, the search's own narrowing and the asking
+   asset, and it stops at `reached + 1` because that is all the question needs.
+   It is a GIN read on the slow path only; a narrowing the index satisfies
+   comfortably never pays for it, and neither does any unnarrowed search.
 
-   Two consequences the implementation owes:
+   Worked, with `limit = 20`:
 
-   - the repository reports that candidate count beside the rows, which means
-     **the threshold moves out of the outermost select and into the service**.
-     It is the same rule change 8 wrote — a threshold removes results the page
-     already holds and does not reach further down — applied one layer up, where
-     the count before it is still knowable. A test asserts the behaviour a
-     caller sees is identical;
-   - the probe carries the *search's* model, the *search's* narrowing and, for
-     an asset's neighbours, the asset it must exclude. A probe that counted
-     assets alone would count assets with no vector of that model, and an
-     asset's own row.
+   | Situation | reached | needed | probe | answer |
+   |---|---|---|---|---|
+   | offset 0, scan finds 25 | 25 | 21 | not asked | complete |
+   | offset 0, scan finds exactly 20, more exist | 20 | 21 | 21 > 20 | **cut short** |
+   | offset 0, scan finds 20, exactly 20 match | 20 | 21 | 20 > 20 is false | complete |
+   | offset 50, scan finds 10 of 40 matches | 10 | 71 | 11 > 10 | **cut short** |
+   | offset 0, scan finds 25, threshold keeps none | 25 | 21 | not asked | complete |
+   | `/similar`, offset 0, 21 neighbours after exclusion | 21 | 21 | not asked | complete |
+
+   For `reached` to be knowable when the page is empty, the offset and the
+   threshold are applied where that count survives — above the repository, over
+   the candidates it returns. Both keep their meaning exactly: the offset still
+   skips, and the threshold still removes results the page already holds without
+   reaching further down (change 8), which a test asserts by comparing against
+   the answers that change recorded. The extra rows crossing the wire are
+   bounded by the searchable depth: at the deepest page the service accepts,
+   about a thousand identifiers and distances.
 
    Rejected: reporting the bound from the plan (`EXPLAIN` per request is
-   absurd); inferring it from the rendered page (finding 1); comparing against
-   post-threshold rows (finding 2).
+   absurd), and re-running the scan to count it (the slow path would pay for the
+   expensive part twice).
 
 4. **One filter object, four surfaces.** A frozen value in `app/domain.py` —
    the tags required, the tags any of which suffice, and the metadata
@@ -183,11 +196,16 @@ down, whichever layer performs the removal.
   the numbers are published, and a deployment that wants a different trade has
   one setting to turn. An unnarrowed search is untouched.
 - **The extra existence query** costs one bounded index read. Mitigation: it
-  runs only when the scan returned fewer candidates than the answer needed, and
+  runs only when the scan reached fewer candidates than the answer needed, and
   only when a narrowing was given; every unnarrowed search and every narrowing
   the index satisfies comfortably takes the fast path.
-- **A threshold enforced one layer up** is a documented rule that moves, and a
-  rule that moves is a rule that can be lost. Mitigation: the test change 8 wrote for
+- **The offset and the threshold applied above the repository** move about a
+  thousand more rows across the wire at the deepest page the service accepts.
+  Mitigation: they are two columns wide, the bound is the searchable depth
+  itself, and it buys the one number without which a cut-short answer cannot be
+  told from a complete one.
+- **A rule enforced one layer up** — the threshold, and now the offset — is a
+  rule that moves, and a rule that moves is a rule that can be lost. Mitigation: the test change 8 wrote for
   it keeps running, and one more asserts that a threshold shortening a page is
   never reported as a stopped scan.
 - **A new field in the search envelope** is a compatible addition, but it is a

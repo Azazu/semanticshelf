@@ -121,6 +121,14 @@ shortened by the threshold SHALL NOT be reported as a search that was.
 - **THEN** the answer still says that it stopped at its bound, rather than
   saying that nothing follows the page
 
+#### Scenario: An empty page deep in a narrowed ranking
+- **WHEN** a narrowed search at a large offset comes back empty, once because
+  the scan stopped at its bound before reaching that offset and once because the
+  ranking holds fewer results than the offset skips
+- **THEN** the first says that the search stopped at its bound and the second
+  does not: an empty page is not evidence either way, and what the search
+  reached decides it
+
 #### Scenario: A page the threshold shortened
 - **WHEN** a narrowed search completes and the threshold then removes some or
   all of its results
