@@ -6,13 +6,14 @@ check is removed, and that failure is demonstrated before the task is ticked.
 ## 1. The second model
 
 - [x] 1.1 `app/ml/dinov2.py`: the adapter behind the `Embedder` protocol —
-  `facebook/dinov2-large` from `DINOV2_MODEL_NAME`, the CLS token after the
-  final layer norm, batches of `EMBED_BATCH_SIZE`, `TextNotSupportedError` from
-  `embed_text`. Read the installed `transformers` for which attribute carries
-  that token rather than assuming it. Verify: `tests/models/test_dinov2.py`
-  (marked `models`, never in CI) loads the real checkpoint once and asserts the
-  width is 1024, the vectors are unit length, and two renderings of the same
-  picture land nearer each other than either does to a different picture.
+  the checkpoint "facebook/dinov2-large" from `DINOV2_MODEL_NAME`, the CLS
+  token after the final layer norm, batches of `EMBED_BATCH_SIZE`, and
+  `TextNotSupportedError` from `embed_text`. Read the installed `transformers`
+  for which attribute carries that token rather than assuming it. Verify:
+  `tests/models/test_dinov2.py` (marked `models`, never in CI) loads the real
+  checkpoint once and asserts the width is 1024, the vectors are unit length,
+  and two renderings of the same picture land nearer each other than either
+  does to a different picture.
 - [x] 1.2 The key joins `IMPLEMENTED_MODELS` and the registry's factories, and
   the existing test that holds those two sets together keeps passing. Verify:
   that test names both keys; `GET /ready` reports `models: ok` against the live
@@ -45,7 +46,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
   first named — cannot be reached: `receive` refuses that configuration before
   it writes anything, which is the guard change 6 put there.)
 - [x] 2.3 `POST /api/v1/search/image` in the API: multipart `file` plus the page
-  fields as form fields, the envelope of `/search/text`, and the body bound the
+  fields as form fields, the envelope of `GET /search/text`, and the body bound the
   upload path already enforces. Verify: api tests for the shape, for each
   refusal, and for the same page bounds as the text endpoint; the OpenAPI
   document carries the operation with a summary, a description and an example,
@@ -164,15 +165,15 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 7. Documentation
 
-- [ ] 7.1 `docs/how-to/searching.md` gains both new ways to ask, with output
+- [x] 7.1 `docs/how-to/searching.md` gains both new ways to ask, with output
   from a real run, and says plainly what each model is for: words find what a
   picture is *about*, a picture finds what *looks like* it. It also says that a
   score from one model means nothing against a score from the other, and that
   `/similar` needs that asset's vector to exist.
-- [ ] 7.2 `docs/reference/demo-dataset.md` and `docs/how-to/demo-ui.md` mention
+- [x] 7.2 `docs/reference/demo-dataset.md` and `docs/how-to/demo-ui.md` mention
   that the demo now ends with `index missing`, and what the fifth page does.
   Verify: every command in both was run in the form shown.
-- [ ] 7.3 `docs/explanation/requirements.md`: FR-IMG-2's tag filters are not
+- [x] 7.3 `docs/explanation/requirements.md`: FR-IMG-2's tag filters are not
   delivered here (change 12 owns filters); its 409 is owed to the absence of a
   vector rather than to a job that is not `done`, the same correction change 8
   made to FR-TXT-3 for the same reason (a reindex puts the work back while the
@@ -183,7 +184,7 @@ check is removed, and that failure is demonstrated before the task is ticked.
 
 ## 8. Evidence
 
-- [ ] 8.1 A real run: `make demo` on a clean store, then a picture search and a
+- [x] 8.1 A real run: `make demo` on a clean store, then a picture search and a
   `/similar` against the corpus with the real weights, captured into the how-to.
   Verify: the captured output is from that run, and `make test-models` asserts
   1024 on the real checkpoint.

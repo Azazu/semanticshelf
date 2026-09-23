@@ -13,7 +13,7 @@ Authoritative live source: `make help`.
 | `make migrate` | apply migrations |
 | `make test` / `make test-integration` | unit and api tests (no database) / pgvector integration tests (`DATABASE_URL`, migrated database) |
 | `make test-models` | the `models` suite against the real weights; downloads the checkpoint on a cold cache, never part of `make check` or CI |
-| `make demo` | fetch the demo corpus and index it (`DEMO_COUNT`, `DEMO_ROOT`); see `demo-dataset.md` |
+| `make demo` | fetch the demo corpus, index it, and queue what any enabled model still has no vector for (`DEMO_COUNT`, `DEMO_ROOT`); see `demo-dataset.md` |
 | `make ui` | the Streamlit demo over the API (`UI_PORT`, `API_BASE_URL`); needs the `ui` group |
 | `make test-ui` | the `ui` suite: the demo pages against a service that answers from memory; never part of `make check` or CI |
 | `make screenshots` | capture `docs/images/*.png` from a running API and interface; needs the `ui` and `screenshots` groups |
@@ -35,6 +35,7 @@ Installed as the `semanticshelf` console script; run it with `uv run`.
 |---|---|
 | `uv run semanticshelf models warm` | load every key in `ENABLED_MODELS`, downloading what is missing, and print each model's width and load time ([how-to](../how-to/models.md)) |
 | `uv run semanticshelf index-folder <dir> [--recursive] [--tags a,b] [--meta '{"k":"v"}'] [--dry-run] [--no-index]` | import a directory of pictures through the upload pipeline, then carry out the work it created; `--dry-run` reads and writes nothing, `--no-index` leaves the work queued. Exits non-zero only when the run could not start ([how-to](../how-to/indexing.md)) |
+| `uv run semanticshelf index missing [--model KEY] [--no-index]` | queue the work stored assets have none of, and carry it out — what a model that arrived after the pictures needs. An asset is queued when it has no vector for that model and no work for it waiting, running or failed; what already failed is passed over, counted, and left to `reindex`. `--no-index` leaves the work queued ([how-to](../how-to/searching.md)) |
 | `uv run semanticshelf storage prune [--apply]` | report files no asset owns and assets whose files are gone; `--apply` removes and marks. Does nothing while an upload is in flight ([how-to](../how-to/uploading.md)) |
 
 ## Workflow scripts
