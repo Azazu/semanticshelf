@@ -5,21 +5,40 @@
 See `proposal.md` — Why. What the design has to work with, and one thing it was
 allowed to stop guessing about:
 
-- **The failure this change exists to prevent was reproduced before anything was
-  written.** On the integration database: 3 000 assets, one in three hundred
-  carrying a rare tag, the rare ones shuffled so they are not the nearest rows,
-  and a page of 20 asked for with `tags_all=rare`:
+- **What a narrowed vector query actually does was measured, twice, and the
+  second measurement corrected the first.** On the integration database: 3 000
+  assets, a page of 21 candidates asked for, `ef_search` 40, the narrowing's
+  assets shuffled through the ranking rather than gathered at its head.
 
-  | `hnsw.iterative_scan` | rows returned | what the index scan produced |
-  |---|---|---|
-  | `off` (today) | **0 of 20** | 40 rows — exactly `ef_search`, none of them rare |
-  | `strict_order` | **10 of 20** | 3 000 rows — it kept going until the filter was satisfied |
-  | `relaxed_order` | 10 of 20 | 3 000 rows |
+  The first run, on a table that had never been `ANALYZE`d, showed the defect
+  FR-FLT-2 names: `tags_all=rare` (one asset in three hundred) returned **0 of
+  20** with `hnsw.iterative_scan = off` — the index produced its 40 candidates,
+  the narrowing removed all of them — and 10 of 20, every match there is, with
+  `strict_order`.
 
-  Ten is every rare asset that exists, so the last two answers are complete. The
-  first is the defect FR-FLT-2 names in one line: the index chose its candidates,
-  the filter then removed all of them, and the answer was empty while the store
-  held ten matches.
+  The second run, after `ANALYZE`, shows what a real store does:
+
+  | narrowing | matches | `off` | `strict_order` | the plan PostgreSQL chose |
+  |---|---|---|---|---|
+  | 1 in 2 | 1 500 | 21 | 21 | the vector index |
+  | 1 in 5 | 600 | 21 | 21 | driven from `assets`, distances computed exactly |
+  | 1 in 10 | 300 | 21 | 21 | driven from `assets`, exact |
+  | 1 in 20 | 150 | 21 | 21 | driven from `assets`, exact |
+  | 1 in 50 | 60 | 21 | 21 | driven from `assets`, exact |
+  | 1 in 100 | 30 | 21 | 21 | driven from `assets`, exact |
+
+  Every one of them is a full page, with the iterative scan and without it,
+  because **the planner leaves the vector index as soon as the narrowing is at
+  all selective** and answers exactly over the narrowed rows — which is not a
+  worse answer than the index's, it is a better one.
+
+  So the empty page is real and conditional: it is what happens when the vector
+  index is used *and* the narrowing removes what it produced. Stale statistics
+  put a query there; so does a narrowing broad enough for the planner to prefer
+  the index while still selective enough to exhaust its candidates; so does a
+  corpus large enough that scanning the narrowed rows stops being cheap. This
+  change therefore does two things rather than one: it makes the index path
+  behave correctly when it is chosen, and it measures where the choice falls.
 - The search statement already has three layers and a place for a predicate in
   each: the **window** the index answers, the **page** cut from it (which since
   change 11 carries the self-exclusion), and the **threshold** outside both. Two
@@ -57,10 +76,21 @@ reaches no further down, whichever layer performs either.
    (`asset_id IN (…)`), which turns a filter into a bounded list and fails for
    any corpus where the filter matches more assets than the list may hold.
 
+   One predicate in one place is also what lets the planner choose: written like
+   this, a selective narrowing is answered exactly over the narrowed rows and a
+   broad one by the vector index, and neither is the service's decision to make
+   (the Context's table). Applying the narrowing to the scan's result would take
+   that choice away and leave only the worse half of it.
+
 2. **`hnsw.iterative_scan = strict_order`, set per query beside `ef_search`.**
-   The table above is the argument: with `off` the requirement cannot be met at
-   all. `strict_order` returns rows in exact distance order, which is what the
-   page contract of change 8 rests on.
+   Not because every narrowed search needs it — the Context's table shows most
+   of them never reach the index at all — but because the one that does is the
+   one that can come back short: the index produces its candidates, the
+   narrowing removes some, and without an iterative scan nothing goes back for
+   more. FR-FLT-2 promises a full page whenever the matches exist, and this is
+   what keeps that promise on the path where the planner uses the index.
+   `strict_order` returns rows in exact distance order, which is what the page
+   contract of change 8 rests on.
    Rejected: `relaxed_order` — it is allowed to return rows slightly out of
    order, and this statement cuts the window by distance *before* the page
    re-orders, so a row that arrives late can be cut although it belonged inside.
@@ -177,13 +207,21 @@ reaches no further down, whichever layer performs either.
    report (decision 3). Tying the two together would make a narrowed search
    refuse pages it can answer perfectly well.
 
-7. **The measurement is a command, not a paragraph.** `scripts/` gains a script
-   that builds a synthetic corpus of a given size and selectivity in the
-   integration database, runs the same statement the service runs at each
-   setting, and prints rows-returned and latency; `docs/how-to/benchmarks.md`
-   carries its output and the command that produced it. Synthetic on purpose:
-   what is being measured is the index's behaviour against selectivity, and a
-   real model's vectors would only add a variable nobody can control.
+7. **The measurement is a command, not a paragraph — and it is the half of this
+   change that outlives it.** `scripts/filter_benchmark.py` builds a synthetic
+   corpus of a given size and selectivity in the database `DATABASE_URL` names,
+   runs the same statement the service runs, and prints, per selectivity: which
+   plan answered it, how many rows came back against how many were asked for,
+   and how long it took — at `iterative_scan` off and `strict_order`, with
+   statistics fresh and (deliberately) without them.
+   `docs/how-to/benchmarks.md` carries its output and the command that produced
+   it. Synthetic on purpose: what is measured is the planner's choice against
+   selectivity, and a real model's vectors would only add a variable nobody can
+   control.
+
+   This is what change 14 needs from here, and it is what the first version of
+   this design got wrong by measuring once, on a table without statistics, and
+   generalising from it.
 
 ## Applicability
 
@@ -203,6 +241,15 @@ reaches no further down, whichever layer performs either.
   point of measuring it. Mitigation: the bound (`max_scan_tuples`) is stated,
   the numbers are published, and a deployment that wants a different trade has
   one setting to turn. An unnarrowed search is untouched.
+- **The scan's bound, and therefore its report, belongs to one of the two plans
+  the planner may choose.** When a narrowing is answered exactly over the
+  narrowed rows there is no scan to bound and no report to make — the answer is
+  complete by construction. Mitigation: `scan_limited` is computed from what the
+  query returned rather than from which plan ran, so it is false exactly when
+  the answer is complete, whichever path produced it. Its rules are held by unit
+  tests (`tests/unit/test_search_cut.py`); an integration test that forced the
+  bound to bite would have to defeat the planner's statistics to do it, and
+  would then be testing the fixture rather than the service.
 - **The extra existence query** costs one bounded index read. Mitigation: it
   runs only when the scan reached fewer candidates than the answer needed, and
   only when a narrowing was given; every unnarrowed search and every narrowing

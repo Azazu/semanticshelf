@@ -169,9 +169,15 @@ async def tagged(session: AsyncSession, tag: str) -> list[UUID]:
 async def test_a_narrowing_that_matches_rarely_still_fills_a_page(
     session: AsyncSession, db_settings: Settings, pool: Any, embedder: PlanarEmbedder
 ) -> None:
-    """One asset in three hundred carries the tag. With the scan left as it is,
-    the index produces its candidates once and the narrowing removes all of
-    them: an empty page over a store holding ten matches."""
+    """One asset in three hundred carries the tag, and the page comes back full.
+
+    Which plan answers it is the planner's choice (`design.md`, Context): with
+    the statistics a freshly written table has, this query stays on the vector
+    index, and there the iterative scan is what fills the page — removing it
+    empties this test. Given statistics, PostgreSQL would answer the same
+    narrowing exactly instead, and the page would be full for a different
+    reason. The assertion is the promise, which holds either way.
+    """
     await seed(session, assets=3000, rare_every=300)
 
     page = await search.search_text(

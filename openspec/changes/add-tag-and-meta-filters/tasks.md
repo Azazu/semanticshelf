@@ -39,12 +39,14 @@ that is *full* can be just as wrong.
   otherwise (design decision 2). Verify: an integration test reads
   `current_setting('hnsw.iterative_scan')` from inside the transaction that runs
   the query, for a narrowed and an unnarrowed search.
-- [x] 2.3 A narrowing that matches rarely still fills a page. Verify: the
-  integration test that reproduced the defect — 3 000 assets, one in three
-  hundred carrying the tag, shuffled so they are not the nearest rows — asserts
-  a full page of the nearest matching assets, in distance order. Demonstrated
-  failing input: leaving `iterative_scan` off returns an empty page while ten
-  matches exist, which is the measurement recorded in `design.md`.
+- [x] 2.3 A narrowing that matches rarely still fills a page — whichever plan
+  answers it. Verify: an integration test over 3 000 assets, one in three
+  hundred carrying the tag, shuffled so they are not the nearest rows, asserts a
+  full page of the nearest matching assets in distance order. Demonstrated
+  failing input: with `iterative_scan` left off, that page comes back **empty**
+  — which holds while the fixture's statistics are as a freshly written table
+  leaves them, because that is what keeps the query on the index path this
+  change is about (`design.md`, Context).
 - [x] 2.4 A narrowing changes which assets are ranked, never their scores.
   Verify: an integration test searches with and without a narrowing and asserts
   that an asset in both answers carries the same score in both.
@@ -53,7 +55,8 @@ that is *full* can be just as wrong.
 
 The four numbers of design decision 3 — window reach, candidates, reached,
 needed — are the vocabulary of this group. None of these tasks may decide
-anything from the shape of the answer.
+anything from the shape of the answer, and none of them may assume which of the
+two plans answered the query.
 
 - [x] 3.1 The repository returns the candidates in order — after the exclusion,
   **before** the offset and **before** the threshold — up to the window reach,
@@ -88,14 +91,16 @@ anything from the shape of the answer.
   it counts neither an asset without a vector of that model nor the asking
   asset. Demonstrated failing input: dropping the model makes an asset indexed
   only by the other model count as reachable.
-- [ ] 3.5 Against a real index, a narrowing that outruns the scan's budget is
-  reported. Verify: an integration test lowers `hnsw.max_scan_tuples` for its
-  transaction so the bound is reached deliberately, and asserts it for three
-  shapes — a short page, a page of exactly `limit`, and an empty page at a
-  nonzero offset — each paired with the same shape over a store that genuinely
-  holds no more, which must **not** be reported. Demonstrated failing input:
-  leaving the report to `has_more` alone makes all three read as the end of the
-  ranking.
+- [ ] 3.5 The report is about what the search found, not about which plan found
+  it. Verify: an integration test asserts `scan_limited` is false for every
+  answer a narrowed search gives over a store it can exhaust — a full page, a
+  short page, an empty page at an offset, and a page the threshold empties —
+  because in each the scan reached what the answer needed or the store held no
+  more. The case where it is true is held by the unit tests of task 3.2: on this
+  corpus the planner answers a selective narrowing exactly, so an integration
+  test that made the bound bite would have to defeat its statistics and would
+  then be testing the fixture (`design.md`, Risks). What the bound costs in
+  practice is the benchmark's question, not a test's.
 - [ ] 3.6 The question is asked only when it is needed. Verify: an integration
   test counts the statements of an unnarrowed page, of a narrowed page that
   reached what it needed, and of a narrowed page that did not, and asserts only
@@ -144,18 +149,19 @@ anything from the shape of the answer.
 ## 6. The numbers
 
 - [ ] 6.1 `scripts/filter_benchmark.py` builds a synthetic corpus of a given
-  size and selectivity in the database `DATABASE_URL` names and measures the
-  same statement the service runs, at each setting (design decision 7). Verify:
-  `uv run python scripts/filter_benchmark.py --assets 3000 --rare-every 300
-  --seed 7` prints the table, and a second run with the same arguments prints
-  the same rows-returned. The script empties the tables it uses and says so
-  before it starts — on this machine that database is also the one development
-  uses.
+  size in the database `DATABASE_URL` names and measures, per selectivity,
+  **which plan answered**, how many rows came back against how many were asked
+  for, and how long it took — at `iterative_scan` off and `strict_order`, with
+  statistics fresh and without them (design decision 7). Verify: `uv run python
+  scripts/filter_benchmark.py --assets 3000 --seed 7` prints the table, and a
+  second run with the same arguments prints the same plans and rows. The script
+  empties the tables it uses and says so before it starts — on this machine that
+  database is also the one development uses.
 - [ ] 6.2 `docs/how-to/benchmarks.md` carries that output, the command that
-  produced it, and what it means for a deployment — including the cost of an
-  iterative scan against a single one, and the bound at which a narrowed search
-  gives up. Verify: every command in the page was run in the form shown, and the
-  numbers are from that run.
+  produced it, and what it means for a deployment: where the planner changes its
+  mind, what each plan costs, what an iterative scan buys on the path that uses
+  the index, and what stale statistics do to all of it. Verify: every command in
+  the page was run in the form shown, and the numbers are from that run.
 - [ ] 6.3 `docs/how-to/searching.md` gains how to narrow a search on all three
   endpoints, with output from a real run against the demo corpus, and says what
   a short page means when a narrowing is in force.

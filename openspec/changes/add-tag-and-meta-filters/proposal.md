@@ -29,13 +29,17 @@ owner.
 
 The hard part is the one FR-FLT-2 names: **inside** the vector query, "not by
 post-filtering a fixed candidate list, so a narrow filter still returns `limit`
-items when they exist". A `WHERE` next to an HNSW scan does not do that by
-itself — with `hnsw.iterative_scan = off`, which is what this database has
-today, the index chooses its candidates first and the filter then removes some
-of them, so a tag that matches one picture in a thousand returns an almost
-empty page while the matches sit just past the candidate window. pgvector 0.8
-has the mechanism that fixes it, this change is where it is turned on, bounded,
-and measured.
+items when they exist". Who keeps that promise turns out to depend on the query,
+and the design measured it rather than assuming: PostgreSQL leaves the vector
+index as soon as a narrowing is at all selective and answers exactly over the
+narrowed rows — a *better* answer than the index's — and stays on the index when
+the narrowing is broad, where the candidates it produces are plenty. The gap is
+in between, and where stale statistics put a query: the index is used, the
+narrowing removes what it produced, and the page comes back short while the
+matches sit just past the candidate window. pgvector 0.8 has the mechanism that
+closes that gap; this change turns it on for narrowed queries, bounds it, says
+when the bound was reached, and publishes where the line between the two plans
+falls — which is the number change 14 needs and cannot get anywhere else.
 
 ## What Changes
 
@@ -50,16 +54,18 @@ and measured.
   it was cut. What that costs and what it then promises is design decision 1,
   and the answer is measured rather than assumed.
 - **`hnsw.iterative_scan` is set per query**, the way `hnsw.ef_search` already
-  is, so that a filtered search keeps looking until it has the page or reaches a
-  stated bound. The bound is part of the contract: a page may still come back
-  short, and the answer says so rather than implying the store holds nothing
-  more.
+  is, so that a narrowed search that *is* answered by the index keeps looking
+  until it has the page or reaches a stated bound. The bound is part of the
+  contract: a page may still come back short, and the answer says so rather than
+  implying the store holds nothing more.
 - **`meta.<key>` on the listing** (`GET /api/v1/assets`), which has had
   `tags_all` and `tags_any` since change 5 and never had this one. The
   repository can already express it; the API cannot.
-- **The measurement ADR-002 needs**: what a filter costs an HNSW scan at a few
-  selectivities, with the commands and the numbers, recorded where change 14
-  will pick them up rather than re-derive them.
+- **The measurement ADR-002 needs**, which this change now treats as half of its
+  own point: at a range of selectivities, which plan PostgreSQL chooses, whether
+  the page comes back full, and what each costs — with and without the iterative
+  scan, with and without statistics. The commands and the numbers are published
+  where change 14 picks them up rather than re-derives them.
 - **The demo interface's tag box becomes the service's own filter.** The page
   stops explaining that the filter applies only to what was fetched, because it
   no longer does.

@@ -1,7 +1,7 @@
 # Handoff — add-tag-and-meta-filters
 
 **Updated:** 2026-09-23 · claude
-**State:** blocked
+**State:** awaiting-gate-1
 **Branch:** change/add-tag-and-meta-filters
 **Security-sensitive:** yes — this change handles client input: a shared
 parser for tag and metadata narrowings on four public surfaces, including the
@@ -37,46 +37,36 @@ then `DEMO_COUNT=20 make demo`): 20 assets, 40 vectors, both models `done`.
 
 ## Next step
 
-**A design question the user has to settle before the rest of the apply.**
-Measured on the integration database, 3 000 assets, a page of 21 candidates,
-`ef_search` 40, statistics fresh (`ANALYZE`):
+Gate 1 round 2: `/gate-review add-tag-and-meta-filters 1`. Round 1 confirmed a
+design whose central evidence turned out to be conditional, and the artifacts
+now say what was measured instead.
 
-| narrowing | matches | `iterative_scan = off` | `strict_order` | plan |
-|---|---|---|---|---|
-| 1 in 2 | 1 500 | 21 rows | 21 rows | the vector index |
-| 1 in 5 | 600 | 21 rows | 21 rows | driven from `assets`, exact |
-| 1 in 10 | 300 | 21 rows | 21 rows | driven from `assets`, exact |
-| 1 in 20 | 150 | 21 rows | 21 rows | driven from `assets`, exact |
-| 1 in 50 | 60 | 21 rows | 21 rows | driven from `assets`, exact |
-| 1 in 100 | 30 | 21 rows | 21 rows | driven from `assets`, exact |
+What changed since that confirmation:
 
-Every one of them answers a full page, with or without the iterative scan,
-because PostgreSQL leaves the vector index as soon as the narrowing is at all
-selective and computes the distances exactly over the narrowed rows.
+- **The Context's evidence is two measurements, not one.** The first, on a table
+  that had never been `ANALYZE`d, is the empty page FR-FLT-2 forbids. The second,
+  after `ANALYZE`, is a full page at every selectivity from 1 in 2 to 1 in 100 —
+  because PostgreSQL leaves the vector index as soon as a narrowing is selective
+  and answers exactly over the narrowed rows. The first measurement was mine,
+  and generalising from it was my error, not the reviewer's.
+- **Decision 2 keeps the iterative scan for the reason that survives**: it is
+  what fills a page on the path where the index *is* used, which is broad
+  narrowings, stale statistics, and corpora where the exact plan stops being
+  cheap.
+- **Decision 7 is now half the point of the change**: the benchmark measures
+  which plan answers at each selectivity, with and without statistics, and what
+  each costs. That is the number change 14 needs and cannot get elsewhere.
+- **Task 3.5 no longer asks for an integration test of the scan's bound.** On
+  this corpus such a test can only fire by defeating the planner's statistics,
+  and would test the fixture. The rule stays in the unit tests of task 3.2, and
+  what the bound costs is the benchmark's question.
 
-The empty page recorded in `design.md` — `0 of 20` at `iterative_scan = off` —
-is real but conditional: that probe never ran `ANALYZE`, so the planner believed
-the narrowing was broad and stayed on the index, where post-filtering emptied
-the page. With statistics, on this corpus, it does not happen.
-
-What still stands: when the planner *does* choose the vector index — a broad
-narrowing, or a corpus large enough that the exact plan is too expensive — the
-iterative scan is what keeps the page full, and `scan_limited` is what keeps a
-budget-stopped answer from reading as the end of a ranking. The code for both is
-written, and the unit tests hold their arithmetic exactly.
-
-What this costs: the three integration tests for the scan's own bound were
-removed, because on this corpus they can only fire by defeating the planner's
-statistics. `tests/unit/test_search_cut.py` still holds every rule they checked.
-
-The question: is that acceptable, or should the change carry its evidence
-differently — a corpus big enough for the planner to keep the index (which makes
-the integration suite much slower), or an explicit statement in the spec that
-the bound's report is best-effort on the path the planner chooses?
+Implementation state: 8 of 26 tasks done and committed (the narrowing value and
+its parser, the predicate inside the window, the iterative scan, the cut and the
+decision function with their unit tests). `make check` 511, integration 236, all
+green. Groups 4 to 7 are untouched and do not depend on this review.
 
 ## Blockers
 
-The above. No code is blocked by it — groups 4 to 7 (the four surfaces, the
-interface, the benchmark, the documentation) do not depend on the answer — but
-the benchmark in group 6 is now the more interesting half of this change, and
-its shape depends on what is decided here.
+None — the question that blocked the apply was answered by the user: rewrite the
+justification around the measurement and ask Gate 1 again.
