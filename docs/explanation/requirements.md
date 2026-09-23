@@ -342,7 +342,7 @@ The stage plan is the source for `openspec/ROADMAP.md`; ids are stable across bo
 |---|---|---|---|---|
 | 8 | `add-text-to-image-search` | `GET /search/text`, score semantics, `min_score`, `limit`/`offset`/`has_more`, `ef_search` bound, `query_truncated`, model isolation, `/tags`, `/stats` | medium | ordering, threshold, pagination and isolation tests on fake vectors; `EXPLAIN` shows the HNSW scan |
 | 9 | `add-demo-dataset` | `demo-dataset download/index`, licence check and notice, provenance meta, per-picture sidecars in the folder import, `make demo` | high (raised from medium in the change itself: the egress is an operator's, but the command also turns remote bytes into files, which is security-sensitive input handling) | 500 images indexed locally; licence recorded in `docs/reference/demo-dataset.md` |
-| 10 | `add-demo-ui` | Streamlit Search, Browse, Upload, Status pages; dependency group; `make ui` | low | pages render against the API; screenshots produced |
+| 10 | `add-demo-ui` | Streamlit Search, Browse, Upload, Status pages; dependency groups; `make ui`, `make test-ui`, `make screenshots` | high (raised in the change: it adds dependencies and uploads a file, which §Security-Sensitive Code puts at `high`, and it deletes assets) | pages render against the API; screenshots produced |
 
 ### Stage 3 — image→image, filters, worker, index tuning
 

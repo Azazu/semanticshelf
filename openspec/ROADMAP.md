@@ -23,7 +23,7 @@ and gets its vectors in the background. The history is in git and in
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 10 | `add-demo-ui` | Streamlit Search, Browse, Upload, Status pages; own dependency group; `make ui` | low |
+| 10 | `add-demo-ui` | Streamlit Search, Browse, Upload, Status pages; own dependency group; `make ui`, `make test-ui`, `make screenshots` | high |
 
 ## Stage 3 — image→image, filters, worker, index tuning
 

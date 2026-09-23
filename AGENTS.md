@@ -369,7 +369,10 @@ app/
   cli.py             typer app: models warm and storage prune today; index-folder,
                      worker and demo-dataset later (the `worker` process of stage 3
                      calls the same functions in services/indexing.py)
-ui/                  Streamlit demo (own dependency group), HTTP client of the API
+ui/                  Streamlit demo: `app.py` declares the pages, `pages/` holds them,
+                     `client.py` is the only thing that speaks HTTP and `shell.py` what
+                     the pages share. Its own dependency group; imports nothing from
+                     `app/`, which `tests/ui/test_layering_ui.py` proves
 alembic/             migrations
 tests/               unit/ (fake embedder, no DB), integration/ (pgvector, marked),
                      api/ (httpx against the app factory), models/ (real weights, on demand)

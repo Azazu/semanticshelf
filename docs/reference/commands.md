@@ -13,6 +13,10 @@ Authoritative live source: `make help`.
 | `make migrate` | apply migrations |
 | `make test` / `make test-integration` | unit and api tests (no database) / pgvector integration tests (`DATABASE_URL`, migrated database) |
 | `make test-models` | the `models` suite against the real weights; downloads the checkpoint on a cold cache, never part of `make check` or CI |
+| `make demo` | fetch the demo corpus and index it (`DEMO_COUNT`, `DEMO_ROOT`); see `demo-dataset.md` |
+| `make ui` | the Streamlit demo over the API (`UI_PORT`, `API_BASE_URL`); needs the `ui` group |
+| `make test-ui` | the `ui` suite: the demo pages against a service that answers from memory; never part of `make check` or CI |
+| `make screenshots` | capture `docs/images/*.png` from a running API and interface; needs the `ui` and `screenshots` groups |
 | `make lock-check` | `uv lock --check`: `uv.lock` matches `pyproject.toml` |
 | `make lint` / `make fmt` / `make fmt-check` / `make types` | ruff check / ruff format / format check / mypy |
 | `make check` | lock check + lint + format + types + unit and api tests — the gate floor |

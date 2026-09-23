@@ -35,6 +35,12 @@ dev = [
     "pytest-asyncio>=1.4",
     "ruff>=0.16",
 ]
+screenshots = [
+    "playwright>=1.63.0",
+]
+ui = [
+    "streamlit>=1.64.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -84,4 +90,5 @@ addopts = "--strict-markers"
 markers = [
     "integration: needs the pgvector container",
     "models: loads real model weights; on demand only, never in CI",
+    "ui: needs the ui dependency group (Streamlit); `make test-ui`",
 ]
