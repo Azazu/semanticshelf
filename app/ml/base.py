@@ -7,7 +7,7 @@ rests on those two properties, so they are enforced here once rather than
 trusted in each adapter.
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -62,6 +62,17 @@ class Embedder(Protocol):
 
     def embed_images(self, images: Sequence[Image]) -> EmbeddingResult:
         """Embed images."""
+
+
+def batches[T](items: Sequence[T], size: int) -> Iterator[Sequence[T]]:
+    """Split a request into forward passes. Memory, not speed, sets the size:
+    a batch is a tensor, and a large one on a small container is a crash.
+
+    Here rather than in one adapter because every adapter owes the same thing:
+    the caller's order, stitched back together, whatever the batch size is.
+    """
+    for start in range(0, len(items), size):
+        yield items[start : start + size]
 
 
 def normalise(vectors: np.ndarray) -> Vectors:

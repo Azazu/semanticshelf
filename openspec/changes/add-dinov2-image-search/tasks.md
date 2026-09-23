@@ -13,16 +13,16 @@ check is removed, and that failure is demonstrated before the task is ticked.
   (marked `models`, never in CI) loads the real checkpoint once and asserts the
   width is 1024, the vectors are unit length, and two renderings of the same
   picture land nearer each other than either does to a different picture.
-- [ ] 1.2 The key joins `IMPLEMENTED_MODELS` and the registry's factories, and
+- [x] 1.2 The key joins `IMPLEMENTED_MODELS` and the registry's factories, and
   the existing test that holds those two sets together keeps passing. Verify:
   that test names both keys; `GET /ready` reports `models: ok` against the live
   schema, whose constraint already declares 1024 for this key.
-- [ ] 1.3 `app/domain.py` says what each model can be asked — text, pictures, or
+- [x] 1.3 `app/domain.py` says what each model can be asked — text, pictures, or
   both — in one table. Verify: unit tests assert CLIP takes both and DINOv2
   takes only pictures, and that every implemented key appears in the table
   (so a third model cannot be added without answering the question).
   Demonstrated failing input: removing a key from the table fails that test.
-- [ ] 1.4 `DINOV2_MODEL_NAME` in settings and in `docs/reference/settings.md`,
+- [x] 1.4 `DINOV2_MODEL_NAME` in settings and in `docs/reference/settings.md`,
   beside `CLIP_MODEL_NAME`. Verify: a unit test reads it from the environment
   and asserts the default.
 

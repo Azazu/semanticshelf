@@ -8,16 +8,23 @@ import pytest
 
 from app.domain import (
     ASSET_SOURCES,
+    CLIP_VIT_L14,
     CONTENT_TYPES,
+    DINOV2_LARGE,
     EMBEDDING_MODELS,
     EXTENSION_BY_CONTENT_TYPE,
     FILE_EXTENSIONS,
+    IMPLEMENTED_MODELS,
     JOB_STATUSES,
+    MODEL_MODALITIES,
     Asset,
     Embedding,
     IndexingJob,
+    Modality,
     NeighbourHit,
+    UnknownModelError,
     dimension_of,
+    modality_of,
     vector_index_name,
 )
 
@@ -54,6 +61,35 @@ def test_model_registry() -> None:
     assert dimension_of("clip-vit-l14") == 768
     with pytest.raises(KeyError):
         dimension_of("no-such-model")
+
+
+def test_every_model_says_what_it_can_be_asked() -> None:
+    # The table is what the router reads to refuse an impossible pair without
+    # loading anything. A model added without an answer here would be refused
+    # at the first request instead, which is the drift this test exists against.
+    assert set(MODEL_MODALITIES) == set(EMBEDDING_MODELS)
+    assert IMPLEMENTED_MODELS <= set(MODEL_MODALITIES)
+
+
+def test_what_each_model_takes() -> None:
+    assert modality_of(CLIP_VIT_L14) == Modality(text=True, images=True)
+    assert modality_of(DINOV2_LARGE) == Modality(text=False, images=True)
+
+
+def test_an_unknown_key_is_reported_the_way_every_layer_reports_one() -> None:
+    with pytest.raises(UnknownModelError, match="no-such-model"):
+        modality_of("no-such-model")
+
+
+def test_a_modality_describes_itself_for_a_refusal() -> None:
+    assert Modality(text=True, images=True).described == "text and pictures"
+    assert Modality(text=False, images=True).described == "pictures"
+    assert Modality(text=True, images=False).described == "text"
+
+
+def test_a_model_that_takes_nothing_is_not_a_model() -> None:
+    with pytest.raises(ValueError, match="embeds nothing"):
+        Modality(text=False, images=False)
 
 
 def test_vector_index_names_are_identifiers() -> None:

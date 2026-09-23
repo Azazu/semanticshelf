@@ -12,27 +12,20 @@ configuration, because the reasonable values differ between a laptop and a
 container with two cores.
 """
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Final
 
 import numpy as np
 from PIL.Image import Image
 
 from app.domain import CLIP_VIT_L14, dimension_of
-from app.ml.base import EmbeddingResult, check_checkpoint_width, empty, normalise
+from app.ml.base import EmbeddingResult, batches, check_checkpoint_width, empty, normalise
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only
     from app.core.settings import Settings
 
 #: Embedded once at load to see how wide this checkpoint's vectors really are.
 WIDTH_PROBE: Final = "a photograph"
-
-
-def _batches[T](items: Sequence[T], size: int) -> Iterator[Sequence[T]]:
-    """Split a request into forward passes. Memory, not speed, sets the size:
-    a batch is a tensor, and a large one on a small container is a crash."""
-    for start in range(0, len(items), size):
-        yield items[start : start + size]
 
 
 class ClipEmbedder:
@@ -84,7 +77,7 @@ class ClipEmbedder:
     def embed_text(self, texts: Sequence[str]) -> EmbeddingResult:
         if not texts:
             return empty(self.dim)
-        rows = [self._text_features(batch) for batch in _batches(list(texts), self._batch_size)]
+        rows = [self._text_features(batch) for batch in batches(list(texts), self._batch_size)]
         return EmbeddingResult(
             vectors=normalise(np.concatenate(rows)), truncated=self._truncation_flags(texts)
         )
@@ -92,7 +85,7 @@ class ClipEmbedder:
     def embed_images(self, images: Sequence[Image]) -> EmbeddingResult:
         if not images:
             return empty(self.dim)
-        rows = [self._image_features(batch) for batch in _batches(list(images), self._batch_size)]
+        rows = [self._image_features(batch) for batch in batches(list(images), self._batch_size)]
         return EmbeddingResult(
             vectors=normalise(np.concatenate(rows)), truncated=(False,) * len(images)
         )

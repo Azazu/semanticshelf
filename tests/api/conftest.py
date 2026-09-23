@@ -10,25 +10,16 @@ from collections.abc import Iterator
 
 import pytest
 
-from app.domain import CLIP_VIT_L14, dimension_of
-from app.ml import registry
-from app.ml.fake import FakeEmbedder
+from tests.fake_models import fake_models
 
 
 @pytest.fixture(autouse=True)
 def fake_model() -> Iterator[None]:
-    """CLIP without the weights, for every api test.
+    """Every implemented model without its weights, for every api test.
 
-    The factory is replaced rather than the registry's contents, so the lazy
-    load inside the application still runs its normal path; only what it builds
-    is fake. The real adapter has its own suite (`-m models`).
+    Every one, not only CLIP: both keys are enabled by default (FR-IDX-1), so
+    faking one would leave the other reachable. The real adapters have their
+    own suite (`-m models`).
     """
-    registry.clear()
-    original = dict(registry.FACTORIES)
-    registry.FACTORIES[CLIP_VIT_L14] = lambda settings: FakeEmbedder(
-        CLIP_VIT_L14, dimension_of(CLIP_VIT_L14)
-    )
-    yield
-    registry.FACTORIES.clear()
-    registry.FACTORIES.update(original)
-    registry.clear()
+    with fake_models():
+        yield

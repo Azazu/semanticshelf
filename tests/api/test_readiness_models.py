@@ -12,7 +12,7 @@ import httpx
 import pytest
 
 from app.core.settings import Settings
-from app.domain import CLIP_VIT_L14
+from app.domain import CLIP_VIT_L14, DINOV2_LARGE
 from app.main import create_app
 from app.ml import registry
 from app.services.readiness import code_head
@@ -22,7 +22,13 @@ AGREEING = (
     "CHECK ((((model = 'clip-vit-l14'::text) AND (vector_dims(vector) = 768))"
     " OR ((model = 'dinov2-large'::text) AND (vector_dims(vector) = 1024))))"
 )
-NARROWER = "CHECK (((model = 'clip-vit-l14'::text) AND (vector_dims(vector) = 512)))"
+#: One model at the wrong width, the other as declared.
+NARROWER = (
+    "CHECK ((((model = 'clip-vit-l14'::text) AND (vector_dims(vector) = 512))"
+    " OR ((model = 'dinov2-large'::text) AND (vector_dims(vector) = 1024))))"
+)
+#: A schema that never heard of the second model at all.
+INCOMPLETE = "CHECK (((model = 'clip-vit-l14'::text) AND (vector_dims(vector) = 768)))"
 UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://127.0.0.1:1/nowhere"
 
 
@@ -92,6 +98,16 @@ async def test_a_schema_of_another_width_answers_503_naming_both_widths(tmp_path
     assert body["type"] == "/errors/not-ready"
     assert body["checks"]["database"] == "ok"
     assert body["checks"]["models"] == f"{CLIP_VIT_L14}: code 768, schema 512"
+
+
+async def test_a_schema_that_never_heard_of_a_model_says_so(tmp_path: Path) -> None:
+    # Absent is not the same as different: a deployment running two models
+    # against a schema that declares one is a missing migration, not a typo.
+    response = await probe(INCOMPLETE, tmp_path)
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["checks"]["models"] == f"{DINOV2_LARGE}: code 1024, schema absent"
 
 
 async def test_the_probe_loads_no_model(tmp_path: Path) -> None:

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from app.core import settings as settings_module
 from app.core.settings import Settings
 from app.domain import CLIP_VIT_L14, DINOV2_LARGE, IMPLEMENTED_MODELS
 
@@ -19,10 +20,13 @@ def settings(**overrides: object) -> Settings:
 
 def test_defaults_are_exactly_what_the_proposal_states() -> None:
     s = settings()
-    assert s.enabled_models == (CLIP_VIT_L14,)
+    # Both implemented keys, in sorted order: FR-IDX-1 makes every model this
+    # build can run enabled by default, which is why an upload queues two.
+    assert s.enabled_models == (CLIP_VIT_L14, DINOV2_LARGE)
     assert s.model_warmup == ()
     assert s.model_cache == Path(".data/models")
     assert s.clip_model_name == "openai/clip-vit-large-patch14"
+    assert s.dinov2_model_name == "facebook/dinov2-large"
     assert s.torch_num_threads == 0
     assert s.embed_batch_size == 8
     assert s.inference_workers == 2
@@ -32,7 +36,11 @@ def test_the_default_configuration_only_enables_what_this_build_implements() -> 
     assert set(settings().enabled_models) <= IMPLEMENTED_MODELS
 
 
-def test_a_model_without_an_adapter_is_refused_by_name() -> None:
+def test_a_model_without_an_adapter_is_refused_by_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Every key the schema declares has an adapter today, so the guard is shown
+    # against its own rule rather than against an accident of the table: with
+    # only CLIP implemented, naming the other key is refused by name.
+    monkeypatch.setattr(settings_module, "IMPLEMENTED_MODELS", frozenset({CLIP_VIT_L14}))
     with pytest.raises(ValidationError, match=DINOV2_LARGE):
         settings(enabled_models=(CLIP_VIT_L14, DINOV2_LARGE))
 
@@ -98,10 +106,17 @@ def test_an_empty_variable_means_an_empty_list(monkeypatch: pytest.MonkeyPatch) 
 def test_several_keys_are_separated_by_commas_in_the_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Both halves are proved at once: the value is split, and the guard sees
-    # the second key — a JSON-decoded value would have failed before either.
-    with pytest.raises(ValidationError, match=DINOV2_LARGE):
-        environment_settings(monkeypatch, ENABLED_MODELS=f"{CLIP_VIT_L14},{DINOV2_LARGE}")
+    # A JSON-decoded value would have failed outright rather than split, which
+    # is what this form once did.
+    s = environment_settings(monkeypatch, ENABLED_MODELS=f"{CLIP_VIT_L14},{DINOV2_LARGE}")
+    assert s.enabled_models == (CLIP_VIT_L14, DINOV2_LARGE)
+
+
+def test_a_checkpoint_may_be_pointed_elsewhere(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A mirror, an air-gapped copy or a compatible fine-tune. A checkpoint of
+    # the wrong width is refused at load, not here.
+    s = environment_settings(monkeypatch, DINOV2_MODEL_NAME="mirror/dinov2-large")
+    assert s.dinov2_model_name == "mirror/dinov2-large"
 
 
 def test_the_same_forms_are_read_from_a_dotenv_file(
