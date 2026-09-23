@@ -26,6 +26,7 @@ BLANK: dict[str, object] = {
     "has_more": False,
     "model": "",
     "truncated": False,
+    "scan_limited": False,
 }
 for key, value in BLANK.items():
     st.session_state.setdefault(key, value)
@@ -35,6 +36,7 @@ st.caption("Describe a picture. The service ranks what it has by how near it is 
 
 query = st.text_input("What are you looking for?", key="query")
 minimum = st.slider("Minimum score", min_value=-1.0, max_value=1.0, value=0.0, step=0.01)
+#: Part of the search, not of the page: the service ranks only what carries it.
 tag = st.text_input("Only pictures tagged", key="tag", placeholder="optional")
 
 if st.button("Search", type="primary") and query:
@@ -53,6 +55,7 @@ if st.button("Search", type="primary") and query:
             has_more=page["has_more"],
             model=page["model"],
             truncated=page["query_truncated"],
+            scan_limited=page.get("scan_limited", False),
         )
         st.rerun()
 
@@ -63,18 +66,26 @@ if asked is not None:
         st.warning("The model could not take the whole query and used as much as it could.")
     st.write(f"Ranked by **{st.session_state.model}** — a score is comparable only within it.")
 
+    if st.session_state.scan_limited:
+        st.warning(
+            "The service stopped at how far it may look before it had filled the page. "
+            "There may be more matches further down the ranking — narrow the search further, "
+            "or raise the threshold."
+        )
+
     if results:
         thumbnails(results, captions=[asset_caption(item) for item in results])
     elif asked["tag"]:
         st.info(
-            f"Nothing on the pages fetched so far carries **{asked['tag']}**. "
-            "The filter applies to what was fetched — ask for more, or search without it."
+            f"Nothing the service reached carries **{asked['tag']}**. The tag is part of the "
+            "search, so this is the ranking narrowed to that tag — ask for more, or search "
+            "without it."
         )
     else:
         st.info("Nothing matched. A threshold that is too high empties a page, so try lowering it.")
 
-    # Outside the `if results` above on purpose: a tag can empty every page
-    # fetched so far while the ranking still has more to give.
+    # Outside the `if results` above on purpose: a narrowed page can come back
+    # empty while the ranking still has more to give.
     if st.session_state.has_more and st.button("More"):
         try:
             page = service().search(
@@ -93,4 +104,5 @@ if asked is not None:
             st.session_state.results = without_repeats(results, page["items"])
             st.session_state.offset += page["limit"]
             st.session_state.has_more = page["has_more"]
+            st.session_state.scan_limited = page.get("scan_limited", False)
             st.rerun()

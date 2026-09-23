@@ -70,6 +70,7 @@ def found(
     has_more: bool = False,
     model: str = "clip-vit-l14",
     truncated: bool = False,
+    scan_limited: bool = False,
 ) -> dict[str, object]:
     return {
         "items": items,
@@ -78,6 +79,7 @@ def found(
         "has_more": has_more,
         "model": model,
         "query_truncated": truncated,
+        "scan_limited": scan_limited,
     }
 
 
@@ -210,15 +212,26 @@ def test_more_repeats_the_search_that_produced_the_results(service: Service) -> 
     )
 
 
-def test_more_is_offered_even_when_a_tag_emptied_the_page(service: Service) -> None:
-    """The tag filters what was fetched; a page it empties is not the end of the
-    ranking, and the way to the rest must stay on the screen."""
+def test_the_tag_is_part_of_what_the_service_is_asked(service: Service) -> None:
+    """The tag box is the service's filter (change 12): it travels with the
+    search, and what comes back is what is shown — including an asset whose
+    tags this page never looks at."""
+    service.answer("/api/v1/search/text", found([hit("1", tags=["cat"])]))
+    test = run("search.py")
+    test.text_input[0].set_value("animal").run()
+    test.text_input[1].set_value("dog").run()
+    button(test, "Search").click().run()
+
+    assert service.queries("/api/v1/search/text")[0]["tags_all"] == "dog"
+    assert pictures(test) == 1, "the service decided this satisfies the narrowing"
+
+
+def test_more_is_offered_even_when_a_narrowed_page_is_empty(service: Service) -> None:
+    """A narrowed page that holds nothing is not the end of the ranking, and
+    the way to the rest must stay on the screen."""
     searching(
         service,
-        [
-            found([hit("1", tags=["cat"])], has_more=True),
-            found([hit("2", tags=["dog"])], has_more=False),
-        ],
+        [found([], has_more=True), found([hit("2", tags=["dog"])], has_more=False)],
     )
     test = run("search.py")
     test.text_input[0].set_value("animal").run()
@@ -227,10 +240,31 @@ def test_more_is_offered_even_when_a_tag_emptied_the_page(service: Service) -> N
 
     assert pictures(test) == 0
     assert "dog" in messages(test)
+    assert "applies to what was fetched" not in messages(test), "it no longer does"
 
     button(test, "More").click().run()
 
     assert pictures(test) == 1, "the match on the next page is reachable"
+
+
+def test_the_page_says_when_the_service_stopped_at_its_bound(service: Service) -> None:
+    service.answer("/api/v1/search/text", found([hit("1")], has_more=False, scan_limited=True))
+    test = run("search.py")
+    test.text_input[0].set_value("animal").run()
+    test.text_input[1].set_value("dog").run()
+    button(test, "Search").click().run()
+
+    assert "stopped at how far it may look" in messages(test)
+    assert "further down the ranking" in messages(test)
+
+
+def test_an_ordinary_answer_says_nothing_of_the_kind(service: Service) -> None:
+    service.answer("/api/v1/search/text", found([hit("1")]))
+    test = run("search.py")
+    test.text_input[0].set_value("animal").run()
+    button(test, "Search").click().run()
+
+    assert "stopped at how far it may look" not in messages(test)
 
 
 def test_search_says_when_the_query_was_cut(service: Service) -> None:

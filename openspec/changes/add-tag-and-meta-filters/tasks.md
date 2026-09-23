@@ -140,16 +140,16 @@ two plans answered the query.
 
 ## 5. The interface
 
-- [ ] 5.1 `ui/pages/search.py` sends the tag to the service instead of filtering
+- [x] 5.1 `ui/pages/search.py` sends the tag to the service instead of filtering
   what it fetched, and the page stops saying that the filter applies only to
   what was fetched. Verify: `AppTest` asserts the request carries the tag and
   that the results shown are what the service returned; the wording that
   described the old behaviour is gone from the page and from
   `docs/how-to/demo-ui.md`.
-- [ ] 5.2 When the service says it stopped at its bound, the page says so.
+- [x] 5.2 When the service says it stopped at its bound, the page says so.
   Verify: `AppTest` with a stubbed answer that carries the flag asserts the
   sentence is on the page, and that an ordinary answer does not carry it.
-- [ ] 5.3 The interface still imports nothing from the service. Verify: the
+- [x] 5.3 The interface still imports nothing from the service. Verify: the
   existing layering test covers the changed modules because it walks every file
   under `ui/`.
 

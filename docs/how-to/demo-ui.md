@@ -42,12 +42,16 @@ the service for the next page by offset. A picture the service hands back twice
 — which a group of identical scores at a page's edge allows — is shown once:
 the page keeps the service's offset and drops the repeat from the screen.
 
-The **tag box on this page is a filter of what has been fetched**, not part of
-the search: `GET /search/text` takes no tag — filtered vector search is its own
-question, with its own measurement, and change 12 owns it. So a tag can empty a
-page while the ranking still holds matches further down, which is why **More**
-stays on the screen and the page says that the filter is what emptied it. On
-**Browse** the filter is the store's own (`tags_all`), and has no such gap.
+The **tag box on this page is the service's own filter**: it travels with the
+search as `tags_all`, so the answer is the nearest pictures *that carry the
+tag*, however deep in the ranking they sit. Nothing is removed from the page
+afterwards — what the service answered is what is shown. A narrowed search is
+bounded in how far the index may look; when it stops at that bound before
+filling the page, the answer says so (`scan_limited`) and the page repeats it,
+rather than presenting a short page as the end of the ranking. **More** stays on
+the screen when the service says more exist, including when this page of the
+narrowed ranking held nothing. On **Browse** the same filter narrows the
+listing.
 
 **Find similar** — the other half of the demo. Upload a picture and the service
 ranks what it has by how much it *looks like* that one; the picture is decoded
