@@ -1,7 +1,7 @@
 # Handoff — add-tag-and-meta-filters
 
 **Updated:** 2026-09-23 · claude
-**State:** awaiting-gate-1
+**State:** implementing
 **Branch:** change/add-tag-and-meta-filters
 **Security-sensitive:** yes — this change handles client input: a shared
 parser for tag and metadata narrowings on four public surfaces, including the
@@ -37,27 +37,24 @@ then `DEMO_COUNT=20 make demo`): 20 assets, 40 vectors, both models `done`.
 
 ## Next step
 
-Gate 1 confirmation of round 2: `/gate-review add-tag-and-meta-filters 1 confirm 2`.
-All three findings are `fixed`, and each was a place where the rewrite had not
-been carried all the way through:
+`/opsx:apply add-tag-and-meta-filters` — Gate 1 round 2 confirmed, all three
+findings resolved. 8 of 28 tasks are done and committed; the rest, in order:
 
-1. The delta spec still demanded the vector index for every narrowed search —
-   forbidding the exact plan the same rewrite had just accepted. It now requires
-   what actually matters (no narrowed search reads every stored vector, and the
-   answer does not depend on which plan ran) and keeps a targeted requirement
-   that the index path works when it is chosen.
-2. Removing the database-backed positive case left `scan_limited` with no test
-   that could catch a mis-wiring: the unit tests feed the arithmetic its own
-   inputs. Task 3.5 now asks for the positive path end to end, and it can be
-   built without touching the planner's statistics — measured: a narrowing over
-   half the corpus keeps the vector index *with* statistics, and a lowered scan
-   budget then leaves the page one row short of what it needed while fifteen
-   hundred matches remain.
-3. The benchmark was planned to empty the tables `DATABASE_URL` names. It now
-   builds in a schema it creates and drops, a test asserts the documented
-   command leaves a populated store untouched, and the applicability table stops
-   claiming that nothing here deletes — on this machine that mistake already
-   cost the demo corpus once.
+- **3.5 / 3.5a** the scan-limit evidence, positive and negative. The positive
+  one needs no games with statistics: a narrowing over half the corpus keeps the
+  vector index, and a lowered scan budget then leaves the page one candidate
+  short while fifteen hundred matches remain.
+- **3.6 / 3.7** the bounded question only when it is needed, and the envelope.
+- **4.x** the four surfaces, `meta.<key>` read from the raw parameters.
+- **5.x** the interface's tag box becomes the service's filter.
+- **6.x** the benchmark, in a schema it creates and drops, and the numbers.
+- **7.x** the documentation and the evidence.
+
+What the review cost and bought, worth remembering at Gate 2: three rounds of
+Gate 1 on this change, and every finding was a contradiction between what the
+artifacts claimed and what the database does. The measurement that started it —
+one probe without `ANALYZE` — is why the change now carries a benchmark rather
+than a slogan.
 
 ## Blockers
 
