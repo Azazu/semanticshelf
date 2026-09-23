@@ -57,13 +57,18 @@ work queued for it — SHALL be the same.
 The import SHALL read a file only through a descriptor it opened itself, and
 SHALL decide what that file is from that descriptor rather than from its path:
 a name that was safe when it was listed SHALL NOT be able to become something
-else before it is read.
+else before it is read. This SHALL hold for every file the import reads,
+whether it is a candidate picture or the sidecar of one, and in every directory
+the run walks.
 
 A symbolic link SHALL NOT be read, wherever it points. A directory reached
 through a symbolic link SHALL NOT be walked. Anything that is not a regular
 file — a device node, a socket, a fifo — SHALL NOT be read, and opening it
 SHALL NOT be able to block the run. Each of these SHALL be reported as skipped
-with its reason rather than passed over in silence.
+with its reason rather than passed over in silence; when it is a sidecar, its
+own picture SHALL be refused with that reason rather than imported without it,
+because a picture whose provenance could not be read is not the picture the run
+was asked to import.
 
 The directory named for the run SHALL be opened once before the walk starts,
 and every step of the run — counting, walking, importing — SHALL work in the
@@ -81,6 +86,24 @@ in that directory; with it, the files of every directory beneath it.
   read, by a symbolic link pointing outside the folder or by a fifo
 - **THEN** nothing outside the folder is read, the run does not block, and the
   entry is reported as skipped
+
+#### Scenario: A sidecar that is a symbolic link
+- **WHEN** a picture's sidecar is a symbolic link, wherever it points
+- **THEN** it is not read, nothing outside the folder is opened, and the
+  picture is refused with that reason
+
+#### Scenario: A sidecar that is gone by the time it is read
+- **WHEN** a sidecar is removed after the picture beside it was listed and
+  before the sidecar is read
+- **THEN** the picture is refused with that reason rather than imported without
+  what its sidecar said
+
+#### Scenario: A sidecar replaced between being found and being read
+- **WHEN** a sidecar is replaced, after the picture beside it was listed and
+  before the sidecar is read, by a symbolic link or by a file that is not
+  regular
+- **THEN** it is not read, the run does not block, and the picture is refused
+  with that reason
 
 #### Scenario: A link that leaves the tree
 - **WHEN** the imported directory holds a symbolic link to a file outside it
@@ -131,6 +154,16 @@ Tags and metadata given for the run SHALL be applied to every asset it
 creates, through the same normalisation and the same limits an upload applies,
 and SHALL NOT replace what the import records about the file's origin.
 
+A picture MAY be accompanied by a sidecar file, named after it and lying beside
+it, carrying tags and metadata for that picture alone. When one is present its
+tags SHALL be added to the run's tags and its metadata merged over the run's
+metadata, through the same normalisation and the same limits, and neither SHALL
+replace what the import records about the file's origin. A sidecar SHALL NOT be
+considered a picture to import. A sidecar that cannot be read, is not an
+object, exceeds the limits, or carries a tag the service would refuse SHALL
+cause its own picture to be refused with a reason naming the sidecar, and the
+run SHALL continue with the rest of the folder.
+
 #### Scenario: A picture in a subdirectory
 - **WHEN** a picture nested in subdirectories is imported
 - **THEN** its original filename is the file's own name, and its metadata
@@ -150,6 +183,27 @@ and SHALL NOT replace what the import records about the file's origin.
 #### Scenario: Tags that are not acceptable
 - **WHEN** a folder is imported with a tag the service would refuse at upload
 - **THEN** the run refuses before reading any file, and nothing is stored
+
+#### Scenario: A picture with a sidecar
+- **WHEN** a folder holding a picture with its sidecar is imported
+- **THEN** that asset carries the sidecar's tags together with the run's, and
+  the sidecar's metadata over the run's, with the recorded origin intact
+
+#### Scenario: A sidecar that tries to set the origin
+- **WHEN** a sidecar names the key the import records the origin under
+- **THEN** the stored origin is the one the import recorded, not the one the
+  sidecar supplied
+
+#### Scenario: A sidecar the service cannot accept
+- **WHEN** a sidecar cannot be read, is not an object, exceeds the limits, or
+  carries a tag the service would refuse
+- **THEN** its picture is refused with a reason naming the sidecar, nothing is
+  stored for that picture, and the run continues with the rest of the folder
+
+#### Scenario: A sidecar is not a picture
+- **WHEN** a folder holding pictures and their sidecars is imported
+- **THEN** the sidecars are not reported as files the run refused or skipped,
+  and no asset is created for one
 
 ### Requirement: A dry run changes nothing
 

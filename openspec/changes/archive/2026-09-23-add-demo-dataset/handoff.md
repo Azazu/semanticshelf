@@ -1,7 +1,7 @@
 # Handoff — add-demo-dataset
 
 **Updated:** 2026-09-23 · claude
-**State:** ready-to-merge
+**State:** merged
 **Branch:** change/add-demo-dataset
 
 ## Done this session
@@ -30,17 +30,13 @@ that matter (the layering, the manifest, the transfers, the sidecar).
 
 ## Next step
 
-**Gate 2 passed** (Confirmation 1 of round 1, commit `2086af4`, all three
-findings confirmed; the reviewer reproduced each independently). Gate 1 passed
-earlier on the artifacts.
+Merged into `main` as `6d0cec3` (`--no-ff`, 19 commits) and archived with both
+deltas synced: `demo-dataset` is a new capability of eight requirements, and
+`folder-indexing` gained the sidecar — what it may say, and that it is opened
+through the descriptor the walk holds, with the two races that proves.
 
-`/git:merge add-demo-dataset`, then `/opsx:archive`. The corpus itself is not
-committed — `.data/` is gitignored — so nothing of the 20 pictures or the
-241 MiB archive goes with it.
-
-Local evidence, run the way CI runs it (`FORCE_COLOR=1 CI=true`): `make check`
-406 green, `make test-integration` 198 green, `openspec validate --all
---strict` 13/13, both `scripts/*_test.sh`, `sh -n` over every script.
+Next in the roadmap: change 10, `add-demo-ui` — the Streamlit pages, which now
+have a corpus to render.
 
 ## Blockers
 
