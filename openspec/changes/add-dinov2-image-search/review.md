@@ -70,3 +70,35 @@ the working tree was initially clean. All source-round findings are marked
 fixed. `openspec validate add-dinov2-image-search --strict` passed.
 This is a Gate 1 artifact confirmation; implementation tests were not run.
 Only this review record was appended; no git write commands were run.
+
+## Round 1 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-23
+**Reviewed-Commit:** f4aad30acfe9b3821ac8dfd991c00bacec11049f
+**Verdict:** changes-requested
+
+### Findings
+
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `ui/shell.py:74–75`; `ui/pages/similar.py:134`; `ui/pages/search.py:91` | The new thumbnail action uses only the asset ID as its Streamlit widget key, but both search pages append subsequent results without deduplication. The search contract explicitly permits overlapping pages when a tied group crosses the bounded candidate window; changes to the corpus between requests can also repeat an asset. Consequently a valid second page containing an already displayed ID makes **More** raise `StreamlitDuplicateElementKey` and abort rendering, including on the existing text-search page which now uses these buttons. Reproduced with the real Similar page in `AppTest` and a stub returning asset `11111111` on both pages: the initial render has no exception; clicking More raises "There are multiple elements with the same key='similar-11111111'". Make rendering tolerate repeated IDs (for example, deduplicate accumulated results while preserving the server offset, or give each rendered occurrence a unique widget key). Add regression coverage that clicks More on overlapping pages, verifies there is no exception, and checks the similar action still targets the correct asset; cover both text and picture search consumers of the shared grid. | open |
+
+### Validation
+
+The branch and HEAD match the requested target, and the working tree was clean
+before this record. Reviewed the diff from `main`, the proposal, design, tasks,
+all four delta specs, prior gate records, repository policy and OpenSpec
+configuration. Inspected the search SQL and depth accounting, model adapter
+and installed DINOv2 implementation, multipart handling and temporary-file
+lifecycle, queue serialization and shared drain, UI, documentation and tests.
+
+`openspec validate add-dinov2-image-search --strict` and `git diff --check`
+passed. The existing UI suite passed (45 tests), as did the selected domain,
+model-settings, search-policy and index-CLI unit tests (59 tests), using the
+installed environment with bytecode and pytest cache writes disabled. An
+additional in-memory AppTest reproduction demonstrated finding 1 by clicking
+More on overlapping pages. The broader `make test` run, with the installed
+Python supplied through `RUN`, was interrupted after it stopped making progress
+at the first API test; it did not produce a passing result. Integration and
+real-weight suites were inspected but not rerun, and remote CI was not queried.
+Only `review.md` was modified; no git write commands were run.
