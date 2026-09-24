@@ -169,10 +169,15 @@ badly looks exactly like one that stopped well until the lease expires.
   look at when nothing is being indexed (`/stats`, `index_status`). Verify:
   every command in the page was run in the form shown, against a real service
   and a real worker.
-- [ ] 6.2 `docs/reference/settings.md` and `.env.example` gain
+- [x] 6.2 `docs/reference/settings.md` and the environment template gain
   `INDEXING_RUNNER` and `WORKER_POLL_SECONDS`, with the same columns every other
   setting has (who reads it, default, what it means). Verify: the page lists
-  both; `rg` finds no setting in `Settings` that the page or the template omits.
+  both, and a sweep of `Settings.model_fields` against the page finds nothing
+  undocumented in either direction. The template's two lines were added by the
+  user, because the permission rules keep the executor out of that directory;
+  the comparison that followed found the page's *copy* of the template stale by
+  nine lines, so the copy was replaced by a reference to the file itself
+  (AGENTS.md: one authority plus references).
 - [x] 6.3 `docs/explanation/requirements.md` reads as the service behaves:
   FR-IDX-2 and FR-CLI-2 name the command as it actually is (`semanticshelf
   worker`, not `python -m app.cli worker`); FR-IDX-2 says what `INDEXING_RUNNER`

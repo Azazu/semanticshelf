@@ -1,7 +1,7 @@
 # Handoff — add-indexing-worker
 
 **Updated:** 2026-09-24 · claude
-**State:** blocked
+**State:** implementing
 **Branch:** change/add-indexing-worker
 
 ## Done this session
@@ -34,23 +34,30 @@ them). `make check` 580, integration 275, ui 59, both script suites, `sh -n`,
 
 ## Next step
 
-One manual edit (below), then the push and `/gate-review add-indexing-worker 2`.
+Push `change/add-indexing-worker` and watch CI. On green:
+`/gate-review add-indexing-worker 2`.
 
-`scripts/pregate-verify.sh gate2 add-indexing-worker` will fail while task 6.2
-is unchecked — that is the floor doing its job, not a surprise.
+All 27 tasks are done. `scripts/pregate-verify.sh gate2 add-indexing-worker`
+passes.
+
+What Gate 2 should know before reading the diff:
+
+- **The guarantee is at-least-once with a fenced completion**, stated that way
+  in the delta spec, the requirements and the how-to. A test holds one runner
+  inside the work while its lease expires, lets a second take the same unit, and
+  asserts one vector with the loser's completion discarded.
+- **The evidence is processes.** `tests/worker_child.py` is the command's
+  runtime with the fake embedder and a barrier; seven integration tests
+  rendezvous through `held-<pid>`, `signalled-<pid>` and `ready-<pid>`. The
+  fixture that starts children kills any survivor — the first run of these tests
+  leaked one, and it went on claiming work from every test after it.
+- **The switch has four callers**, because FR-CLI-1 promised it would.
+- **One thing outside the change's scope was corrected**: `settings.md` carried
+  a copy of the environment template that had drifted from it by nine lines. The
+  copy is gone, replaced by a reference — the repository's own rule about one
+  authority. The template's own two new lines were added by the user, since the
+  permission rules keep the executor out of that directory.
 
 ## Blockers
 
-**Task 6.2 needs one manual edit.** The permission rules keep me out of the
-directory holding the environment template, so two lines have to be added by
-hand after `WORKER_BATCH_SIZE=4`:
-
-```
-WORKER_POLL_SECONDS=2
-INDEXING_RUNNER=inline
-```
-
-`docs/reference/settings.md` already documents both, and the sweep that compares
-the declared settings with the documented ones passes; the template is the only
-place left.
-
+None.
