@@ -225,3 +225,38 @@ separate full unit/API run collected 545 selected tests and stalled at
 review does not independently certify the full check suite as green. No
 database integration suite, live benchmark or GitHub Actions query was run.
 Only `review.md` was modified; no git write commands were run.
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-24
+**Reviewed-Commit:** 6ace07c7fcc4cf338d0f265a48a826c5086aa77b
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The CLI schema pattern now ends at `\Z`, rejecting `public\n` before `run()` or any connection is reached. Protected names and the `pg_` namespace are refused at the CLI and protected names are checked again in `run()`. The new refusal regression replaces `run()` and asserts that no refused input reaches it. Independent non-database probes confirmed these refusals. |
+| 2 | confirmed — Plain `CREATE SCHEMA` replaces the initial unconditional DROP, and cleanup is enabled only after that creation transaction commits. The occupied default/custom schema tests exercise setup refusal and assert preservation of the existing schema, its contents, and service asset, embedding and job identifiers. Default-command preservation now includes jobs. Documentation describes the ownership boundary consistently. An independent fake-engine probe confirmed that failed ownership acquisition executes no DROP and that a subsequent build failure drops only the schema successfully created by the run. |
+| 3 | confirmed — The added real-repository/service pair exercises an empty page with offset 5 after reaching only two candidates and genuine exhaustion at offset 50 after reaching all thirty matches. It asserts true/false scan-limit results, probe answers 3/30 and exact bounds 3/31, establishing use of the pre-offset count. The existing real-index positive coverage remains. Commit `08e3e488de87f8438912bfaeb1413d14e3f743d7` records demonstrated failures for post-offset counting and substituting `offset + reached`; inspection of the service wiring and assertions supports those outcomes. |
+| 4 | confirmed — The metadata-key pattern now requires the whole string. Parser regressions reject terminal newlines and cover the 64/65-character boundary; the added wire regression expects 422 for `meta.dataset%0A`. The parser regressions passed independently. Related tag and request-id anchors also require the whole string, with passing direct regressions. |
+
+### Validation
+
+Reviewed only the diff from `9e8506aa5c0f4507f42465bb36144799f885f3d7`
+to `6ace07c7fcc4cf338d0f265a48a826c5086aa77b` and collateral ownership,
+validation and candidate/probe behavior reachable from the named findings.
+Confirmed the requested branch and HEAD, an initially clean working tree,
+and disposition of all source-round findings. Read the repository instructions,
+OpenSpec configuration, relevant planning obligations, implementation, tests,
+documentation and recorded mutation evidence.
+
+All 71 selected tests passed through `make test` using the installed virtual
+environment: narrowing, tagging, search-cut unit tests and the direct request-id
+newline regression. Fake-engine probes verified CLI refusals, occupied-schema
+setup failure without cleanup DDL, and cleanup after a post-create build failure;
+no SQL was sent to a database. Strict OpenSpec validation and `git diff --check`
+passed. Broader request-id HTTP selections stalled and were interrupted; no
+independent full-suite or database-integration success is claimed. The executor's
+integration and mutation results were assessed from the committed evidence,
+not rerun. No live benchmark or GitHub Actions query was run. Only `review.md`
+was modified; no git write commands were run.
