@@ -106,7 +106,13 @@ def pool(db_settings: Settings) -> Iterator[Any]:
     executor.shutdown(wait=True)
 
 
-async def add_asset(repository: AssetRepository, seed: int) -> Asset:
+async def add_asset(
+    repository: AssetRepository,
+    seed: int,
+    *,
+    tags: Sequence[str] = (),
+    meta: dict[str, Any] | None = None,
+) -> Asset:
     return await repository.add(
         sha256=f"{seed:064d}",
         content_type="image/png",
@@ -115,16 +121,33 @@ async def add_asset(repository: AssetRepository, seed: int) -> Asset:
         height=64,
         size_bytes=1024 * seed,
         source="upload",
+        tags=tags,
+        meta=meta,
     )
 
 
-async def seed_ranking(session: AsyncSession, angles: Sequence[tuple[float, float]]) -> list[Asset]:
-    """One asset per direction, nearest first when the query points at (1, 0)."""
+async def seed_ranking(
+    session: AsyncSession,
+    angles: Sequence[tuple[float, float]],
+    *,
+    tags: Sequence[Sequence[str]] | None = None,
+    meta: Sequence[dict[str, Any]] | None = None,
+) -> list[Asset]:
+    """One asset per direction, nearest first when the query points at (1, 0).
+
+    `tags` and `meta` give one per direction, so a narrowing can be written
+    against positions in the ranking rather than against identifiers.
+    """
     assets = AssetRepository(session)
     embeddings = EmbeddingRepository(session)
     created = []
     for seed, (x, y) in enumerate(angles, start=1):
-        asset = await add_asset(assets, seed)
+        asset = await add_asset(
+            assets,
+            seed,
+            tags=() if tags is None else tags[seed - 1],
+            meta=None if meta is None else meta[seed - 1],
+        )
         await embeddings.upsert(
             asset_id=asset.id, model=CLIP_VIT_L14, vector=plane_vector(CLIP_DIM, x, y)
         )
@@ -390,3 +413,47 @@ async def test_two_assets_at_the_same_distance_come_back_in_one_order(
     pages = [ids(await searched(client)) for _ in range(3)]
 
     assert pages == [expected, expected, expected]
+
+
+# --- narrowed -------------------------------------------------------------------
+
+
+async def test_a_narrowed_search_ranks_only_what_the_narrowing_admits(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    """The nearest asset carries neither tag, so an answer that merely removed
+    rows from the page would come back one item short of what was asked for."""
+    assets = await seed_ranking(session, RANKING, tags=[[], ["dragon"], ["dragon"], ["fog"]])
+
+    body = await searched(client, tags_all="dragon", limit=2)
+
+    assert ids(body) == [str(assets[1].id), str(assets[2].id)], "a full page, in order"
+    assert body["has_more"] is False
+    assert body["scan_limited"] is False
+
+
+async def test_a_narrowing_by_metadata_reaches_the_text_search(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    """`meta.<key>` is read off the query string, which is the only way a
+    parameter whose name the caller invents can arrive (design decision 5)."""
+    assets = await seed_ranking(
+        session, RANKING, meta=[{"dataset": "unsplash"}, {"dataset": "coco"}, {}, {}]
+    )
+
+    body = await searched(client, **{"meta.dataset": "coco"})
+
+    assert ids(body) == [str(assets[1].id)]
+
+
+async def test_a_score_means_the_same_thing_narrowed(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    """A narrowing decides which assets are ranked, never how near they are."""
+    assets = await seed_ranking(session, RANKING, tags=[[], ["dragon"], [], []])
+    wide = await searched(client)
+    narrow = await searched(client, tags_all="dragon")
+
+    scored = {item["asset"]["id"]: item["score"] for item in wide["items"]}
+    assert ids(narrow) == [str(assets[1].id)]
+    assert narrow["items"][0]["score"] == scored[str(assets[1].id)]

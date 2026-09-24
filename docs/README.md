@@ -29,8 +29,11 @@ implementing change)_
   of an asset's work, finding what failed and why, and running it again
 - [`how-to/searching.md`](how-to/searching.md) — the three ways to ask: words,
   a picture you send, a picture the store holds. What a score means, paging and
-  its depth bounds, thresholds, which model answers, and what is not filterable
-  yet
+  its depth bounds, thresholds, which model answers, and how to narrow a search
+  by tags and metadata
+- [`how-to/benchmarks.md`](how-to/benchmarks.md) — measuring a narrowed vector
+  search: the command, which plan answers at which selectivity, what the
+  iterative scan buys, and what stale statistics do to all of it
 
 ## Reference (facts)
 

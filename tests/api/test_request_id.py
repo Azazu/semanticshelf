@@ -7,6 +7,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
+from app.core.request_id import resolve_request_id
 from app.core.settings import Settings
 from app.main import create_app
 from tests.conftest import make_client
@@ -30,6 +31,18 @@ async def test_invalid_client_id_is_replaced(client: httpx.AsyncClient, bad: str
     generated = response.headers["x-request-id"]
     assert generated != bad
     assert uuid.UUID(generated).version == 4
+
+
+def test_an_id_that_ends_in_a_newline_is_not_of_that_shape() -> None:
+    """Asserted at the function, because no HTTP client will send such a header
+    — which is exactly why the guard has to say what it means: `^...$` matches
+    before a final newline, so the old pattern would have echoed `abc\n` into
+    the response header and every log line (change 12, Gate 2 finding 1)."""
+    generated = resolve_request_id([(b"x-request-id", "abc\n".encode("latin-1"))])
+
+    assert generated != "abc\n"
+    assert uuid.UUID(generated).version == 4
+    assert resolve_request_id([(b"x-request-id", b"abc")]) == "abc", "the shape itself still holds"
 
 
 async def test_missing_id_is_generated(client: httpx.AsyncClient) -> None:

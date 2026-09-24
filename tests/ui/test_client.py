@@ -55,25 +55,50 @@ def test_a_threshold_that_was_not_chosen_is_not_sent(service: Service) -> None:
     assert "min_score" not in service.queries("/api/v1/search/text")[0]
 
 
-def test_a_tag_narrows_the_results_the_page_shows(service: Service) -> None:
+def test_a_tag_travels_with_the_search(service: Service) -> None:
+    """Since change 12 the service narrows the ranking, so the tag is part of
+    the question. What comes back is shown as it came back — a client that
+    filtered it again would be answering a question the service already
+    answered, and worse."""
     service.answer(
         "/api/v1/search/text",
         {
-            "items": [
-                {"score": 0.4, "asset": asset("1", tags=["cat"])},
-                {"score": 0.3, "asset": asset("2", tags=["dog"])},
-            ],
+            "items": [{"score": 0.3, "asset": asset("2", tags=["dog"])}],
             "limit": 5,
             "offset": 0,
             "has_more": False,
             "model": "m",
             "query_truncated": False,
+            "scan_limited": False,
         },
     )
 
     found = client_module.client().search("animal", limit=5, offset=0, min_score=None, tag="dog")
 
+    (query,) = service.queries("/api/v1/search/text")
+    assert query["tags_all"] == "dog"
     assert [item["asset"]["id"] for item in found["items"]] == ["2"]
+
+
+def test_nothing_the_service_answered_is_removed_by_the_client(service: Service) -> None:
+    """The one that fails if the old post-filter ever returns: the service is
+    the authority on what satisfies a narrowing, tags shown or not."""
+    service.answer(
+        "/api/v1/search/text",
+        {
+            "items": [{"score": 0.4, "asset": asset("1", tags=[])}],
+            "limit": 5,
+            "offset": 0,
+            "has_more": False,
+            "model": "m",
+            "query_truncated": False,
+            "scan_limited": False,
+        },
+    )
+
+    found = client_module.client().search("animal", limit=5, offset=0, min_score=None, tag="dog")
+
+    assert [item["asset"]["id"] for item in found["items"]] == ["1"]
 
 
 def test_listing_passes_the_tag_filter_the_api_takes(service: Service) -> None:

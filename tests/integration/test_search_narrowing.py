@@ -1,0 +1,798 @@
+"""Narrowing a search, against a real index.
+
+The defect this change exists to prevent cannot be reproduced against a stand-in
+— it is the index's own behaviour — so the corpus here is three thousand rows
+with a rare tag shuffled through it, and the assertions are about what a page
+holds and what the answer says about its own completeness.
+
+The vectors are planar: one direction per asset, the query another, so the
+ranking is arithmetic a reader can check.
+"""
+
+import json
+import math
+import random
+from collections.abc import AsyncIterator, Iterator, Sequence
+from typing import Any
+from uuid import UUID, uuid4
+
+import pytest
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+
+from app.core.settings import Settings
+from app.db.engine import create_session_factory
+from app.domain import CLIP_VIT_L14, DINOV2_LARGE, Narrowing, dimension_of, vector_index_name
+from app.ml import registry
+from app.ml.base import EmbeddingResult, normalise
+from app.ml.fake import FakeEmbedder
+from app.ml.pool import create_pool
+from app.repositories import EmbeddingRepository
+from app.services import search
+from tests.integration.conftest import explain
+
+pytestmark = pytest.mark.integration
+
+TABLES = "assets, embeddings, indexing_jobs"
+CLIP_DIM = dimension_of(CLIP_VIT_L14)
+DINO_DIM = dimension_of(DINOV2_LARGE)
+RARE = "rare"
+COMMON = "common"
+
+
+def plane_vector(dimension: int, x: float, y: float) -> list[float]:
+    values = [0.0] * dimension
+    values[0], values[1] = x, y
+    return values
+
+
+class PlanarEmbedder(FakeEmbedder):
+    """A text tower that always answers with the direction the fixtures rank by."""
+
+    def __init__(self) -> None:
+        super().__init__(CLIP_VIT_L14, CLIP_DIM)
+
+    def embed_text(self, texts: Sequence[str]) -> EmbeddingResult:
+        rows = normalise([plane_vector(CLIP_DIM, 1.0, 0.0) for _ in texts])  # type: ignore[arg-type]
+        return EmbeddingResult(vectors=rows, truncated=(False,) * len(texts))
+
+
+@pytest.fixture
+def embedder() -> Iterator[PlanarEmbedder]:
+    planar = PlanarEmbedder()
+    registry.clear()
+    original = dict(registry.FACTORIES)
+    registry.FACTORIES[CLIP_VIT_L14] = lambda settings: planar
+    yield planar
+    registry.FACTORIES.clear()
+    registry.FACTORIES.update(original)
+    registry.clear()
+
+
+@pytest.fixture(autouse=True)
+async def empty_store(engine: AsyncEngine) -> None:
+    async with engine.begin() as connection:
+        await connection.execute(sa.text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+
+
+@pytest.fixture
+async def session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
+    factory = create_session_factory(engine)
+    async with factory() as session:
+        yield session
+
+
+@pytest.fixture
+def pool(db_settings: Settings) -> Iterator[Any]:
+    executor = create_pool(db_settings)
+    yield executor
+    executor.shutdown(wait=True)
+
+
+async def seed(
+    session: AsyncSession,
+    *,
+    assets: int,
+    rare_every: int,
+    model: str = CLIP_VIT_L14,
+    seed_value: int = 7,
+) -> list[UUID]:
+    """A ranking of `assets` rows, with one in `rare_every` carrying `RARE`.
+
+    The rare ones are shuffled through the ranking rather than gathered at its
+    head: a narrowing that matches only what the index would have returned
+    anyway proves nothing about filtering.
+
+    Written in two statements: this is the only fixture that needs thousands of
+    rows, and the point is the index's behaviour, not the insert.
+    """
+    dimension = dimension_of(model)
+    order = list(range(assets))
+    random.Random(seed_value).shuffle(order)
+    identifiers = [uuid4() for _ in range(assets)]
+    rows, vectors = [], []
+    for position, (identifier, rank) in enumerate(zip(identifiers, order, strict=True)):
+        angle = (rank + 1) * (math.pi / 2) / (assets + 2)
+        rows.append(
+            {
+                "id": identifier,
+                "sha256": f"{rank:064d}",
+                "content_type": "image/png",
+                "file_ext": "png",
+                "width": 64,
+                "height": 64,
+                "size_bytes": 1024,
+                "source": "upload",
+                "tags": [RARE] if position % rare_every == 0 else [COMMON],
+                "meta": {"dataset": "coco"} if position % rare_every == 0 else {},
+            }
+        )
+        vectors.append(
+            {
+                "asset_id": identifier,
+                "model": model,
+                "vector": plane_vector(dimension, math.cos(angle), math.sin(angle)),
+            }
+        )
+    await session.execute(
+        sa.text(
+            "INSERT INTO assets (id, sha256, content_type, file_ext, width, height,"
+            " size_bytes, source, tags, meta) VALUES (:id, :sha256, :content_type,"
+            " :file_ext, :width, :height, :size_bytes, :source, :tags, CAST(:meta AS jsonb))"
+        ),
+        [{**row, "meta": json.dumps(row["meta"])} for row in rows],
+    )
+    await session.execute(
+        sa.text(
+            "INSERT INTO embeddings (asset_id, model, vector) "
+            "VALUES (:asset_id, :model, CAST(:vector AS vector))"
+        ),
+        [{**vector, "vector": str(vector["vector"])} for vector in vectors],
+    )
+    await session.commit()
+    # In ranking order: the nearest first.
+    return [identifiers[order.index(rank)] for rank in range(assets)]
+
+
+async def tagged(session: AsyncSession, tag: str) -> list[UUID]:
+    """In a transaction of its own: a read left open is a transaction the next
+    search cannot begin inside."""
+    async with session.begin():
+        rows = await session.execute(
+            sa.text("SELECT id FROM assets WHERE tags @> ARRAY[:tag]::text[]"), {"tag": tag}
+        )
+        return [identifier for (identifier,) in rows]
+
+
+# --- the defect, reproduced and prevented ---------------------------------------
+
+
+async def test_a_narrowing_that_matches_rarely_still_fills_a_page(
+    session: AsyncSession, db_settings: Settings, pool: Any, embedder: PlanarEmbedder
+) -> None:
+    """One asset in three hundred carries the tag, and the page comes back full.
+
+    Which plan answers it is the planner's choice (`design.md`, Context): with
+    the statistics a freshly written table has, this query stays on the vector
+    index, and there the iterative scan is what fills the page — removing it
+    empties this test. Given statistics, PostgreSQL would answer the same
+    narrowing exactly instead, and the page would be full for a different
+    reason. The assertion is the promise, which holds either way.
+    """
+    await seed(session, assets=3000, rare_every=300)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=5,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert len(page.hits) == 5, "a full page of the nearest rare assets"
+    assert all(RARE in hit.asset.tags for hit in page.hits)
+    assert [hit.score for hit in page.hits] == sorted(
+        (hit.score for hit in page.hits), reverse=True
+    ), "nearest first"
+    assert page.scan_limited is False, "ten exist and five were asked for"
+
+
+async def test_the_scan_is_iterative_only_when_something_is_narrowed(
+    session: AsyncSession, db_settings: Settings, pool: Any, embedder: PlanarEmbedder
+) -> None:
+    """The setting is per query, read from inside the transaction that runs it."""
+    await seed(session, assets=50, rare_every=5)
+    seen: list[str] = []
+
+    class Watching(EmbeddingRepository):
+        async def nearest(self, **kwargs: Any) -> Any:
+            value = await self._session.execute(
+                sa.select(sa.func.current_setting("hnsw.iterative_scan", True))
+            )
+            seen.append(value.scalar_one())
+            return await super().nearest(**kwargs)
+
+    original = search.EmbeddingRepository
+    search.EmbeddingRepository = Watching  # type: ignore[misc]
+    try:
+        await search.search_text(
+            "anything", session=session, settings=db_settings, pool=pool, limit=3
+        )
+        await search.search_text(
+            "anything",
+            session=session,
+            settings=db_settings,
+            pool=pool,
+            limit=3,
+            narrowing=Narrowing(tags_all=(RARE,)),
+        )
+    finally:
+        search.EmbeddingRepository = original  # type: ignore[misc]
+
+    assert seen == ["off", "strict_order"]
+
+
+async def test_a_narrowing_changes_which_assets_are_ranked_not_their_scores(
+    session: AsyncSession, db_settings: Settings, pool: Any, embedder: PlanarEmbedder
+) -> None:
+    await seed(session, assets=200, rare_every=4)
+
+    wide = await search.search_text(
+        "anything", session=session, settings=db_settings, pool=pool, limit=50
+    )
+    narrow = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=50,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    wide_scores = {hit.asset.id: hit.score for hit in wide.hits}
+    shared = [hit for hit in narrow.hits if hit.asset.id in wide_scores]
+    assert shared, "the two answers overlap"
+    for hit in shared:
+        assert hit.score == wide_scores[hit.asset.id]
+
+
+async def test_both_tag_conditions_and_metadata_narrow_the_ranking(
+    session: AsyncSession, db_settings: Settings, pool: Any, embedder: PlanarEmbedder
+) -> None:
+    await seed(session, assets=100, rare_every=10)
+    rare = set(await tagged(session, RARE))
+
+    by_all = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=20,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+    by_any = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=20,
+        narrowing=Narrowing(tags_any=(RARE, "nothing-carries-this")),
+    )
+    by_meta = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=20,
+        narrowing=Narrowing(meta={"dataset": "coco"}),
+    )
+
+    for answer in (by_all, by_any, by_meta):
+        assert {hit.asset.id for hit in answer.hits} <= rare
+        assert len(answer.hits) == len(rare)
+
+
+async def test_a_narrowing_nothing_satisfies_is_an_empty_page(
+    session: AsyncSession, db_settings: Settings, pool: Any, embedder: PlanarEmbedder
+) -> None:
+    await seed(session, assets=100, rare_every=10)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=20,
+        narrowing=Narrowing(tags_all=("nothing-carries-this",)),
+    )
+
+    assert page.hits == []
+    assert page.has_more is False
+    assert page.scan_limited is False, "the scan reached the end of a ranking with nothing in it"
+
+
+# --- what the answer says when the scan stops ----------------------------------
+
+
+class Counting(EmbeddingRepository):
+    """Counts the bounded question decision 3 asks only on the slow path.
+
+    `asked` holds what each question answered, `bounds` the `at_most` it was
+    given — the two are asserted apart because the bound is the claim that it
+    is a question about *more than the scan reached* rather than a count of the
+    corpus.
+    """
+
+    asked: list[int] = []
+    bounds: list[int] = []
+
+    async def reachable(self, **kwargs: Any) -> int:
+        found = await super().reachable(**kwargs)
+        Counting.asked.append(found)
+        Counting.bounds.append(int(kwargs["at_most"]))
+        return found
+
+
+@pytest.fixture
+def counting() -> Iterator[list[int]]:
+    Counting.asked = []
+    Counting.bounds = []
+    original = search.EmbeddingRepository
+    search.EmbeddingRepository = Counting  # type: ignore[misc]
+    yield Counting.asked
+    search.EmbeddingRepository = original  # type: ignore[misc]
+
+
+async def test_an_exhausted_ranking_is_not_reported_as_cut_short(
+    session: AsyncSession, db_settings: Settings, pool: Any, embedder: PlanarEmbedder
+) -> None:
+    """The same shape of answer over a store that genuinely holds no more."""
+    await seed(session, assets=100, rare_every=25)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=20,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert len(page.hits) == 4, "every rare asset there is"
+    assert page.has_more is False
+    assert page.scan_limited is False
+
+
+async def test_an_empty_page_because_the_ranking_ran_out(
+    session: AsyncSession, db_settings: Settings, pool: Any, embedder: PlanarEmbedder
+) -> None:
+    await seed(session, assets=100, rare_every=25)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=5,
+        offset=10,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert page.hits == [], "four matches, and the offset skips past all of them"
+    assert page.scan_limited is False, "the scan found every one of them"
+
+
+async def test_a_threshold_emptying_a_page_is_not_a_cut_short_scan(
+    session: AsyncSession,
+    db_settings: Settings,
+    pool: Any,
+    embedder: PlanarEmbedder,
+    counting: list[int],
+) -> None:
+    await seed(session, assets=100, rare_every=5)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=5,
+        min_score=0.999,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert page.hits == [], "the threshold removed everything the page held"
+    assert page.scan_limited is False
+    assert counting == [], "and the bounded question was never asked"
+
+
+async def test_the_bounded_question_is_asked_only_when_the_scan_ran_out(
+    session: AsyncSession,
+    db_settings: Settings,
+    pool: Any,
+    embedder: PlanarEmbedder,
+    counting: list[int],
+) -> None:
+    await seed(session, assets=200, rare_every=2)
+
+    await search.search_text("anything", session=session, settings=db_settings, pool=pool, limit=5)
+    assert counting == [], "an unnarrowed search never asks"
+
+    await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=5,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+    assert counting == [], "nor does a narrowing the scan satisfies comfortably"
+
+    await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=5,
+        narrowing=Narrowing(tags_all=("nothing-carries-this",)),
+    )
+    assert len(counting) == 1, "only the one where the scan ran out"
+
+
+# --- the scan's own bound, where it exists --------------------------------------
+#
+# Which plan answers a narrowed query is the planner's choice, and on a corpus
+# this size it answers a selective narrowing exactly, over the narrowed rows,
+# where there is no scan to bound (`design.md`, Context). The path this change
+# is about is the other one — the vector index with the narrowing inside it —
+# which a large corpus gets by itself, because computing every matching distance
+# stops being cheap. These tests reach it deliberately, with `enable_sort = off`,
+# and say so; the alternative would be a fixture of a million rows.
+#
+# Measured, on the fixture below (3 000 assets, one match in a hundred, a page
+# needing 21 candidates): at a scan budget of 200 the index path reaches 2 of
+# them, and at the default 20 000 it reaches all 21.
+
+
+async def force_the_index_path(session: AsyncSession, *, tuples: int) -> None:
+    """The plan this change is about, and how far its scan may look.
+
+    Both are set for the session rather than for a transaction, because the
+    search opens its own. `enable_sort = off` is what keeps the planner from
+    answering the narrowing exactly; `hnsw.max_scan_tuples` is the bound whose
+    report is under test.
+    """
+    await session.execute(sa.text("SET enable_sort = off"))
+    await session.execute(sa.text(f"SET hnsw.max_scan_tuples = {tuples}"))
+    await session.commit()
+
+
+async def seed_analysed(session: AsyncSession, *, assets: int, rare_every: int) -> None:
+    """The corpus, with statistics, so nothing here depends on their absence."""
+    await seed(session, assets=assets, rare_every=rare_every)
+    async with session.begin():
+        await session.execute(sa.text("ANALYZE assets, embeddings"))
+
+
+async def test_the_vector_index_answers_the_narrowing_when_it_is_used(
+    session: AsyncSession,
+) -> None:
+    """The premise the tests below rest on, asserted rather than assumed."""
+    await seed_analysed(session, assets=3000, rare_every=100)
+    await force_the_index_path(session, tuples=200)
+    statement = EmbeddingRepository(session).nearest_statement(
+        model=CLIP_VIT_L14,
+        vector=plane_vector(CLIP_DIM, 1.0, 0.0),
+        limit=21,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    async with session.begin():
+        plan = await explain(session, statement, no_seqscan=False)
+
+    assert vector_index_name(CLIP_VIT_L14) in plan, plan
+
+
+async def test_a_full_page_the_scan_was_cut_short_of_completing(
+    session: AsyncSession,
+    db_settings: Settings,
+    pool: Any,
+    embedder: PlanarEmbedder,
+    counting: list[int],
+) -> None:
+    """The case a full page hides. The scan reaches two candidates; the page
+    asked for two and is therefore complete to look at, while the row that would
+    have said whether more exist was never reached and thirty matching assets
+    remain. Nothing about the answer's shape betrays it — only what the scan
+    reached does."""
+    await seed_analysed(session, assets=3000, rare_every=100)
+    await force_the_index_path(session, tuples=200)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=2,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert len(page.hits) == 2, "a full page"
+    assert page.has_more is False, "because the row beyond it was never reached"
+    assert page.scan_limited is True, "which is the only thing that says so"
+    assert counting == [3], "the bounded question, stopped at reached + 1"
+
+
+async def test_a_short_page_the_scan_was_cut_short_of_filling(
+    session: AsyncSession,
+    db_settings: Settings,
+    pool: Any,
+    embedder: PlanarEmbedder,
+    counting: list[int],
+) -> None:
+    await seed_analysed(session, assets=3000, rare_every=100)
+    await force_the_index_path(session, tuples=200)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=20,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert len(page.hits) == 2, "of the twenty it asked for"
+    assert page.scan_limited is True
+    assert counting == [3]
+
+
+async def test_the_same_query_at_the_default_budget_is_complete(
+    session: AsyncSession,
+    db_settings: Settings,
+    pool: Any,
+    embedder: PlanarEmbedder,
+    counting: list[int],
+) -> None:
+    """Same plan, same corpus, same narrowing — only the budget differs."""
+    await seed_analysed(session, assets=3000, rare_every=100)
+    await force_the_index_path(session, tuples=20000)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=2,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert len(page.hits) == 2
+    assert page.has_more is True, "the scan reached the row beyond the page"
+    assert page.scan_limited is False
+    assert counting == [], "and nothing had to be asked"
+
+
+# --- the window, the answer, and what the question counts ------------------------
+
+
+async def place(session: AsyncSession, *, tags: list[str], model: str | None) -> UUID:
+    """One asset carrying `tags`, with a vector of `model` — or with none.
+
+    Deliberately not `seed`: what the bounded question counts is about rows
+    existing or not, and a corpus would only hide which row each assertion is
+    about.
+    """
+    identifier = uuid4()
+    async with session.begin():
+        await session.execute(
+            sa.text(
+                "INSERT INTO assets (id, sha256, content_type, file_ext, width, height,"
+                " size_bytes, source, tags, meta) VALUES (:id, :sha256, 'image/png', 'png',"
+                " 64, 64, 1024, 'upload', :tags, '{}'::jsonb)"
+            ),
+            {"id": identifier, "sha256": f"{identifier.hex}{'0' * 32}", "tags": tags},
+        )
+        if model is not None:
+            await session.execute(
+                sa.text(
+                    "INSERT INTO embeddings (asset_id, model, vector) "
+                    "VALUES (:asset_id, :model, CAST(:vector AS vector))"
+                ),
+                {
+                    "asset_id": identifier,
+                    "model": model,
+                    "vector": str(plane_vector(dimension_of(model), 1.0, 0.0)),
+                },
+            )
+    return identifier
+
+
+async def test_an_asset_search_that_reached_its_lookahead_asks_nothing(
+    session: AsyncSession, db_settings: Settings, pool: Any, counting: list[int]
+) -> None:
+    """The window carries the excluded asset; the answer never counts on it.
+
+    Five rare assets, one of them asking: four neighbours, which is exactly the
+    `limit + 1` a page of three needs. Requiring one row more — the exclusion's
+    — would make this search pay for the bounded question, and every search of
+    this shape with it.
+    """
+    await seed(session, assets=50, rare_every=10)
+    rare = await tagged(session, RARE)
+    assert len(rare) == 5
+
+    page = await search.search_similar(
+        rare[0],
+        session=session,
+        settings=db_settings,
+        limit=3,
+        model=CLIP_VIT_L14,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert len(page.hits) == 3
+    assert rare[0] not in [hit.asset.id for hit in page.hits], "never among its own neighbours"
+    assert page.has_more is True, "the fourth neighbour is the row beyond the page"
+    assert page.scan_limited is False
+    assert counting == [], "the scan reached everything the answer needed"
+
+
+async def test_the_same_when_the_asking_asset_is_outside_the_narrowing(
+    session: AsyncSession, db_settings: Settings, pool: Any, counting: list[int]
+) -> None:
+    """The asking asset is not in the window at all here, so the window's extra
+    row is spent on nothing — and the answer still needs only its four."""
+    await seed(session, assets=50, rare_every=13)
+    rare = await tagged(session, RARE)
+    common = await tagged(session, COMMON)
+    assert len(rare) == 4
+
+    page = await search.search_similar(
+        common[0],
+        session=session,
+        settings=db_settings,
+        limit=3,
+        model=CLIP_VIT_L14,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert {hit.asset.id for hit in page.hits} <= set(rare)
+    assert len(page.hits) == 3
+    assert page.has_more is True
+    assert page.scan_limited is False
+    assert counting == []
+
+
+async def test_the_bounded_question_counts_only_vectors_of_the_search_model(
+    session: AsyncSession,
+) -> None:
+    """A model is part of an embedding's identity, and of this count.
+
+    Without it an asset indexed only by the other model would count as
+    reachable, and a scan that reached everything there is would report itself
+    cut short.
+    """
+    await place(session, tags=[RARE], model=CLIP_VIT_L14)
+    await place(session, tags=[RARE], model=DINOV2_LARGE)
+    await place(session, tags=[RARE], model=None)
+    await place(session, tags=[COMMON], model=CLIP_VIT_L14)
+
+    async with session.begin():
+        found = await EmbeddingRepository(session).reachable(
+            model=CLIP_VIT_L14, narrowing=Narrowing(tags_all=(RARE,)), at_most=10
+        )
+
+    assert found == 1, "the rare asset this model has seen, and no other row"
+
+
+async def test_the_bounded_question_never_counts_the_asking_asset(
+    session: AsyncSession,
+) -> None:
+    asking = await place(session, tags=[RARE], model=CLIP_VIT_L14)
+    await place(session, tags=[RARE], model=CLIP_VIT_L14)
+
+    async with session.begin():
+        repository = EmbeddingRepository(session)
+        without = await repository.reachable(
+            model=CLIP_VIT_L14,
+            narrowing=Narrowing(tags_all=(RARE,)),
+            at_most=10,
+            exclude_asset_id=asking,
+        )
+        counted = await repository.reachable(
+            model=CLIP_VIT_L14, narrowing=Narrowing(tags_all=(RARE,)), at_most=10
+        )
+
+    assert without == 1, "an asset is not its own neighbour, here as everywhere"
+    assert counted == 2, "and the same question without the exclusion says so"
+
+
+async def test_the_bounded_question_stops_where_it_is_told_to(session: AsyncSession) -> None:
+    """It is asked as `reached + 1`: whether more exist than the scan reached,
+    never how many. A count of the corpus is exactly what it must not be."""
+    for _ in range(5):
+        await place(session, tags=[RARE], model=CLIP_VIT_L14)
+
+    async with session.begin():
+        repository = EmbeddingRepository(session)
+        bounded = await repository.reachable(
+            model=CLIP_VIT_L14, narrowing=Narrowing(tags_all=(RARE,)), at_most=3
+        )
+        further = await repository.reachable(
+            model=CLIP_VIT_L14, narrowing=Narrowing(tags_all=(RARE,)), at_most=10
+        )
+
+    assert bounded == 3, "the bound, not the five that are there"
+    assert further == 5
+
+
+# --- the scan that stopped before the offset -------------------------------------
+#
+# The pair task 3.1 promises, and the case a page cannot show: an empty page at
+# an offset, once because the scan ran out of budget before reaching it and once
+# because the ranking held fewer matches than the offset skips. Nothing about
+# either answer differs — only what the scan reached does.
+
+
+async def test_a_scan_that_stopped_before_the_offset_says_so(
+    session: AsyncSession,
+    db_settings: Settings,
+    pool: Any,
+    embedder: PlanarEmbedder,
+    counting: list[int],
+) -> None:
+    """Reached 2 candidates of the 8 a page at offset 5 needs, while thirty
+    matching assets exist: the page is empty and the scan was cut short.
+
+    The count that decides it is taken **before** the offset — after it there
+    would be nothing left to count, and the bound of the question would say 1
+    instead of 3."""
+    await seed_analysed(session, assets=3000, rare_every=100)
+    await force_the_index_path(session, tuples=200)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=2,
+        offset=5,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert page.hits == [], "the scan never reached the offset"
+    assert page.has_more is False
+    assert page.scan_limited is True, "which is the only thing that says the page is not the end"
+    assert counting == [3], "more matching rows exist than the two it reached"
+    assert Counting.bounds == [3], "asked as reached + 1, on the pre-offset count"
+
+
+async def test_an_empty_page_at_an_offset_the_ranking_never_reaches_is_not_cut_short(
+    session: AsyncSession,
+    db_settings: Settings,
+    pool: Any,
+    embedder: PlanarEmbedder,
+    counting: list[int],
+) -> None:
+    """The same shape of answer over the same corpus, with the budget the
+    service really runs at: the scan reaches every one of the thirty matches,
+    the offset skips past all of them, and nothing was cut short."""
+    await seed_analysed(session, assets=3000, rare_every=100)
+    await force_the_index_path(session, tuples=20000)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=2,
+        offset=50,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert page.hits == [], "thirty matches, and the offset skips past all of them"
+    assert page.scan_limited is False
+    assert counting == [30], "every match there is, counted no further than the scan reached"
+    assert Counting.bounds == [31]

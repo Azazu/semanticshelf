@@ -137,7 +137,7 @@ def a_picture() -> dict[str, tuple[str, bytes, str]]:
     return {"file": ("query.png", picture_bytes(), "image/png")}
 
 
-async def add_asset(repository: AssetRepository, seed: int) -> Asset:
+async def add_asset(repository: AssetRepository, seed: int, *, tags: Sequence[str] = ()) -> Asset:
     return await repository.add(
         sha256=f"{seed:064d}",
         content_type="image/png",
@@ -146,18 +146,27 @@ async def add_asset(repository: AssetRepository, seed: int) -> Asset:
         height=64,
         size_bytes=1024 * seed,
         source="upload",
+        tags=tags,
     )
 
 
 async def seed_ranking(
-    session: AsyncSession, angles: Sequence[tuple[float, float]], *, model: str = DINOV2_LARGE
+    session: AsyncSession,
+    angles: Sequence[tuple[float, float]],
+    *,
+    model: str = DINOV2_LARGE,
+    tags: Sequence[Sequence[str]] | None = None,
 ) -> list[Asset]:
-    """One asset per direction, nearest first when the query points at (1, 0)."""
+    """One asset per direction, nearest first when the query points at (1, 0).
+
+    `tags` gives one set per direction, so a narrowing can be written against
+    positions in the ranking rather than against identifiers.
+    """
     assets = AssetRepository(session)
     embeddings = EmbeddingRepository(session)
     created = []
     for seed, (x, y) in enumerate(angles, start=1):
-        asset = await add_asset(assets, seed)
+        asset = await add_asset(assets, seed, tags=() if tags is None else tags[seed - 1])
         await embeddings.upsert(
             asset_id=asset.id, model=model, vector=plane_vector(dimension_of(model), x, y)
         )
@@ -498,3 +507,76 @@ async def test_one_page_deeper_is_refused_rather_than_answered_shallow(
     assert response.json()["type"] == "/errors/page-too-deep"
     assert f"at most {MAX_PAGE_DEPTH_EXCLUDING}" in detail, "its own bound, not the other one"
     assert f"at most {MAX_PAGE_DEPTH}" not in detail
+
+
+# --- narrowed, on both ways of asking with a picture ----------------------------
+
+
+async def test_a_picture_search_ranks_only_what_the_narrowing_admits(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    """The nearest asset does not carry the tag, and the answer starts with the
+    nearest one that does — which is what makes this a narrowing of the ranking
+    rather than of the page."""
+    assets = await seed_ranking(session, RANKING, tags=[[], ["dragon"], ["dragon"], ["castle"]])
+
+    body = await searched(client, tags_all="dragon")
+
+    assert ids(body) == [str(assets[1].id), str(assets[2].id)]
+    assert body["scan_limited"] is False
+
+
+async def test_an_assets_neighbours_can_be_narrowed(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    assets = await seed_ranking(session, RANKING, tags=[["dragon"], [], ["dragon"], ["dragon"]])
+
+    body = await similar_to(client, assets[0].id, tags_all="dragon")
+
+    assert ids(body) == [str(assets[2].id), str(assets[3].id)]
+    assert str(assets[0].id) not in ids(body), "absent as it always is"
+
+
+async def test_an_asset_may_ask_under_a_narrowing_it_does_not_satisfy(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    """The narrowing decides which neighbours are ranked, not whether the
+    question may be asked: an asset carrying nothing may still ask what, among
+    the dragons, looks most like it."""
+    assets = await seed_ranking(session, RANKING, tags=[["castle"], ["dragon"], [], ["dragon"]])
+
+    body = await similar_to(client, assets[0].id, tags_all="dragon")
+
+    assert ids(body) == [str(assets[1].id), str(assets[3].id)]
+    assert str(assets[0].id) not in ids(body)
+
+
+async def test_a_narrowing_by_metadata_reaches_the_picture_search(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    """`meta.<key>` travels as a form field beside the picture, which no
+    framework can declare for it (change 12, design decision 5)."""
+    assets = AssetRepository(session)
+    embeddings = EmbeddingRepository(session)
+    wanted = await assets.add(
+        sha256=f"{1:064d}",
+        content_type="image/png",
+        file_ext="png",
+        width=64,
+        height=64,
+        size_bytes=1024,
+        source="upload",
+        meta={"dataset": "coco"},
+    )
+    other = await add_asset(assets, 2)
+    for asset, (x, y) in zip([wanted, other], RANKING[1:3], strict=True):
+        await embeddings.upsert(
+            asset_id=asset.id,
+            model=DINOV2_LARGE,
+            vector=plane_vector(DINO_DIM, x, y),
+        )
+    await session.commit()
+
+    body = await searched(client, **{"meta.dataset": "coco"})
+
+    assert ids(body) == [str(wanted.id)]

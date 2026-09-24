@@ -16,14 +16,17 @@ Two corpora, because the examples came from two runs:
 
 - the **words** examples use five pictures imported from a folder — a red
   field, a green field, a blue circle, a black square and a yellow circle;
-- the **picture** examples use the demo corpus (`make demo`), twenty
-  photographs from COCO val2017.
+- the **picture** examples, and every narrowing example, use the demo corpus
+  (`make demo`), twenty photographs from COCO val2017 — each tagged with the
+  labels COCO gives it and carrying its dataset, licence and source address as
+  metadata.
 
-The service listens on `APP_PORT`, 8000 by default; the picture examples were
-captured with `APP_PORT=8010` because 8000 was taken on that machine. Where a
-compact one-line answer is too wide for the page it is wrapped, and an
-identifier in a URL is shortened with `…`; nothing else about an answer is
-touched.
+The service listens on `APP_PORT`, 8000 by default; the picture and narrowing
+examples were captured with `APP_PORT=8010` because 8000 was taken on that
+machine. Where a compact one-line answer is too wide for the page it is wrapped,
+and an identifier or a licence address in a URL is shortened with `…`; in the
+narrowing examples each asset is trimmed to its tags, because that is what the
+filter is about. Nothing else about an answer is touched.
 
 ## Ask with words
 
@@ -272,12 +275,183 @@ Without the threshold that same query returns all five pictures, scoring 0.206,
 threshold is a per-model, per-corpus judgement rather than a universal number.
 Start without it, look at the scores you actually get, then choose.
 
+## Narrow it
+
+A search may be narrowed to the assets that carry something — all of a set of
+tags (`tags_all`), any of a set (`tags_any`), or a top-level equality in the
+metadata (`meta.<key>`). The forms combine, and all four surfaces take them: the
+three searches and the listing.
+
+**A narrowing is part of the ranking, not of the page.** The answer is the
+nearest assets *that satisfy it*, however deep in the ranking they sit — not
+what is left after the nearest ones were fetched and then sifted. The demo
+corpus tags every picture with the COCO labels it carries, so this is easy to
+see:
+
+```console
+$ curl -s "http://127.0.0.1:8010/api/v1/search/text?q=a+city+street&limit=3" | jq
+{"items": [
+   { "tags": [], "score": 0.2 },
+   { "tags": ["person","umbrella","handbag","cup","traffic-light"], "score": 0.19 },
+   { "tags": [], "score": 0.177 }],
+ "has_more": true, "model": "clip-vit-l14", "scan_limited": false}
+
+$ curl -s "http://127.0.0.1:8010/api/v1/search/text?q=a+city+street&limit=3&tags_all=person" | jq
+{"items": [
+   { "tags": ["person","umbrella","handbag","cup","traffic-light"], "score": 0.19 },
+   { "tags": ["bus","backpack","car","person","handbag"], "score": 0.17 },
+   { "tags": ["bird","person","handbag"], "score": 0.16 }],
+ "has_more": true, "model": "clip-vit-l14", "scan_limited": false}
+```
+
+The narrowed page is **full**, and the picture that was second without the
+filter is first with it, at the same score: a narrowing decides which assets are
+ranked, never how near they are.
+
+`tags_any` is at least one of them:
+
+```console
+$ curl -s "http://127.0.0.1:8010/api/v1/search/text?q=a+city+street&limit=3&tags_any=cow,bird" | jq
+{"items": [
+   { "tags": ["bird","person","handbag"], "score": 0.16 },
+   { "tags": ["cow"], "score": 0.155 },
+   { "tags": ["cow"], "score": 0.135 }],
+ "has_more": true, "scan_limited": false}
+```
+
+**`meta.<key>` is the parameter whose name you choose.** The key is matched
+against `^[a-z0-9_]{1,64}$`, at most five conditions may be given, and the same
+key twice is refused rather than answered with an empty page. The value is
+compared for equality against the top level of the asset's metadata — so the
+demo corpus, which records each picture's licence, can be searched by it:
+
+```console
+$ curl -s --get "http://127.0.0.1:8010/api/v1/search/text" \
+    --data-urlencode "q=a city street" --data "limit=3" \
+    --data-urlencode "meta.licence=http://creativecommons.org/licenses/by-sa/2.0/" | jq
+{"items": [
+   { "tags": ["cat"],      "licence": "…/licenses/by-sa/2.0/", "score": 0.131 },
+   { "tags": ["boat"],     "licence": "…/licenses/by-sa/2.0/", "score": 0.119 },
+   { "tags": ["elephant"], "licence": "…/licenses/by-sa/2.0/", "score": 0.103 }],
+ "has_more": true, "scan_limited": false}
+```
+
+On the picture search they are form fields beside the file, `meta.<key>`
+included:
+
+```console
+$ curl -s -F "file=@.data/demo/pictures/122745/000000122745.jpg" \
+    -F "tags_all=person" -F "limit=3" \
+    "http://127.0.0.1:8010/api/v1/search/image" | jq
+{"items": [
+   { "tags": ["person","umbrella","handbag","cup","traffic-light"], "score": 0.064 },
+   { "tags": ["bus","backpack","car","person","handbag"], "score": 0.063 },
+   { "tags": ["person"], "score": 0.05 }],
+ "has_more": true, "model": "dinov2-large", "scan_limited": false}
+```
+
+And an asset may ask what looks like it **among a set it does not belong to**.
+This one is tagged `cow`; narrowing its neighbours to `person` is answered, and
+the asset is absent from its own answer as it always is:
+
+```console
+$ curl -s "http://127.0.0.1:8010/api/v1/assets/989f8262…/similar?limit=3" | jq
+{"items": [
+   { "tags": ["cow"], "score": 0.08 },
+   { "tags": ["bottle","dining-table","person","knife","bowl", …], "score": 0.063 },
+   { "tags": ["toilet","sink"], "score": 0.051 }],
+ "has_more": true, "model": "dinov2-large", "scan_limited": false}
+
+$ curl -s "http://127.0.0.1:8010/api/v1/assets/989f8262…/similar?limit=3&tags_all=person" | jq
+{"items": [
+   { "tags": ["bottle","dining-table","person","knife","bowl", …], "score": 0.063 },
+   { "tags": ["person"], "score": 0.042 },
+   { "tags": ["bus","backpack","car","person","handbag"], "score": 0.039 }],
+ "has_more": true, "scan_limited": false}
+```
+
+The listing takes the same conditions, which is the point of them being one
+thing: what you write to narrow a search you write to narrow a listing.
+
+```console
+$ curl -s --get "http://127.0.0.1:8010/api/v1/assets" --data "limit=3" \
+    --data-urlencode "meta.licence=http://creativecommons.org/licenses/by-sa/2.0/" | jq
+{"items": [
+   { "tags": ["cat"],  "licence": "…/licenses/by-sa/2.0/" },
+   { "tags": ["boat"], "licence": "…/licenses/by-sa/2.0/" },
+   { "tags": ["bird"], "licence": "…/licenses/by-sa/2.0/" }],
+ "has_more": true}
+```
+
+A narrowing nothing satisfies is an empty page, not an error:
+
+```console
+$ curl -s "http://127.0.0.1:8010/api/v1/search/text?q=a+city+street&tags_all=dragon" | jq
+{"items": [], "has_more": false, "scan_limited": false}
+```
+
+### When a narrowed page is short
+
+`scan_limited` is the one field a narrowed answer adds. The vector index looks
+only so far; when a narrowing matches rarely, the assets that satisfy it may lie
+deeper than the search was allowed to look. If that happens the answer says so:
+
+```json
+{"items": [ … ], "has_more": false, "scan_limited": true}
+```
+
+`scan_limited: true` means **this page is not the whole answer** — more matching
+assets exist beyond what the search reached, whatever `has_more` says. A full
+page can carry it (the row beyond the page was never reached) and so can an
+empty one. Narrow the query further, ask for a smaller page, or reach the rest
+through the listing, which is not ranked and has no such bound.
+
+`scan_limited: false` means the search reached everything the answer needed: a
+short page is then a short *ranking*, and a page emptied by `min_score` is the
+threshold doing its job. Only a narrowed search can ever set it.
+
+Which plan the database uses for a narrowed query is its own judgement: the
+vector index, the distances of exactly the assets the narrowing admits, or — on
+a corpus small enough for that to be cheapest — the distances of every vector of
+the model. Only the first is bounded, so only the first can report stopping.
+Where the lines fall, and what each costs, is measured in
+[`benchmarks.md`](benchmarks.md).
+
+### Refused narrowings
+
+Every filter this service will not apply is 422 `/errors/invalid-filter`, on all
+four surfaces, and the detail names the value:
+
+```console
+$ curl -s --get "http://127.0.0.1:8010/api/v1/search/text" \
+    --data-urlencode "q=a city street" --data-urlencode "tags_all=not a tag!"
+{"type":"/errors/invalid-filter","title":"Unprocessable Entity","status":422,
+ "detail":"not a valid tag: 'not a tag!'","instance":"urn:request:…"}
+
+$ curl -s "http://127.0.0.1:8010/api/v1/search/text?q=a+city+street&meta.Dataset=coco"
+{"type":"/errors/invalid-filter","title":"Unprocessable Entity","status":422,
+ "detail":"not a valid metadata key: 'Dataset'","instance":"urn:request:…"}
+
+$ curl -s "http://127.0.0.1:8010/api/v1/search/text?q=a+city+street&meta.a=1&meta.b=2&meta.c=3&meta.d=4&meta.e=5&meta.f=6"
+{"type":"/errors/invalid-filter","title":"Unprocessable Entity","status":422,
+ "detail":"at most 5 metadata conditions are allowed, got 6","instance":"urn:request:…"}
+
+$ curl -s "http://127.0.0.1:8010/api/v1/search/text?q=a+city+street&meta.dataset=coco&meta.dataset=unsplash"
+{"type":"/errors/invalid-filter","title":"Unprocessable Entity","status":422,
+ "detail":"metadata key given twice: 'dataset'","instance":"urn:request:…"}
+```
+
+Nothing is searched when a narrowing is refused. A tag is normalised exactly as
+the tags on an asset were — ` Dragon ` and `dragon` are one tag — so a filter
+matches what an upload stored.
+
 ## What is refused
 
 | Answer | When |
 |---|---|
 | 422 `/errors/invalid-query` | `q` is missing, empty, only whitespace, or longer than 256 characters once trimmed — the padding is never counted against you |
 | 422 `/errors/validation` | the raw `q` is longer than 1024 characters (a guard on padding, not on queries), `limit` is outside 1–100, `offset` is negative, or `min_score` is outside [−1, 1] |
+| 422 `/errors/invalid-filter` | a narrowing this service will not apply: a value that is not a tag, a metadata key outside `^[a-z0-9_]{1,64}$`, more than five metadata conditions, or the same key twice |
 | 422 `/errors/page-too-deep` | `limit + offset` is beyond 999 — or beyond 998 for an asset's neighbours, which spend one candidate on the asset they leave out |
 | 422 `/errors/wrong-modality` | the named model cannot take that kind of query: words asked of a model with no text tower. The detail says what it *can* be asked |
 | 422 `/errors/invalid-upload` | the picture search got no `file` part, or more than one, or one under another name |
@@ -334,11 +508,6 @@ thumbnails are not counted, and nothing walks the media root to produce it.
 
 ## What this search does not do yet
 
-- **Filters, on any of the three.** `tags_all`, `tags_any` and metadata filters
-  belong inside the vector query rather than beside it, which is a different
-  question with its own measurement; all three searches take the page, the
-  threshold and the model, and no tags. Until that change lands, narrow a corpus
-  with the listing (`GET /api/v1/assets?tags_all=…`) rather than with a search.
 - **Other languages.** CLIP ViT-L/14 was trained on English captions; other
   languages degrade towards a random ranking. The service does not translate,
   and says so rather than pretending. A picture query has no language at all,

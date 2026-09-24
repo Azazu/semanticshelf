@@ -23,7 +23,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from app.core.settings import Settings
-from app.domain import CLIP_VIT_L14, DINOV2_LARGE, Asset, modality_of
+from app.domain import (
+    CLIP_VIT_L14,
+    DINOV2_LARGE,
+    NO_NARROWING,
+    Asset,
+    Narrowing,
+    NeighbourHit,
+    modality_of,
+)
 from app.ml.base import TextNotSupportedError
 from app.ml.pool import acquire, run_in_pool
 from app.repositories.assets import AssetRepository
@@ -113,6 +121,10 @@ class SearchPage:
     has_more: bool
     model: str
     query_truncated: bool
+    #: True when the search stopped at the bound on how far it may look rather
+    #: than at the end of the ranking. Only a narrowed search can set it, and a
+    #: client that sees it knows a short page is not the whole answer.
+    scan_limited: bool = False
 
 
 def effort_for(*, settings: Settings, limit: int, offset: int, excluded: int = 0) -> int:
@@ -125,6 +137,20 @@ def effort_for(*, settings: Settings, limit: int, offset: int, excluded: int = 0
     leaves a candidate for every row the page cannot use.
     """
     return min(MAX_SEARCH_EFFORT, max(settings.hnsw_ef_search, limit + offset + 1 + excluded))
+
+
+def rows_needed(*, limit: int, offset: int) -> int:
+    """How many candidates the answer needs from the scan.
+
+    The offset's worth, the page's, and the one beyond the page that says
+    whether more exist. A row the page may not use — the asset left out of its
+    own answer — is **not** here: it belongs to the window the repository asks
+    for (`EmbeddingRepository.nearest_statement`), because a row that can never
+    become a result is not a row the answer requires. Making the exclusion cost
+    a row here would make every asset search pay for the bounded question of
+    decision 3 whenever the store held exactly enough neighbours.
+    """
+    return offset + limit + 1
 
 
 def score_of(distance: float) -> float:
@@ -217,14 +243,67 @@ async def embed_picture(
     return [float(value) for value in result.vectors[0]]
 
 
-async def _set_effort(session: AsyncSession, effort: int) -> None:
-    """`SET LOCAL hnsw.ef_search`, for this transaction only.
+async def _set_effort(session: AsyncSession, effort: int, *, narrowed: bool) -> None:
+    """How hard the index looks, for this transaction only.
 
     `SET LOCAL` takes no parameters; `set_config(..., true)` is the same thing
     with a bind, and the `true` is what makes it local to this transaction
     rather than to the connection the pool hands on.
+
+    A narrowed search also turns the scan iterative, in the order-preserving
+    mode: without it the index chooses its candidates once and the narrowing
+    then removes them, which is how a tag matching one asset in three hundred
+    answers an empty page (change 12, design decision 2). `relaxed_order` is
+    faster and may hand rows back slightly out of order, which this statement
+    cuts by distance before it re-orders — so, `strict_order`.
     """
     await session.execute(sa.select(sa.func.set_config("hnsw.ef_search", str(effort), True)))
+    if narrowed:
+        await session.execute(
+            sa.select(sa.func.set_config("hnsw.iterative_scan", "strict_order", True))
+        )
+
+
+def cut(
+    candidates: Sequence[NeighbourHit], *, offset: int, limit: int, max_distance: float | None
+) -> tuple[list[NeighbourHit], bool]:
+    """The page, and whether more exist — cut from the candidates the scan gave.
+
+    The offset skips, the threshold removes results the page already holds, and
+    the row beyond the page is what `has_more` reads. All three were in the SQL
+    until change 12 needed the count of candidates *before* them (design
+    decision 3); what they do is unchanged, and the tests change 8 wrote for the
+    threshold say so.
+
+    With a threshold `has_more` stays exact: the candidates are ordered by
+    distance, so a row the threshold removes has only further rows after it.
+    """
+    page = list(candidates[offset : offset + limit + 1])
+    if max_distance is not None:
+        page = [one for one in page if one.distance <= max_distance]
+    return page[:limit], len(page) > limit
+
+
+def was_cut_short(*, reached: int, needed: int, matching: int) -> bool:
+    """Did the scan stop at its own budget rather than at the end of the ranking?
+
+    Only two facts decide it, and neither is the shape of the answer: how many
+    candidates the scan reached, and how many matching rows the store holds
+    beyond them. A full page proves nothing (a scan that finds exactly `limit`
+    rows while more exist returns one), and a short page proves nothing either
+    (the threshold shortens a page for an honest reason).
+    """
+    return reached < needed and matching > reached
+
+
+@dataclass(frozen=True, slots=True)
+class Page:
+    """What a ranking answered, before it is turned into a response."""
+
+    hits: list[Hit]
+    has_more: bool
+    statuses: Mapping[UUID, Mapping[str, str]]
+    scan_limited: bool
 
 
 async def _page_of(
@@ -235,25 +314,43 @@ async def _page_of(
     limit: int,
     offset: int,
     min_score: float | None,
+    narrowing: Narrowing,
     exclude_asset_id: UUID | None = None,
-) -> tuple[list[Hit], bool, Mapping[UUID, Mapping[str, str]]]:
+) -> Page:
     """One page of the ranking around a vector, whatever made that vector.
 
-    Called inside an open transaction whose search effort is already set. One
-    row beyond the page is asked for: that row is the whole of `has_more`. With
-    a threshold it stays exact — the ranking is ordered by distance, so a row
-    the threshold removes has only further rows after it.
+    Called inside an open transaction whose search effort is already set. The
+    scan is asked for every candidate the answer needs — the offset's worth, the
+    page's, and the one beyond it — and the page is cut from what came back.
     """
-    neighbours = await EmbeddingRepository(session).nearest(
+    needed = rows_needed(limit=limit, offset=offset)
+    embeddings = EmbeddingRepository(session)
+    candidates = await embeddings.nearest(
         model=model,
         vector=vector,
-        limit=limit + 1,
-        offset=offset,
-        max_distance=None if min_score is None else score_of(min_score),
+        limit=needed,
         exclude_asset_id=exclude_asset_id,
+        narrowing=narrowing or None,
     )
-    has_more = len(neighbours) > limit
-    page = neighbours[:limit]
+    reached = len(candidates)
+    page, has_more = cut(
+        candidates,
+        offset=offset,
+        limit=limit,
+        max_distance=None if min_score is None else score_of(min_score),
+    )
+
+    scan_limited = False
+    if narrowing and reached < needed:
+        # Only here: the scan ran out, and one bounded question says of what.
+        matching = await embeddings.reachable(
+            model=model,
+            narrowing=narrowing,
+            at_most=reached + 1,
+            exclude_asset_id=exclude_asset_id,
+        )
+        scan_limited = was_cut_short(reached=reached, needed=needed, matching=matching)
+
     assets = await AssetRepository(session).by_ids([one.asset_id for one in page])
     statuses = await indexing.status_of(session, list(assets))
     hits = [
@@ -261,7 +358,7 @@ async def _page_of(
         for one in page
         if one.asset_id in assets
     ]
-    return hits, has_more, statuses
+    return Page(hits=hits, has_more=has_more, statuses=statuses, scan_limited=scan_limited)
 
 
 async def search_text(
@@ -274,28 +371,35 @@ async def search_text(
     offset: int = 0,
     min_score: float | None = None,
     model: str = CLIP_VIT_L14,
+    narrowing: Narrowing = NO_NARROWING,
 ) -> SearchPage:
     """One page of the assets nearest to what the query describes."""
     check_depth(limit=limit, offset=offset)
     vector, truncated = await embed_query(query, model=model, settings=settings, pool=pool)
 
     async with session.begin():
-        await _set_effort(session, effort_for(settings=settings, limit=limit, offset=offset))
-        hits, has_more, statuses = await _page_of(
+        await _set_effort(
+            session,
+            effort_for(settings=settings, limit=limit, offset=offset),
+            narrowed=bool(narrowing),
+        )
+        page = await _page_of(
             vector,
             session=session,
             model=model,
             limit=limit,
             offset=offset,
             min_score=min_score,
+            narrowing=narrowing,
         )
 
     return SearchPage(
-        hits=hits,
-        statuses=statuses,
-        has_more=has_more,
+        hits=page.hits,
+        statuses=page.statuses,
+        has_more=page.has_more,
         model=model,
         query_truncated=truncated,
+        scan_limited=page.scan_limited,
     )
 
 
@@ -310,6 +414,7 @@ async def search_image(
     offset: int = 0,
     min_score: float | None = None,
     model: str = DINOV2_LARGE,
+    narrowing: Narrowing = NO_NARROWING,
 ) -> SearchPage:
     """One page of the assets that look most like the picture in the request.
 
@@ -328,22 +433,28 @@ async def search_image(
         await run_in_threadpool(discard_temporary, received.path)
 
     async with session.begin():
-        await _set_effort(session, effort_for(settings=settings, limit=limit, offset=offset))
-        hits, has_more, statuses = await _page_of(
+        await _set_effort(
+            session,
+            effort_for(settings=settings, limit=limit, offset=offset),
+            narrowed=bool(narrowing),
+        )
+        page = await _page_of(
             vector,
             session=session,
             model=model,
             limit=limit,
             offset=offset,
             min_score=min_score,
+            narrowing=narrowing,
         )
 
     return SearchPage(
-        hits=hits,
-        statuses=statuses,
-        has_more=has_more,
+        hits=page.hits,
+        statuses=page.statuses,
+        has_more=page.has_more,
         model=model,
         query_truncated=False,
+        scan_limited=page.scan_limited,
     )
 
 
@@ -356,6 +467,7 @@ async def search_similar(
     offset: int = 0,
     min_score: float | None = None,
     model: str = DINOV2_LARGE,
+    narrowing: Narrowing = NO_NARROWING,
 ) -> SearchPage:
     """One page of the assets that look most like a stored one.
 
@@ -363,9 +475,9 @@ async def search_similar(
     inference runs — which is what makes this answerable on a build whose
     weights were never downloaded. The asset is never among its own neighbours,
     at any page: the exclusion happens inside the query, above the index scan
-    and before the offset is applied (design decision 5), and it costs one of
-    the candidates the index may produce, which is why the page may not reach
-    as deep as a text or picture query.
+    and before anything is cut from the candidates (change 11, design decision
+    5), and it costs one of the candidates the index may produce, which is why
+    the page may not reach as deep as a text or picture query.
     """
     check_depth(limit=limit, offset=offset, excluded=1)
     check_model(model, settings=settings, kind="picture")
@@ -378,22 +490,26 @@ async def search_similar(
         if embedding is None:
             raise NotIndexedError(f"asset {asset_id} has no {model!r} vector yet")
         await _set_effort(
-            session, effort_for(settings=settings, limit=limit, offset=offset, excluded=1)
+            session,
+            effort_for(settings=settings, limit=limit, offset=offset, excluded=1),
+            narrowed=bool(narrowing),
         )
-        hits, has_more, statuses = await _page_of(
+        page = await _page_of(
             embedding.vector,
             session=session,
             model=model,
             limit=limit,
             offset=offset,
             min_score=min_score,
+            narrowing=narrowing,
             exclude_asset_id=asset_id,
         )
 
     return SearchPage(
-        hits=hits,
-        statuses=statuses,
-        has_more=has_more,
+        hits=page.hits,
+        statuses=page.statuses,
+        has_more=page.has_more,
         model=model,
         query_truncated=False,
+        scan_limited=page.scan_limited,
     )

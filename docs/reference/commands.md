@@ -38,6 +38,12 @@ Installed as the `semanticshelf` console script; run it with `uv run`.
 | `uv run semanticshelf index missing [--model KEY] [--no-index]` | queue the work stored assets have none of, and carry it out — what a model that arrived after the pictures needs. An asset is queued when it has no vector for that model and no work for it waiting, running or failed; what already failed is passed over, counted, and left to `reindex`. `--no-index` leaves the work queued ([how-to](../how-to/searching.md)) |
 | `uv run semanticshelf storage prune [--apply]` | report files no asset owns and assets whose files are gone; `--apply` removes and marks. Does nothing while an upload is in flight ([how-to](../how-to/uploading.md)) |
 
+## Measurement
+
+| Command | Purpose |
+|---|---|
+| `uv run python scripts/filter_benchmark.py [--assets N] [--seed N] [--schema NAME] [--plans]` | measure a narrowed vector search: which plan answers at which selectivity, with the iterative scan on and off and with the planner's statistics fresh and absent. Builds its corpus in a schema it creates and drops, never in the tables the service uses ([how-to](../how-to/benchmarks.md)) |
+
 ## Workflow scripts
 
 Authoritative live source: each script's header comment.

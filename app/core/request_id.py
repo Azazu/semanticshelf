@@ -19,7 +19,10 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.core.errors import internal_error_response
 
 REQUEST_ID_HEADER = "x-request-id"
-_VALID_REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+#: `\Z`, not `$`: a value that ends in a newline is not of this shape, and an
+#: id that is echoed into a header and into every log line must be exactly it
+#: (the rule `app/services/tagging.py` states in full).
+_VALID_REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}\Z")
 
 log = structlog.stdlib.get_logger(__name__)
 

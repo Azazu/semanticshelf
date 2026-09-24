@@ -92,13 +92,20 @@ class Client:
     def search(
         self, query: str, *, limit: int, offset: int, min_score: float | None, tag: str | None
     ) -> dict[str, Any]:
+        """Words as the query, narrowed by a tag when one was chosen.
+
+        The tag travels with the search (`tags_all`) rather than removing rows
+        from what came back: since change 12 the service narrows the *ranking*,
+        so a tag one asset in three hundred carries still fills a page. Nothing
+        here filters anything — what the service answered is what the page
+        shows.
+        """
         parameters: dict[str, Any] = {"q": query, "limit": limit, "offset": offset}
         if min_score is not None:
             parameters["min_score"] = min_score
-        found: dict[str, Any] = self._ask("GET", f"{API}/search/text", params=parameters)
         if tag:
-            kept = [item for item in found["items"] if tag in item["asset"]["tags"]]
-            found = {**found, "items": kept}
+            parameters["tags_all"] = tag
+        found: dict[str, Any] = self._ask("GET", f"{API}/search/text", params=parameters)
         return found
 
     def search_image(

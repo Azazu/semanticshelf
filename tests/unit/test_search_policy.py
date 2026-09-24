@@ -5,9 +5,17 @@ are refused outright — none of it needs a database, and all of it is easy to
 get subtly wrong.
 """
 
+import re
+from typing import Any
+from uuid import uuid4
+
 import pytest
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from app.core.settings import Settings
+from app.domain import CLIP_VIT_L14, dimension_of
+from app.repositories.embeddings import EmbeddingRepository
 from app.services.search import (
     MAX_PAGE_DEPTH,
     MAX_PAGE_DEPTH_EXCLUDING,
@@ -19,6 +27,7 @@ from app.services.search import (
     depth_bound,
     effort_for,
     normalised_query,
+    rows_needed,
     score_of,
 )
 from tests.conftest import UNREACHABLE_DATABASE_URL
@@ -127,6 +136,67 @@ def test_the_page_a_text_query_may_ask_for_is_one_too_deep_here() -> None:
 
     with pytest.raises(PageTooDeepError, match=str(MAX_PAGE_DEPTH_EXCLUDING)):
         check_depth(limit=limit, offset=offset, excluded=1)
+
+
+# --- how many rows are asked for, and how many the answer needs -----------------
+#
+# Two numbers that differ by exactly the rows the page may not use, and change
+# 12 made the difference matter: the scan's reach against what the answer needed
+# is what says whether it was cut short (design decision 3). They are read here
+# from the compiled statement and from the service's own rule, side by side,
+# because a drift between them is silent in both directions — one extra row
+# required makes every asset search pay for the bounded question, one too few
+# makes `has_more` a guess.
+
+QUERY_VECTOR = [0.0] * dimension_of(CLIP_VIT_L14)
+
+
+def limits_of(statement: sa.Select[Any]) -> list[int]:
+    """Every LIMIT the statement carries, innermost first: the window's, then
+    the page's. Read from the SQL the database would be sent."""
+    compiled = statement.compile(dialect=postgresql.dialect())
+    names = re.findall(r"LIMIT %\((\w+)\)s", str(compiled))
+    return [int(compiled.params[name]) for name in names]
+
+
+def window_for(needed: int, *, excluding: bool) -> list[int]:
+    repository = EmbeddingRepository(None)  # type: ignore[arg-type]
+    return limits_of(
+        repository.nearest_statement(
+            model=CLIP_VIT_L14,
+            vector=QUERY_VECTOR,
+            limit=needed,
+            exclude_asset_id=uuid4() if excluding else None,
+        )
+    )
+
+
+def test_the_answer_needs_the_offset_the_page_and_the_row_beyond_it() -> None:
+    assert rows_needed(limit=20, offset=0) == 21
+    assert rows_needed(limit=20, offset=50) == 71
+
+
+def test_an_ordinary_search_asks_for_exactly_what_the_answer_needs() -> None:
+    needed = rows_needed(limit=20, offset=50)
+
+    assert window_for(needed, excluding=False) == [needed, needed], "window, then page"
+
+
+def test_an_asset_search_asks_for_one_row_more_than_the_answer_needs() -> None:
+    """The asset itself is dropped between the window and the page, so the
+    window carries it and the answer never counts on it."""
+    needed = rows_needed(limit=20, offset=50)
+    window, page = window_for(needed, excluding=True)
+
+    assert window == needed + 1
+    assert page == needed
+
+
+def test_the_exclusion_costs_nothing_to_what_the_answer_requires() -> None:
+    """The one that fails if the extra row is ever moved into `rows_needed`:
+    what an asset search needs is what any search of that shape needs."""
+    assert rows_needed(limit=20, offset=0) == 21
+    assert window_for(21, excluding=True)[1] == 21, "the page is unchanged by the exclusion"
 
 
 def test_the_query_bound_is_the_one_the_requirements_fix() -> None:

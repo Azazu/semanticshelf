@@ -34,7 +34,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.settings import Settings
 from app.db.locks import hold_media_shared
-from app.domain import Asset
+from app.domain import NO_NARROWING, Asset, Narrowing
 from app.repositories.assets import AssetRepository
 from app.repositories.jobs import IndexingJobRepository
 from app.services import images
@@ -229,8 +229,7 @@ async def get_asset(session: AsyncSession, asset_id: UUID) -> Asset | None:
 async def list_assets(
     session: AsyncSession,
     *,
-    tags_all: Sequence[str] = (),
-    tags_any: Sequence[str] = (),
+    narrowing: Narrowing = NO_NARROWING,
     source: str | None = None,
     index_status: tuple[str, str] | None = None,
     limit: int,
@@ -238,8 +237,7 @@ async def list_assets(
 ) -> tuple[list[Asset], bool]:
     """A page of assets, newest first, and whether more exist after it."""
     return await AssetRepository(session).page(
-        tags_all=tags_all,
-        tags_any=tags_any,
+        narrowing=narrowing,
         source=source,
         index_status=index_status,
         limit=limit,

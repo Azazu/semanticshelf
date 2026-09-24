@@ -22,6 +22,7 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 
 from app.api.deps import PoolDep, SessionDep, SettingsDep, StorageDep
+from app.api.filters import INVALID_FILTER_TYPE, NARROWING_DESCRIPTION, narrowing_from
 from app.core.errors import problem, problem_response, problem_responses
 from app.domain import CLIP_VIT_L14, DINOV2_LARGE
 from app.schemas.assets import AssetRead
@@ -51,6 +52,7 @@ from app.services.search import SearchPage as ServicePage
 from app.services.search import search_image as run_image_search
 from app.services.search import search_similar as run_similar_search
 from app.services.search import search_text as run_text_search
+from app.services.tagging import NarrowingError
 
 PREFIX = "/api/v1/search"
 ASSET_PREFIX = "/api/v1/assets"
@@ -77,6 +79,13 @@ TOO_LARGE_TYPE = "/errors/image-too-large"
 TOO_SMALL_TYPE = "/errors/image-too-small"
 NOT_INDEXED_TYPE = "/errors/not-indexed"
 NOT_FOUND_TYPE = "/errors/not-found"
+
+TAGS_ALL_DESCRIPTION = (
+    "Rank only assets carrying every one of these tags (comma-separated, normalised as any tag "
+    "is). Part of the ranking, not of the page: the answer is the nearest assets that carry "
+    "them, however deep in the ranking they sit."
+)
+TAGS_ANY_DESCRIPTION = "Rank only assets carrying at least one of these tags."
 
 MODEL_DESCRIPTION = (
     "Which model answers. It must be one this build runs — otherwise 503 — and one that can "
@@ -106,6 +115,7 @@ def _rendered(page: ServicePage, *, limit: int, offset: int) -> SearchPage:
         has_more=page.has_more,
         model=page.model,
         query_truncated=page.query_truncated,
+        scan_limited=page.scan_limited,
     )
 
 
@@ -122,7 +132,9 @@ def _rendered(page: ServicePage, *, limit: int, offset: int) -> SearchPage:
         "so a deeper page is refused rather than answered worse. `min_score` drops "
         "results below it after ranking, which makes a page shorter rather than reaching "
         "further down. Scores are comparable only within one model, which the answer names. "
-        "The query is English: the model was trained on English captions."
+        "The query is English: the model was trained on English captions. "
+        f"{NARROWING_DESCRIPTION} A narrowed search may stop at the bound on how far it may "
+        "look before the page is full, and `scan_limited` in the answer says when it did."
     ),
     response_model=SearchPage,
     responses={
@@ -133,6 +145,7 @@ def _rendered(page: ServicePage, *, limit: int, offset: int) -> SearchPage:
     },
 )
 async def search_by_text(
+    request: Request,
     session: SessionDep,
     settings: SettingsDep,
     pool: PoolDep,
@@ -152,11 +165,19 @@ async def search_by_text(
     offset: Annotated[int, Query(ge=0)] = 0,
     min_score: Annotated[float | None, Query(ge=-1.0, le=1.0)] = None,
     model: Annotated[str, Query(description=MODEL_DESCRIPTION)] = CLIP_VIT_L14,
+    tags_all: Annotated[str | None, Query(description=TAGS_ALL_DESCRIPTION)] = None,
+    tags_any: Annotated[str | None, Query(description=TAGS_ANY_DESCRIPTION)] = None,
 ) -> Any:
     try:
         query = normalised_query(q)
     except InvalidQueryError as exc:
         return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, INVALID_QUERY_TYPE, str(exc))
+    try:
+        narrowing = narrowing_from(
+            request.query_params.multi_items(), tags_all=tags_all, tags_any=tags_any
+        )
+    except NarrowingError as exc:
+        return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, INVALID_FILTER_TYPE, str(exc))
 
     try:
         page = await run_text_search(
@@ -168,6 +189,7 @@ async def search_by_text(
             offset=offset,
             min_score=min_score,
             model=model,
+            narrowing=narrowing,
         )
     except PageTooDeepError as exc:
         return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, PAGE_TOO_DEEP_TYPE, str(exc))
@@ -190,7 +212,8 @@ async def search_by_text(
         "nothing of it remains after the answer. The page fields (`limit`, `offset`, "
         "`min_score`, `model`) are form fields beside the file, with the bounds the text search "
         "has. The default model is `dinov2-large`, which describes appearance rather than "
-        "subject: what comes back looks like the query, it is not about the same thing."
+        "subject: what comes back looks like the query, it is not about the same thing. "
+        f"{NARROWING_DESCRIPTION} Those are form fields here too, `meta.<key>` included."
     ),
     response_model=SearchPage,
     responses={
@@ -230,10 +253,9 @@ async def search_by_image(
                 INVALID_UPLOAD_TYPE,
                 f"the file part must be called {FILE_FIELD!r}, not {field_name!r}",
             )
+        fields = [(key, value) for key, value in form.multi_items() if isinstance(value, str)]
         try:
-            asked = ImageSearchQuery.model_validate(
-                {key: value for key, value in form.multi_items() if isinstance(value, str)}
-            )
+            asked = ImageSearchQuery.model_validate(dict(fields))
         except ValidationError as exc:
             return _refuse(
                 HTTPStatus.UNPROCESSABLE_ENTITY,
@@ -243,6 +265,10 @@ async def search_by_image(
                     for error in exc.errors()
                 ),
             )
+        try:
+            narrowing = narrowing_from(fields, tags_all=asked.tags_all, tags_any=asked.tags_any)
+        except NarrowingError as exc:
+            return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, INVALID_FILTER_TYPE, str(exc))
 
         try:
             page = await run_image_search(
@@ -255,6 +281,7 @@ async def search_by_image(
                 offset=asked.offset,
                 min_score=asked.min_score,
                 model=asked.model,
+                narrowing=narrowing,
             )
         except PageTooDeepError as exc:
             return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, PAGE_TOO_DEEP_TYPE, str(exc))
@@ -283,7 +310,9 @@ async def search_by_image(
         "searches: leaving the asset out spends one of the candidates the index produces, and a "
         "page is refused rather than answered from a search that could not reach it. An asset "
         "with no vector for that model is 409, not an empty page: nothing is known about what "
-        "it looks like, which is not the same as nothing being like it."
+        "it looks like, which is not the same as nothing being like it. "
+        f"{NARROWING_DESCRIPTION} It applies to the neighbours and never to the asking asset: "
+        "an asset may ask what looks like it among a set it does not itself belong to."
     ),
     response_model=SearchPage,
     responses={
@@ -297,13 +326,23 @@ async def search_by_image(
 )
 async def search_similar_to_asset(
     asset_id: UUID,
+    request: Request,
     session: SessionDep,
     settings: SettingsDep,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     offset: Annotated[int, Query(ge=0)] = 0,
     min_score: Annotated[float | None, Query(ge=-1.0, le=1.0)] = None,
     model: Annotated[str, Query(description=MODEL_DESCRIPTION)] = DINOV2_LARGE,
+    tags_all: Annotated[str | None, Query(description=TAGS_ALL_DESCRIPTION)] = None,
+    tags_any: Annotated[str | None, Query(description=TAGS_ANY_DESCRIPTION)] = None,
 ) -> Any:
+    try:
+        narrowing = narrowing_from(
+            request.query_params.multi_items(), tags_all=tags_all, tags_any=tags_any
+        )
+    except NarrowingError as exc:
+        return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, INVALID_FILTER_TYPE, str(exc))
+
     try:
         page = await run_similar_search(
             asset_id,
@@ -313,6 +352,7 @@ async def search_similar_to_asset(
             offset=offset,
             min_score=min_score,
             model=model,
+            narrowing=narrowing,
         )
     except PageTooDeepError as exc:
         return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, PAGE_TOO_DEEP_TYPE, str(exc))

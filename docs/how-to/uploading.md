@@ -100,7 +100,8 @@ The thumbnail is bounded by its longest side and never enlarged, so a picture
 already smaller than 256 px keeps its own size.
 
 Listing is newest first, with `limit` (20 by default, 100 at most), `offset`
-(10 000 at most), `tags_all`, `tags_any` and `source`:
+(10 000 at most), `tags_all`, `tags_any`, `meta.<key>` (top-level equality in
+the metadata, at most five conditions) and `source`:
 
 ```console
 $ curl -s "http://127.0.0.1:8000/api/v1/assets?limit=20&tags_any=dragon"
