@@ -9,11 +9,13 @@ from app.services.tagging import (
     MAX_TAGS,
     METADATA_MAX_BYTES,
     METADATA_MAX_DEPTH,
+    TAG_PATTERN,
     MetadataError,
     TagError,
     check_metadata,
     merge_metadata,
     normalise_filename,
+    normalise_tag,
     normalise_tags,
     parse_metadata,
     split_tag_fields,
@@ -133,3 +135,14 @@ def test_a_filename_with_nothing_usable_left_is_none() -> None:
 
 def test_a_non_latin_filename_survives() -> None:
     assert normalise_filename("дракон.jpg") == "дракон.jpg"
+
+
+def test_a_tag_pattern_ends_where_the_tag_does() -> None:
+    """The shape describes the whole value: `$` would also match before a final
+    newline, and every pattern in this module that decides whether a value is
+    acceptable says `\\Z` for that reason (change 12, Gate 2 finding 1). A tag
+    never reaches it with a newline — `normalise_tag` strips first — so this
+    asserts the rule directly rather than through an input that cannot occur."""
+    assert TAG_PATTERN.match("dragon") is not None
+    assert TAG_PATTERN.match("dragon\n") is None
+    assert normalise_tag(" dragon\n") == "dragon", "stripped before it is matched"

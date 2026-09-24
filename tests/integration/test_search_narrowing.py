@@ -316,19 +316,28 @@ async def test_a_narrowing_nothing_satisfies_is_an_empty_page(
 
 
 class Counting(EmbeddingRepository):
-    """Counts the bounded question decision 3 asks only on the slow path."""
+    """Counts the bounded question decision 3 asks only on the slow path.
+
+    `asked` holds what each question answered, `bounds` the `at_most` it was
+    given — the two are asserted apart because the bound is the claim that it
+    is a question about *more than the scan reached* rather than a count of the
+    corpus.
+    """
 
     asked: list[int] = []
+    bounds: list[int] = []
 
     async def reachable(self, **kwargs: Any) -> int:
         found = await super().reachable(**kwargs)
         Counting.asked.append(found)
+        Counting.bounds.append(int(kwargs["at_most"]))
         return found
 
 
 @pytest.fixture
 def counting() -> Iterator[list[int]]:
     Counting.asked = []
+    Counting.bounds = []
     original = search.EmbeddingRepository
     search.EmbeddingRepository = Counting  # type: ignore[misc]
     yield Counting.asked
@@ -717,3 +726,73 @@ async def test_the_bounded_question_stops_where_it_is_told_to(session: AsyncSess
 
     assert bounded == 3, "the bound, not the five that are there"
     assert further == 5
+
+
+# --- the scan that stopped before the offset -------------------------------------
+#
+# The pair task 3.1 promises, and the case a page cannot show: an empty page at
+# an offset, once because the scan ran out of budget before reaching it and once
+# because the ranking held fewer matches than the offset skips. Nothing about
+# either answer differs — only what the scan reached does.
+
+
+async def test_a_scan_that_stopped_before_the_offset_says_so(
+    session: AsyncSession,
+    db_settings: Settings,
+    pool: Any,
+    embedder: PlanarEmbedder,
+    counting: list[int],
+) -> None:
+    """Reached 2 candidates of the 8 a page at offset 5 needs, while thirty
+    matching assets exist: the page is empty and the scan was cut short.
+
+    The count that decides it is taken **before** the offset — after it there
+    would be nothing left to count, and the bound of the question would say 1
+    instead of 3."""
+    await seed_analysed(session, assets=3000, rare_every=100)
+    await force_the_index_path(session, tuples=200)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=2,
+        offset=5,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert page.hits == [], "the scan never reached the offset"
+    assert page.has_more is False
+    assert page.scan_limited is True, "which is the only thing that says the page is not the end"
+    assert counting == [3], "more matching rows exist than the two it reached"
+    assert Counting.bounds == [3], "asked as reached + 1, on the pre-offset count"
+
+
+async def test_an_empty_page_at_an_offset_the_ranking_never_reaches_is_not_cut_short(
+    session: AsyncSession,
+    db_settings: Settings,
+    pool: Any,
+    embedder: PlanarEmbedder,
+    counting: list[int],
+) -> None:
+    """The same shape of answer over the same corpus, with the budget the
+    service really runs at: the scan reaches every one of the thirty matches,
+    the offset skips past all of them, and nothing was cut short."""
+    await seed_analysed(session, assets=3000, rare_every=100)
+    await force_the_index_path(session, tuples=20000)
+
+    page = await search.search_text(
+        "anything",
+        session=session,
+        settings=db_settings,
+        pool=pool,
+        limit=2,
+        offset=50,
+        narrowing=Narrowing(tags_all=(RARE,)),
+    )
+
+    assert page.hits == [], "thirty matches, and the offset skips past all of them"
+    assert page.scan_limited is False
+    assert counting == [30], "every match there is, counted no further than the scan reached"
+    assert Counting.bounds == [31]

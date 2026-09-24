@@ -107,6 +107,23 @@ def test_a_key_outside_the_shape_is_refused_by_name(key: str) -> None:
         parse_narrowing(meta=[(key, "value")])
 
 
+@pytest.mark.parametrize(
+    "key", ["dataset\n", "dataset\n\n", "\ndataset"], ids=["trailing", "two", "leading"]
+)
+def test_a_key_carrying_a_newline_is_refused(key: str) -> None:
+    """Python's `$` matches before a final newline, so `^[a-z0-9_]{1,64}$` used
+    to accept `dataset\n` — a key outside the alphabet the shape names, arriving
+    as `meta.dataset%0A` from a query string (Gate 2 round 1, finding 4)."""
+    with pytest.raises(NarrowingError, match="not a valid metadata key"):
+        parse_narrowing(meta=[(key, "value")])
+
+
+def test_the_key_length_holds_at_its_boundary() -> None:
+    assert parse_narrowing(meta=[("k" * 64, "v")]).meta == {"k" * 64: "v"}
+    with pytest.raises(NarrowingError, match="not a valid metadata key"):
+        parse_narrowing(meta=[("k" * 65, "v")])
+
+
 def test_five_conditions_are_allowed() -> None:
     five = [(f"key_{index}", "value") for index in range(MAX_META_CONDITIONS)]
 

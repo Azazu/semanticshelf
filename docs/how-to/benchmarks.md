@@ -16,16 +16,22 @@ planner's statistics fresh and without them. Synthetic on purpose: what is
 measured is the planner's choice against selectivity, and a real model's vectors
 would add a variable nobody can control.
 
-**It cannot touch your store.** The corpus is built in a schema of its own,
-created and dropped by the run, inside the database `DATABASE_URL` names. The
+**It cannot touch your store, and it deletes only what it created.** The corpus
+is built in a schema of its own, inside the database `DATABASE_URL` names, and
+that schema is created by the run: a name that is already taken is a refusal,
+never a drop, so pointing the script at an existing schema cannot destroy it.
+The cleanup at the end drops that schema only if the create succeeded. The
 tables are copied from the service's own (`LIKE ... INCLUDING ALL`), so the
 indexes measured are the indexes a request meets; before a single row is
-written, the script checks that every unqualified name resolves inside that
-schema and refuses to run if it does not. An integration test runs the command
-above against a populated store and asserts that every row is still there.
+written, the script checks that every unqualified name resolves inside its own
+schema and refuses to run if it does not; and `public`, the `pg_*` schemas and
+anything outside `^[a-z_][a-z0-9_]{0,48}$` are refused at the command line.
+Integration tests run the published command against a populated store and assert
+that every asset, embedding and job is still there, and that an occupied schema
+name is refused with its contents intact.
 
 Add `--plans` to print one full plan per shape, and `--schema <name>` to build
-somewhere other than `filter_benchmark`.
+somewhere other than `filter_benchmark` — a name nothing else is using.
 
 ## What one run says
 

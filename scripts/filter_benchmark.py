@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 import sqlalchemy as sa
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.core.settings import Settings
@@ -45,7 +46,16 @@ from app.services.search import effort_for, rows_needed
 DEFAULT_SCHEMA = "filter_benchmark"
 #: A schema name is interpolated into DDL, so it is checked rather than trusted
 #: — the same rule the service applies to everything that arrives from outside.
-SCHEMA_PATTERN = re.compile(r"^[a-z_][a-z0-9_]{0,48}$")
+#:
+#: `\Z`, never `$`: Python's `$` also matches before a final newline, so
+#: `^...$` accepts `public\n` — which SQL reads as `public` followed by
+#: whitespace, and which the equality check below would not catch (change 12,
+#: Gate 2 finding 1).
+SCHEMA_PATTERN = re.compile(r"^[a-z_][a-z0-9_]{0,48}\Z")
+
+#: Names this script will not take whatever the pattern says: where the
+#: service's own tables live, and everything the database reserves.
+PROTECTED_SCHEMAS = frozenset({"public", "pg_catalog", "information_schema"})
 
 TABLES = ("assets", "embeddings")
 MODEL = CLIP_VIT_L14
@@ -88,17 +98,39 @@ class Measurement:
 # --- the corpus, in a schema of its own -----------------------------------------
 
 
+class SchemaInUse(Exception):
+    """The name asked for is already somebody's schema."""
+
+
+async def own(connection: AsyncConnection, *, schema: str) -> None:
+    """Create the schema, or refuse the run.
+
+    Plain `CREATE SCHEMA`: no `IF NOT EXISTS`, and above all no `DROP` first.
+    A schema that is already there belongs to someone — the default name reused
+    between runs, or a schema of the person's own — and this script's promise is
+    that it deletes only what it created (change 12, Gate 2 finding 2). Whether
+    the create succeeded is what the caller's cleanup turns on.
+    """
+    try:
+        await connection.execute(sa.text(f"CREATE SCHEMA {schema}"))
+    except ProgrammingError as error:
+        raise SchemaInUse(
+            f"schema {schema!r} already exists: this script only ever drops a schema it "
+            f"created. Remove it yourself, or pass --schema with another name."
+        ) from error
+
+
 async def build(connection: AsyncConnection, *, schema: str, assets: int, seed: int) -> None:
-    """The schema, the tables copied from the service's own, and the rows.
+    """The tables copied from the service's own, and the rows.
 
     The copy carries every index the real tables have, the partial HNSW index
     over the dimension cast included (ADR-001), so what is measured here is what
     a request meets. Autovacuum is switched off on the copies: a background
     ANALYZE arriving mid-run would silently turn the statistics-free half of the
     table into something else.
+
+    The schema itself is `own()`'s: this writes only inside it.
     """
-    await connection.execute(sa.text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
-    await connection.execute(sa.text(f"CREATE SCHEMA {schema}"))
     for table in TABLES:
         await connection.execute(
             sa.text(f"CREATE TABLE {schema}.{table} (LIKE public.{table} INCLUDING ALL)")
@@ -256,10 +288,24 @@ def compiled(statement: sa.Select[object]) -> str:
 
 
 async def run(*, assets: int, seed: int, schema: str) -> list[Measurement]:
+    """Own a schema, measure inside it, and drop it — in that order, and only
+    ever that schema.
+
+    The create is a transaction of its own so that owning the name is a fact by
+    the time anything else runs: `created` is set after it committed, and the
+    cleanup happens only then. A run that is refused the name leaves everything
+    exactly as it found it, the name included.
+    """
+    if schema in PROTECTED_SCHEMAS or schema.startswith("pg_"):
+        raise SystemExit(f"refusing to run: {schema!r} is not a schema this script may create")
     settings = Settings()  # type: ignore[call-arg]
     engine = create_engine(settings)
     measurements: list[Measurement] = []
+    created = False
     try:
+        async with engine.begin() as connection:
+            await own(connection, schema=schema)
+        created = True
         async with engine.begin() as connection:
             await build(connection, schema=schema, assets=assets, seed=seed)
             index = await hnsw_index(connection, schema=schema)
@@ -281,9 +327,12 @@ async def run(*, assets: int, seed: int, schema: str) -> list[Measurement]:
                                 settings=settings,
                             )
                         )
+    except SchemaInUse as error:
+        raise SystemExit(f"refusing to run: {error}") from error
     finally:
-        async with engine.begin() as connection:
-            await connection.execute(sa.text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
+        if created:
+            async with engine.begin() as connection:
+                await connection.execute(sa.text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
         await engine.dispose()
     return measurements
 
@@ -340,8 +389,8 @@ def main(argv: list[str] | None = None) -> int:
     parsed = parser.parse_args(argv)
     if not SCHEMA_PATTERN.match(parsed.schema):
         parser.error(f"not a schema name this script will create: {parsed.schema!r}")
-    if parsed.schema == "public":  # pragma: no cover - refused by the pattern above
-        parser.error("public is where the service's tables are")
+    if parsed.schema in PROTECTED_SCHEMAS or parsed.schema.startswith("pg_"):
+        parser.error(f"{parsed.schema!r} is where the service's or the database's own tables are")
 
     measurements = asyncio.run(run(assets=parsed.assets, seed=parsed.seed, schema=parsed.schema))
     settings = Settings()  # type: ignore[call-arg]

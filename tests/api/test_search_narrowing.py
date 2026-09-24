@@ -268,6 +268,19 @@ async def test_a_metadata_parameter_with_no_key_is_refused(
     assert asked.narrowing is None
 
 
+async def test_a_key_carrying_a_newline_is_refused_on_the_wire(
+    client: httpx.AsyncClient, asked: Asked
+) -> None:
+    """`meta.dataset%0A=coco` is what the parser's end-anchor let through
+    (Gate 2 round 1, finding 4): the key reaches the query string as
+    `dataset\n`, which is not the shape `meta.<key>` promises."""
+    response = await client.get(TEXT, params=[("q", "a dragon"), ("meta.dataset\n", "coco")])
+
+    assert response.status_code == 422
+    assert response.json()["type"] == INVALID_FILTER
+    assert asked.narrowing is None
+
+
 async def test_a_parameter_that_merely_starts_like_one_is_not_a_condition(
     client: httpx.AsyncClient, asked: Asked
 ) -> None:

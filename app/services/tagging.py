@@ -26,7 +26,13 @@ from app.domain import Narrowing
 
 #: A tag after normalisation. Lower-case, starts with a letter or digit, and
 #: short enough to read in a filter.
-TAG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+#:
+#: `\Z` rather than `$` in this and every other pattern that decides whether a
+#: value is acceptable: Python's `$` also matches *before* a final newline, so
+#: `^...$` accepts `dragon\n` — a value the shape does not describe. Anything
+#: that validates has to match the whole string, terminal newline included
+#: (change 12, Gate 2 finding 1).
+TAG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}\Z")
 MAX_TAGS = 32
 #: The serialised metadata bound. The multipart parser is given a larger bound
 #: (see the upload router), so a value between the two is refused here, at the
@@ -37,7 +43,7 @@ FILENAME_MAX_LENGTH = 255
 
 #: A metadata key a narrowing may name (FR-FLT-3). Narrower than what metadata
 #: may contain: a filter names a key a person typed into a URL.
-NARROWING_KEY_PATTERN = re.compile(r"^[a-z0-9_]{1,64}$")
+NARROWING_KEY_PATTERN = re.compile(r"^[a-z0-9_]{1,64}\Z")
 #: How many metadata conditions one narrowing may carry (FR-FLT-3).
 MAX_META_CONDITIONS = 5
 
