@@ -73,18 +73,43 @@ would have been wrong for seven changes.
    would leave a claim held with nothing to show and buy nothing over the lease).
 
 3. **The second signal is the operating system's business.** The first signal
-   sets the token. The second restores the default disposition for that signal
-   and re-raises it at this process, so the runner dies the way `kill` means it
-   to, with the status a supervisor expects — rather than with an exit code this
-   project invented. Work in flight then returns by its lease, like a crash,
-   because from the queue's point of view that is exactly what it is.
+   sets the token. The second logs one line — that it was forced — restores the
+   default disposition for that signal and re-raises it at this process, so the
+   runner dies the way `kill` means it to, with the status a supervisor expects,
+   rather than with an exit code this project invented. Work in flight then
+   returns by its lease, like a crash, because from the queue's point of view
+   that is exactly what it is.
 
-4. **`INDEXING_RUNNER` is read in one place.** A function in the service layer
-   decides whether an HTTP request schedules a drain, and both routers call it
-   instead of comparing the setting themselves. The switch is one fact about the
-   deployment, and a fact stated twice drifts. `inline` is the default: a build
-   nobody configured must still index what it accepts, and the demo depends on
-   it.
+   What this gives up, deliberately: the **summary** is a guarantee of the
+   graceful path only. A forced end reports that it was forced and nothing more,
+   because collecting totals first is a delay, and removing the delay is the
+   only reason the second signal exists. The spec says this in those words, so
+   the contract and the mechanism cannot drift apart.
+
+4. **`INDEXING_RUNNER` is read in one place, and it governs every runner that
+   is not the worker.** A function in the service layer answers one question —
+   may this process carry out work itself? — and everything that would otherwise
+   index calls it: the upload router, the reindex router, and the two commands
+   that finish the work they create (`index-folder`, `index missing`). The
+   switch is one fact about the deployment, and a fact stated twice drifts.
+
+   The commands are not an extension of scope, they are the scope: FR-CLI-1 says
+   in normative text that `INDEXING_RUNNER` "selects between this runner and the
+   worker process from change 13 onwards, and until that process exists there is
+   nothing for it to select". This is that change, so the folder command stops
+   being an exception. `index missing` is included for the same reason though
+   the requirements do not name it: it is the other command that finishes work
+   it created, and leaving it indexing under `INDEXING_RUNNER=worker` would make
+   the switch mean two different things depending on which command you ran.
+
+   `--no-index` and the switch cannot contradict each other, because they say
+   the same thing from two directions: the flag means *this run* leaves the work
+   queued, the switch means *this deployment* leaves it to the worker. Under the
+   switch the command reports the work as queued exactly as `--no-index` does,
+   and says which of the two decided it.
+
+   `inline` is the default: a build nobody configured must still index what it
+   accepts, and the demo depends on it.
 
 5. **The worker is one process, one batch at a time.** Concurrency is other
    workers, not threads inside this one: the inference pool is already bounded
@@ -92,24 +117,40 @@ would have been wrong for seven changes.
    worker would multiply it by the batch size. A deployment that wants more
    throughput starts more workers, which the queue has always supported.
 
-6. **Two kinds of evidence, because a signal and a shared queue are different
-   claims.**
-   - *Shared queue*: two loops against one real database, running as tasks in
-     one test, over a queue of several units — every unit executed exactly once,
-     none by both, neither loop waiting for the other. Tasks are enough here
-     because `SKIP LOCKED` works at the transaction level, and the test asserts
-     what the queue says afterwards, not what the runners felt.
-   - *Signal*: a real `semanticshelf worker` process, sent a real `SIGTERM`.
-     That test runs against an **empty queue**, so no model is ever loaded and
-     no weights are needed — it proves the thing only a process can prove (the
-     signal arrives, the runner ends promptly, the exit is clean). Stopping
-     *while holding a batch* is proven in-process instead, by setting the token
-     mid-batch and asserting that the batch finished and nothing new was taken.
+6. **The evidence is processes, because that is what the change claims.** A
+   child-process harness makes that affordable: a small test-only entry point
+   installs the deterministic fake embedder (`tests/fake_models.py`, the same
+   one every suite uses) and then calls the worker exactly as the command does.
+   Spawned twice, it is two real runners with two runtimes, two connection pools
+   and two inference pools, on one real queue — and it needs no weights, so it
+   stays in the integration suite rather than becoming a `models` test.
 
-   Rejected: a subprocess test that indexes something (it would need real
-   weights in CI, which this project never does), and proving the signal with a
-   fake (a fake signal proves the handler was called, not that the process
-   stops).
+   What that harness carries:
+   - *Shared queue*: two child processes against one queue of several units.
+     Each unit ends finished, the store holds one vector per asset, and both
+     children did some of it.
+   - *A real signal on a working runner*: a child holding a batch is sent
+     `SIGTERM`, exits 0, and the batch it held is finished — the vectors are in
+     the store. Sent twice, it dies by the signal's own disposition, and the
+     work it held is left `running` with its attempt counted, then claimed by
+     another runner once the lease expires (shortened by settings for the test,
+     never by waiting).
+   - *Determinism*: the children are synchronised through the queue itself — the
+     test seeds a known number of units and waits, with a timeout, for the
+     states it expects — never through sleeps timed to hope.
+
+   What does **not** need a process, and therefore does not get one: that a stop
+   is noticed between batches rather than inside one (a token set mid-batch, in
+   process), and that a claimer does not wait for work another claimer holds —
+   which change 6 already proves deterministically by holding a row in an open
+   transaction and timing the other claim
+   (`tests/integration/test_indexing.py::test_a_claimer_passes_over_work_another_holds`).
+   That test is the authority for the no-waiting claim; a two-runner test cannot
+   be, because a blocking claim would eventually satisfy it too.
+
+   Rejected: proving the signal with a fake (it proves the handler was called,
+   not that the process ends), and running the children against real weights
+   (CI never loads them).
 
 7. **The idle interval is a setting with a small default.** `WORKER_POLL_SECONDS`
    (default 2). It trades latency for idle queries against an indexed claim; a
@@ -123,7 +164,7 @@ would have been wrong for seven changes.
 | Question | Answer |
 |---|---|
 | Crash before/after an external effect | The external effect is the vector. `finish` writes it and marks the job done in one transaction, conditional on the lease still being ours (change 6), so a crash before it leaves the work claimed — returned by lease — and a crash after it leaves the work done. A stop is a crash the queue already knows how to survive; this change adds no new window, and the loop does nothing between `execute` and `finish` that could. |
-| Concurrent writers | Several runners on one queue is the point. The mechanism is the existing claim: `FOR UPDATE SKIP LOCKED` under one transaction, an attempt counted and a lease set at claim time, and every finish conditional on that lease. What it does NOT guarantee: exactly-once execution. Delivery is at-least-once — a lease that expires while its runner is alive is claimed by another, and both may compute the same vector. The upsert on `(asset_id, model)` is what makes that harmless. |
+| Concurrent writers | Several runners on one queue is the point. The mechanism is the existing claim: `FOR UPDATE SKIP LOCKED` under one transaction, an attempt counted and a lease set at claim time, and every finish conditional on that lease. What it does NOT guarantee: exactly-once execution. Delivery is at-least-once — a lease that expires while its runner is alive, slow or merely paused is claimed by another, and both may compute the same vector at the same time. Two things make that harmless rather than wrong: the completion is fenced (a finish whose claim no longer owns the unit lands nowhere, which change 6 proves in four tests) and the effect is idempotent (upsert on `(asset_id, model)`). The delta spec states the guarantee in those terms rather than promising exactly-once. |
 | Empty / zero / null inputs | An empty queue is the normal state: the runner waits its interval and looks again, and `--once` on an empty queue reports nothing taken and exits 0. A batch size or poll interval of zero or less is refused by the settings' own bounds, at startup, not at the first claim. |
 | Deletion / expiry | Two expiries meet here. A lease that expires makes work claimable again and counts a new attempt (existing). An asset deleted while its work is in flight takes the job row with it, so the finish matches nothing and the result is discarded without a retry (FR-IDX-6, existing). The worker inherits both; what it adds is that a stopped runner leans on the first deliberately. |
 | Idempotency of retries | Unchanged and depended upon: the embedding write is an upsert on `(asset_id, model)`, so a unit executed twice leaves one row. The worker makes repeats more likely (more runners, more leases), which is why this row is not `n/a`. |

@@ -48,32 +48,59 @@ badly looks exactly like one that stopped well until the lease expires.
   loop returns. Demonstrated failing input: checking the token inside the batch
   loop abandons the units already claimed, which the same test catches by their
   jobs being left `running` with no vector.
-- [ ] 2.3 What a stopped runner leaves behind is claimable, not failed. Verify:
-  an integration test stops a runner that holds work it cannot finish (the
-  second signal path), then asserts the job is `running` with its attempt
-  counted, is not `failed`, and is claimed by another runner once the lease has
-  expired — with the lease shortened by settings rather than by waiting.
-- [ ] 2.4 A real process, a real signal: the published command run against an
-  **empty** queue, sent `SIGTERM`, ends promptly and cleanly (design decision 6).
-  Verify: an integration test spawns `uv run semanticshelf worker`, waits for the
-  line that says it started, sends the signal, and asserts the process exits 0
-  within a few seconds and printed what it did. No model is loaded, because
-  nothing is due.
+- [ ] 2.3 A test-only child process that is the worker: it installs the
+  deterministic fake embedder (`tests/fake_models.py`) and then runs exactly what
+  the command runs (design decision 6), so a signal can be sent to a real
+  process without a real checkpoint. Verify: an integration test spawns it
+  against a seeded queue and asserts it indexes — the harness is worth nothing
+  if it is not the same runner.
+- [ ] 2.4 A real `SIGTERM` to a runner that is working: it finishes the batch it
+  holds and exits 0. Verify: an integration test seeds work, spawns the child,
+  waits (with a timeout, on the queue's own state) until it holds a batch, sends
+  the signal, and asserts the process exits 0, that the units of that batch are
+  `done` with their vectors stored, and that nothing further was claimed.
+  Demonstrated failing input: a handler that cancels the running batch instead
+  of setting the token leaves those units `running` with no vector, which this
+  test catches.
+- [ ] 2.5 A second signal ends it at once, and what it held returns by the
+  lease. Verify: an integration test sends `SIGTERM` twice, asserts the process
+  ends by that signal's own disposition (not a status this project invented),
+  that the unit it held is `running` with one attempt and **not** `failed`, and
+  that a runner claims it once the lease has expired — the lease shortened by
+  settings, never by waiting.
+- [ ] 2.6 A stop while idle ends promptly and reports what the run did. Verify:
+  an integration test spawns the child against an **empty** queue (no model is
+  ever loaded), sends one signal, and asserts it exits 0 within a few seconds
+  and printed its summary; and that a forced end prints only that it was forced
+  (the spec's report guarantee is the graceful path's).
 
 ## 3. Two runners on one queue
 
-- [ ] 3.1 Nothing in the claim changes; this group only proves it holds for the
-  loop. Verify: an integration test runs two loops concurrently against one
-  queue of several units and asserts every unit ended `done` exactly once, that
-  the number of vectors equals the number of assets, and that no unit counted
-  more than one attempt.
-- [ ] 3.2 Neither runner waits for the other. Verify: the same test asserts both
-  loops took work (neither ended up with zero), which is what `SKIP LOCKED`
-  buys and what a lock-waiting claim would lose.
-- [ ] 3.3 A runner that stopped mid-flight is covered by another. Verify: an
-  integration test claims work in one loop, stops it hard, and asserts the
-  second loop executes that work exactly once after the lease expires — the
-  attempt counter showing two attempts, one per claim.
+- [ ] 3.1 Nothing in the claim changes; this group proves it holds between
+  processes. Verify: an integration test spawns **two** child workers against
+  one queue of several units and asserts that every unit ended `done`, that the
+  store holds exactly one vector per asset, that no unit counted more than one
+  attempt, and that both children did some of the work.
+- [ ] 3.2 That a claimer does not wait for work another claimer holds is
+  **already** proven deterministically, by holding a row in an open transaction
+  and timing the other claim
+  (`tests/integration/test_indexing.py::test_a_claimer_passes_over_work_another_holds`).
+  This change adds no weaker version of it: a two-runner test cannot prove it,
+  because a blocking claim would satisfy it too. Verify: that test still passes
+  unchanged, and the design names it as the authority.
+- [ ] 3.3 A killed runner's work is covered by another. Verify: an integration
+  test kills a child that holds a batch (`SIGKILL`, the case no handler can
+  soften), then asserts the second runner executes that work after the lease
+  expires, that the unit counts two attempts — one per claim — and that the
+  store still holds one vector for it.
+- [ ] 3.4 A lease that expires under a runner that is still working is
+  at-least-once, not a fault. Verify: an integration test shortens the lease so
+  that a unit is reclaimed while its first runner is still executing, and
+  asserts that the store holds one vector, that the late completion lands
+  nowhere and is reported as discarded — reusing the fenced-completion tests
+  change 6 already has
+  (`test_a_late_success_after_a_reclaim_lands_nowhere` and its three siblings)
+  as the authority for the mechanism rather than restating it.
 
 ## 4. Which runner the deployment uses
 
@@ -93,6 +120,21 @@ badly looks exactly like one that stopped well until the lease expires.
   uploads under `INDEXING_RUNNER=worker`, asserts the work is queued and no
   vector appears without a runner, then runs one `--once` batch and asserts the
   vector is there and the asset reads `done`.
+- [ ] 4.4 The commands that finish the work they create consult the same
+  decision (design decision 4, FR-CLI-1): `index-folder` and `index missing`
+  import or queue as they do now and execute nothing under
+  `INDEXING_RUNNER=worker`. Verify: unit tests over each command's runtime
+  assert that the work-finishing step is not reached under `worker` and is under
+  `inline`; an integration test runs `index-folder` on a fixture tree under
+  `worker` and asserts the assets exist with their work `pending` and no
+  vectors, then runs the worker once and asserts they finish. Demonstrated
+  failing input: leaving `index-folder` on its own `index=not no_index` makes
+  the first of those tests find vectors that should not exist yet.
+- [ ] 4.5 `--no-index` and the switch say the same thing from two directions and
+  never contradict each other. Verify: unit tests assert the summary under
+  `--no-index`, under `worker`, and under both at once report the work as queued
+  and name which of the two decided it — and that no combination reports work as
+  indexed that was not.
 
 ## 5. The command
 
@@ -103,9 +145,12 @@ badly looks exactly like one that stopped well until the lease expires.
   Verify: a unit test asserts the command's options and that `--batch 0` is
   refused; the integration test of 2.4 covers the real process.
 - [ ] 5.2 What it says: one line when it starts (batch size, interval, which
-  models are enabled), one per batch that did something, one when it ends with
-  the totals. Verify: the spawned-process test asserts the start line and the
-  end line; a unit test asserts a batch that took nothing logs nothing.
+  models are enabled), one per batch that did something, one when it ends
+  gracefully with the totals, and — when it is forced — one line saying so and
+  nothing else (the spec's report guarantee belongs to the graceful path).
+  Verify: the spawned-process tests of 2.4 and 2.6 assert the start line, the
+  summary on a graceful end and its absence on a forced one; a unit test asserts
+  a batch that took nothing logs nothing.
 
 ## 6. Documentation
 
@@ -120,9 +165,14 @@ badly looks exactly like one that stopped well until the lease expires.
   both; `rg` finds no setting in `Settings` that the page or the template omits.
 - [ ] 6.3 `docs/explanation/requirements.md` reads as the service behaves:
   FR-IDX-2 and FR-CLI-2 name the command as it actually is (`semanticshelf
-  worker`, not `python -m app.cli worker`), and FR-IDX-2 says what
-  `INDEXING_RUNNER` decides. Verify: `openspec validate --all --strict` passes
-  and the text matches the code.
+  worker`, not `python -m app.cli worker`); FR-IDX-2 says what `INDEXING_RUNNER`
+  decides and states the guarantee as at-least-once with a fenced completion
+  rather than as exactly-once; and **FR-CLI-1's promise is kept** — its sentence
+  "`INDEXING_RUNNER` selects between this runner and the worker process from
+  change 13 onwards" now describes something that exists, with `--no-index`'s
+  relation to it stated. Verify: `openspec validate --all --strict` passes,
+  `rg 'INDEXING_RUNNER' docs/` finds no statement the code does not make, and
+  every command named in those requirements exists with that spelling.
 - [ ] 6.4 `openspec/ROADMAP.md` row 13 says what this change did. Verify: the
   row names the command, the switch and the evidence.
 

@@ -36,17 +36,26 @@ functions run in both places.
   a cron-style deployment want.
 - **Several workers on one queue, with no coordination between them.** The claim
   already passes over held rows (`FOR UPDATE SKIP LOCKED`) and a dead runner's
-  work returns by lease expiry. This change proves both with processes rather
-  than sessions, and that is the acceptance criterion the roadmap names.
+  work returns by lease expiry. This change proves both with real processes —
+  spawned through a test-only entry point that installs the fake embedder, so no
+  weights are needed — and that is the acceptance criterion the roadmap names.
+  What is proven is the guarantee the queue actually gives: at-least-once
+  delivery, a completion that lands only while its claim still owns the work,
+  and an idempotent write. Not exactly-once, which a lease expiring under a live
+  runner makes impossible and which nothing here pretends to.
 - **Graceful shutdown.** On SIGTERM (and SIGINT) the worker stops claiming and
   finishes the batch it holds, then exits; nothing is released by hand, because
   a lease is what covers the work of a runner that stops (FR-CLI-2). A second
   signal exits at once, and the abandoned work returns by the same lease.
 - **`INDEXING_RUNNER`**, a new setting with two values: `inline` (today's
   behaviour, and the default — a deployment that never starts a worker must keep
-  indexing) and `worker` (the API enqueues and schedules nothing; the worker is
-  the only runner). The HTTP contract is identical under both: an upload answers
-  `pending` and a vector arrives afterwards either way.
+  indexing) and `worker` (nothing but the worker executes). It governs every
+  runner that is not the worker: the upload and reindex paths in the API, and
+  the two commands that finish the work they create — `index-folder` and
+  `index missing`. That is not an extension of scope but the scope: FR-CLI-1
+  already says `INDEXING_RUNNER` selects between the folder command's own runner
+  and the worker "from change 13 onwards". The HTTP contract is identical under
+  both: an upload answers `pending` and a vector arrives afterwards either way.
 - **`WORKER_POLL_SECONDS`**, how long an idle worker waits before claiming
   again, bounded and documented like every other setting.
 - **The documentation a person running this needs**: `docs/how-to/indexing.md`
@@ -71,10 +80,12 @@ described; what is new is that it is a process of its own.
 
 ## Impact
 
-- **Code**: `app/cli.py` (the command), `app/services/indexing.py` (the loop and
-  what stops it — the claim/execute/finish functions themselves do not change),
+- **Code**: `app/cli.py` (the command, and the two existing commands that now
+  ask whether they may index), `app/services/indexing.py` (the loop, what stops
+  it, and the one function that answers that question — the
+  claim/execute/finish functions themselves do not change),
   `app/core/settings.py` (two settings), `app/api/assets.py` (the two places
-  that schedule a drain consult the switch; nothing else about them moves).
+  that schedule a drain consult the same answer; nothing else about them moves).
 - **API**: no contract change. Under `INDEXING_RUNNER=worker` an upload's
   `index_status` stays `pending` until the worker gets to it, which is what it
   already says.

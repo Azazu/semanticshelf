@@ -1,7 +1,7 @@
 # Handoff — add-indexing-worker
 
 **Updated:** 2026-09-24 · claude
-**State:** awaiting-gate-1
+**State:** fixing-g1
 **Branch:** change/add-indexing-worker
 
 ## Done this session
@@ -29,12 +29,29 @@ Two decisions worth knowing before reading the design:
 
 ## Next step
 
-`/gate-review add-indexing-worker 1` — tier `high` (concurrency), so Gate 1 runs
-on the artifacts before any code. `scripts/pregate-verify.sh gate1
-add-indexing-worker` passes (22 tasks, applicability table present, links
-resolve).
+`/gate-review add-indexing-worker 1 confirm 1` — Gate 1 round 1 asked for
+changes (three major, one minor) and all four are addressed:
 
-After the gate: `/opsx:apply add-indexing-worker`.
+1. The spec promised **exactly-once**; the queue gives at-least-once with a
+   fenced completion and an idempotent write. The requirement now says that in
+   those words, the two-runner scenario carries its preconditions, and a new
+   scenario covers a lease expiring under a runner that is still working.
+2. FR-CLI-1 already promises that `INDEXING_RUNNER` selects between the folder
+   command's own runner and this worker. The switch now governs every runner
+   that is not the worker — the two API paths **and** `index-folder` and
+   `index missing` — with `--no-index`'s relation to it stated, tasks for both,
+   and FR-CLI-1 named in the documentation task.
+3. The evidence is processes, as the proposal claimed: a test-only child entry
+   point installs the fake embedder and runs what the command runs, so two real
+   workers share one queue and a real `SIGTERM` reaches a runner that is working
+   — no weights, still in the integration suite. Task 3.2 no longer pretends a
+   two-runner test proves the absence of lock waits; change 6's held-transaction
+   test is named as the authority.
+4. A forced end reports only that it was forced; the summary is the graceful
+   path's guarantee, in the spec and in the design.
+
+27 tasks now (was 22). `scripts/pregate-verify.sh gate1 add-indexing-worker`
+passes.
 
 ## Blockers
 

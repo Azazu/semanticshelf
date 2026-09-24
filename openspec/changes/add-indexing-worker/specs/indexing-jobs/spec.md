@@ -13,9 +13,14 @@ It SHALL also be able to take a single batch and stop, so that a run can be
 scripted or tested without a signal.
 
 Several such runners SHALL be able to work one queue at the same time with no
-coordination between them: each unit of work SHALL be executed by one of them,
-and a runner SHALL NOT wait for another runner's work — the rules a claim
-already follows are the only mechanism, and this requirement adds none.
+coordination between them. The guarantee this gives is the one the queue has
+always given, and it is not exactly-once: while a unit's lease is valid it is
+held by one runner and no other may take it, delivery is **at-least-once**, a
+completion SHALL take effect only while the claim it came from still owns the
+unit, and the stored effect SHALL be idempotent so that a unit executed more
+than once leaves one result. A runner SHALL NOT wait for work another runner
+holds. The rules a claim already follows are the only mechanism, and this
+requirement adds none.
 
 #### Scenario: Work waiting is worked through
 - **WHEN** a runner of its own is started against a queue holding more work than
@@ -34,9 +39,19 @@ already follows are the only mechanism, and this requirement adds none.
   reporting how much it did
 
 #### Scenario: Two runners on one queue
-- **WHEN** two runners work one queue holding several units at the same time
-- **THEN** every unit is executed exactly once, none is executed by both, and
-  neither runner waits for the other
+- **WHEN** two runners work one queue holding several units at the same time,
+  every lease outlives the work it covers and nothing fails
+- **THEN** each unit is executed by one of them and ends finished, the store
+  holds one result per unit, and both runners make progress rather than one
+  waiting for the other
+
+#### Scenario: A lease expires under a runner that is still working
+- **WHEN** a unit's lease expires while the runner that claimed it is still
+  computing, and another runner claims in the meantime
+- **THEN** the second runner may execute the same unit — that is the
+  at-least-once delivery the queue promises — the store still ends with one
+  result, and the first runner's completion, arriving after it lost the claim,
+  changes nothing and is reported as discarded rather than retried
 
 #### Scenario: A runner that stopped mid-flight
 - **WHEN** a runner is stopped while it holds claimed work, and another runner
@@ -55,7 +70,10 @@ lease expiring.
 A second request to stop SHALL end the runner at once, without waiting for the
 work in flight; what it was holding SHALL return by that same lease.
 
-A runner that ends — either way — SHALL say so, and SHALL report what it did.
+A runner that ends **gracefully** SHALL report what it did. A runner ended by
+the second request SHALL say that it was forced, and SHALL NOT be required to
+report more: it is ending at once, and a summary it had to collect first would
+be a delay the second request exists to remove.
 
 #### Scenario: Asked to stop between batches
 - **WHEN** a runner waiting for work is asked to stop
@@ -68,7 +86,7 @@ A runner that ends — either way — SHALL say so, and SHALL report what it did
 
 #### Scenario: Asked to stop twice
 - **WHEN** a runner is asked to stop a second time while finishing its batch
-- **THEN** it ends at once
+- **THEN** it ends at once, saying only that it was forced
 
 #### Scenario: What a stopped runner leaves behind
 - **WHEN** a runner ends while holding work it did not finish
@@ -77,10 +95,11 @@ A runner that ends — either way — SHALL say so, and SHALL report what it did
 
 ### Requirement: Which runner carries out the work is configured
 
-Configuration SHALL decide which runner executes queued work: the one inside the
-process that serves requests, or a runner of its own. Under the second, creating
-or resetting work SHALL enqueue it and SHALL NOT execute anything inside the
-serving process.
+Configuration SHALL decide which runner executes queued work: the one that lives
+in the process which created the work, or a runner of its own. Under the second,
+anything that creates or resets work SHALL enqueue it and SHALL NOT execute it
+itself — neither the process serving requests nor an operator's command that
+would otherwise finish the work it just created.
 
 The contract of the interface SHALL be identical under both: the same responses,
 the same states, the same guarantee that work exists as soon as the thing it
@@ -99,6 +118,13 @@ deployment that was never told about runners still indexes what it accepts.
   created
 - **THEN** the work is queued and nothing is executed inside the serving
   process; the work waits for that runner
+
+#### Scenario: A command that would carry out its own work
+- **WHEN** an operator's command that normally finishes the work it created is
+  run while a runner of its own is configured
+- **THEN** it creates the work, reports it as queued, and executes none of it —
+  and a command already told to leave the work queued behaves the same way, so
+  the two instructions cannot contradict each other
 
 #### Scenario: The same answers either way
 - **WHEN** the same request is made under each configuration
