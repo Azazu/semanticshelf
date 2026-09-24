@@ -1,7 +1,7 @@
 # Handoff — add-tag-and-meta-filters
 
 **Updated:** 2026-09-24 · claude
-**State:** ready-to-merge
+**State:** merged
 **Branch:** change/add-tag-and-meta-filters
 **Security-sensitive:** yes — this change handles client input: a shared
 parser for tag and metadata narrowings on four public surfaces, including the
@@ -32,13 +32,13 @@ them). `make check` 552, integration 262, ui 59.
 
 ## Next step
 
-`/git:merge add-tag-and-meta-filters` — **Gate 2 confirmed** (confirmation 1 of
-round 1, commit `6ace07c`, all four findings resolved), every task checked, the
-branch pushed and CI green on that head. Only `review.md` and this file differ
-from the reviewed commit, which is what the merge verifier allows.
+Merged into `main` as `f25cdb5 merge: add-tag-and-meta-filters (gate 2
+approved)`, `--no-ff`, no conflicts; `openspec validate --strict` and
+`make check` were green on the branch immediately before it.
 
-After the merge: `/opsx:archive add-tag-and-meta-filters`, and the Russian
-companion document outside the repository is refreshed.
+`/opsx:archive add-tag-and-meta-filters` — the four delta specs sync into
+`openspec/specs/`, then this directory moves under `changes/archive/`. After
+that, the Russian companion document outside the repository is refreshed.
 
 ## Blockers
 
