@@ -155,7 +155,7 @@ two plans answered the query.
 
 ## 6. The numbers
 
-- [ ] 6.1 `scripts/filter_benchmark.py` builds its corpus **in a schema of its
+- [x] 6.1 `scripts/filter_benchmark.py` builds its corpus **in a schema of its
   own**, which it creates and drops: it never writes to, and never deletes from,
   the tables the service uses, so the published command is safe to run against a
   working store (design decision 7). It measures, per selectivity, which plan
@@ -164,13 +164,13 @@ two plans answered the query.
   fresh and without them. Verify: `uv run python scripts/filter_benchmark.py
   --assets 3000 --seed 7` prints the table, and a second run with the same
   arguments prints the same plans and rows.
-- [ ] 6.1a The published command cannot empty a store. Verify: an integration
+- [x] 6.1a The published command cannot empty a store. Verify: an integration
   test seeds assets, embeddings and jobs, runs the benchmark's entry point with
   its default arguments, and asserts every row is still there and the schema it
   used is gone. Demonstrated failing input: pointing the script at the service's
   own tables makes that test fail with the store emptied — which is exactly what
   happened to this machine's demo corpus while this change was being measured.
-- [ ] 6.2 `docs/how-to/benchmarks.md` carries that output, the command that
+- [x] 6.2 `docs/how-to/benchmarks.md` carries that output, the command that
   produced it, and what it means for a deployment: where the planner changes its
   mind, what each plan costs, what an iterative scan buys on the path that uses
   the index, and what stale statistics do to all of it. Verify: every command in
