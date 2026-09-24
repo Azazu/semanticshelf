@@ -462,3 +462,42 @@ async def test_a_killed_runner_leaves_its_work_to_the_lease(
 
     assert (status, attempts) == ("done", 2), "one attempt per claim"
     assert await vectors(engine) == 1, "and one vector, however many runners saw it"
+
+
+async def test_a_lease_that_expires_under_a_working_runner_is_at_least_once(
+    sessions: async_sessionmaker[AsyncSession],
+    engine: AsyncEngine,
+    settings: Settings,
+    media_root: Path,
+    barrier: Path,
+    spawn: Callable[..., Child],
+) -> None:
+    """Task 3.4: the guarantee stated honestly, with two runners on one unit.
+
+    The first is held inside the work while its lease expires — it is alive and
+    computing, not gone — so the second takes the same unit and computes the
+    same vector. That is the at-least-once delivery the queue promises. What
+    keeps it harmless is not timing: the first runner's completion is fenced by
+    the claim it no longer owns (change 6 proves that mechanism in
+    `test_a_late_success_after_a_reclaim_lands_nowhere` and its three siblings),
+    and the write is an upsert.
+    """
+    asset_id = await stored_asset(sessions, media_root, settings)
+    first = spawn(settings, barrier, JOB_LEASE_SECONDS="1")
+    first.wait_until_holding()
+
+    await asyncio.sleep(1.5)  # the lease, which is one second here, expires
+    second = spawn(settings, barrier, JOB_LEASE_SECONDS="600", WORKER_ONCE="1")
+    second.wait_until_holding()  # it took the very unit the first is still working
+
+    release(barrier)  # both finish their embedding; only one of them owns the claim
+    second_output = second.output()
+    first.send(signal.SIGTERM)
+    first_output = first.output()
+
+    assert second.process.returncode == 0, second_output
+    assert first.process.returncode == 0, first_output
+    assert "indexing result discarded" in first_output, "the loser said so rather than retrying"
+    status, attempts = await job_of(engine, asset_id)
+    assert (status, attempts) == ("done", 2), "one attempt per claim"
+    assert await vectors(engine) == 1, "computed twice, stored once"

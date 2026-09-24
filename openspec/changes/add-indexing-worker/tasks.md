@@ -103,7 +103,7 @@ badly looks exactly like one that stopped well until the lease expires.
   construction), then asserts the second runner executes that work after the
   lease expires, that the unit counts two attempts — one per claim — and that
   the store still holds one vector for it.
-- [ ] 3.4 A lease that expires under a runner that is still working is
+- [x] 3.4 A lease that expires under a runner that is still working is
   at-least-once, not a fault. Verify: an integration test shortens the lease so
   that a unit is reclaimed while its first runner is still executing, and
   asserts that the store holds one vector, that the late completion lands
@@ -164,7 +164,7 @@ badly looks exactly like one that stopped well until the lease expires.
 
 ## 6. Documentation
 
-- [ ] 6.1 `docs/how-to/indexing.md` gains the worker: how to run it, what
+- [x] 6.1 `docs/how-to/indexing.md` gains the worker: how to run it, what
   `INDEXING_RUNNER` does, what happens on SIGTERM, how to run two, and what to
   look at when nothing is being indexed (`/stats`, `index_status`). Verify:
   every command in the page was run in the form shown, against a real service
@@ -173,7 +173,7 @@ badly looks exactly like one that stopped well until the lease expires.
   `INDEXING_RUNNER` and `WORKER_POLL_SECONDS`, with the same columns every other
   setting has (who reads it, default, what it means). Verify: the page lists
   both; `rg` finds no setting in `Settings` that the page or the template omits.
-- [ ] 6.3 `docs/explanation/requirements.md` reads as the service behaves:
+- [x] 6.3 `docs/explanation/requirements.md` reads as the service behaves:
   FR-IDX-2 and FR-CLI-2 name the command as it actually is (`semanticshelf
   worker`, not `python -m app.cli worker`); FR-IDX-2 says what `INDEXING_RUNNER`
   decides and states the guarantee as at-least-once with a fenced completion
@@ -183,14 +183,14 @@ badly looks exactly like one that stopped well until the lease expires.
   relation to it stated. Verify: `openspec validate --all --strict` passes,
   `rg 'INDEXING_RUNNER' docs/` finds no statement the code does not make, and
   every command named in those requirements exists with that spelling.
-- [ ] 6.4 `openspec/ROADMAP.md` row 13 says what this change did. Verify: the
+- [x] 6.4 `openspec/ROADMAP.md` row 13 says what this change did. Verify: the
   row names the command, the switch and the evidence.
 
 ## 7. Evidence
 
-- [ ] 7.1 `make check`, `make test-integration` and `make test-ui` green the way
+- [x] 7.1 `make check`, `make test-integration` and `make test-ui` green the way
   CI runs them (`FORCE_COLOR=1 CI=true`), `openspec validate --all --strict`,
   every `scripts/*_test.sh`, and `sh -n` over `scripts/*.sh`.
-- [ ] 7.2 A real run captured into the how-to: a service with
+- [x] 7.2 A real run captured into the how-to: a service with
   `INDEXING_RUNNER=worker`, an upload that stays `pending`, a worker started,
   the vector arriving, and the worker stopped with a signal.

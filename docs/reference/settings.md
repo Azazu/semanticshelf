@@ -28,7 +28,9 @@ file next to `pyproject.toml` (the environment wins). Source of truth:
 | `HNSW_EF_SEARCH` | no | `40` | API | How hard the vector index looks for each search. Every search raises it for its own transaction to at least the depth the page asks for, plus the one row that answers `has_more` (`limit + offset + 1`), so a deep page is not quietly ranked worse than a shallow one. 1000 is pgvector's own maximum, and one scan yields no more rows than that, so the deepest page the service answers ends at `limit + offset` = 999. |
 | `JOB_LEASE_SECONDS` | no | `600` | API, worker | How long a claim on an indexing job is good for. Nothing refreshes it: a runner that dies releases its work when this expires, and another may then claim it. Raise it for a model slow enough that work would otherwise outlive the lease. |
 | `JOB_MAX_ATTEMPTS` | no | `3` | API, worker | How many attempts a job gets before it is `failed` for good. Between attempts it waits `2^attempts × 10 s`. A `failed` job runs again only through `POST /assets/{id}/reindex`. |
-| `WORKER_BATCH_SIZE` | no | `4` | API, worker | How many jobs one run of a runner claims. The runner inside the API process takes at most this many after a response and stops; a runner that drained while work remained would never end. |
+| `WORKER_BATCH_SIZE` | no | `4` | API, worker | How many jobs one run of a runner claims. The runner inside the API process takes at most this many after a response and stops; a runner that drained while work remained would never end. The worker keeps the same bound per batch, which is what lets several workers share a queue and what keeps a stop from waiting for an unbounded amount of work. |
+| `WORKER_POLL_SECONDS` | no | `2` | worker | How long the worker waits before looking again when the queue held nothing for it. A floor on how late a vector can be, against a claim query in a loop; a stop does not wait it out, because the wait *is* the wait for the stop. |
+| `INDEXING_RUNNER` | no | `inline` | API, worker, CLI | Which runner carries out queued work. `inline` is the runner inside whatever process created it — the API after a response, `index-folder` and `index missing` after their import — so a deployment nobody configured still indexes what it accepts. `worker` leaves all of it to `semanticshelf worker`: the API and the commands then queue the work and execute none of it, and a command that did so says which decided it. Set it to `worker` **and start one**, or nothing is ever indexed. |
 
 Template lines for the environment file (the template is `.env.example`,
 copied to `.env` on first run):
@@ -54,6 +56,8 @@ PRUNE_MIN_AGE_SECONDS=3600
 JOB_LEASE_SECONDS=600
 JOB_MAX_ATTEMPTS=3
 WORKER_BATCH_SIZE=4
+WORKER_POLL_SECONDS=2
+INDEXING_RUNNER=inline
 HNSW_EF_SEARCH=40
 ```
 
