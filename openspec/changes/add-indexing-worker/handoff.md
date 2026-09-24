@@ -1,7 +1,7 @@
 # Handoff — add-indexing-worker
 
 **Updated:** 2026-09-24 · claude
-**State:** fixing-g1
+**State:** implementing
 **Branch:** change/add-indexing-worker
 
 ## Done this session
@@ -29,27 +29,29 @@ Two decisions worth knowing before reading the design:
 
 ## Next step
 
-`/gate-review add-indexing-worker 1 confirm 1` again — confirmation 1 confirmed
-finding 2 and sent findings 1 and 3 back, both fairly:
+`/opsx:apply add-indexing-worker` — **Gate 1 passed** (confirmation 2 of round
+1, commit `c204c6c`): all three remaining findings confirmed, nothing new added.
 
-- **1** — the general guarantee was fixed, but the old scenario still promised
-  that work from a "stopped" runner is "never executed twice at the same time".
-  A paused runner is not a gone runner. The scenario now says *terminated*, and
-  makes no claim at all about a slow or paused one: what protects the store
-  there is the fenced completion and the idempotent write, which the requirement
-  states.
-- **3** — the processes were real but not held still. Observing that a unit
-  reads `running` says the child claimed it, not that it is still there when the
-  signal lands; and two signals with no acknowledgement between them can
-  coalesce or arrive after a graceful exit. The harness now carries a barrier
-  inside the fake embedder (`held-<pid>` → wait for `release`) and an
-  acknowledgement in the stop handler (`signalled-<pid>`), and every process
-  test rendezvouses through them: both children are held before either is
-  released, the second signal is delivered while the work is still held, and
-  every wait is bounded and fails naming what it waited for.
+27 tasks, in the order the groups are written:
 
-Finding 4 was not disputed. 27 tasks; `scripts/pregate-verify.sh gate1
-add-indexing-worker` passes.
+- **1.x** the loop, the idle wait that is the wait for the stop token, `--once`,
+  `WORKER_POLL_SECONDS`.
+- **2.x** stopping: the token and its handlers, a stop noticed between batches,
+  and the child harness with its barrier (`held-<pid>` → `release`) and its
+  acknowledgement (`signalled-<pid>`) — every process test rendezvouses through
+  them.
+- **3.x** two runners on one queue, a killed one covered by the other, and a
+  lease expiring under a runner that is still working; change 6's
+  held-transaction test stays the authority for no-lock-waiting.
+- **4.x** `INDEXING_RUNNER`, one function that answers "may this process index
+  itself?", and the four callers: upload, reindex, `index-folder`,
+  `index missing`.
+- **5.x** the command and what it says.
+- **6.x / 7.x** the documentation — including FR-CLI-1's promise, which this
+  change is what fulfils — and the evidence.
+
+What the reviewer left for Gate 2 in its own words: the implementation and the
+process tests actually running.
 
 ## Blockers
 
