@@ -13,6 +13,7 @@ ownership the claim handed out — if the job has since been reclaimed, reset, o
 deleted with its asset, nothing lands at all.
 """
 
+import asyncio
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -262,6 +263,88 @@ async def drain(
             log.info("indexing batch finished", jobs=taken)
     except Exception:
         log.exception("indexing batch failed")
+
+
+# --- a runner of its own ------------------------------------------------------
+
+
+class Stop:
+    """What asks a runner to end, and what an idle runner waits on.
+
+    One object rather than a flag, because the loop's idle wait *is* the wait
+    for it (change 13, design decision 2): a runner that is doing nothing ends
+    the moment it is asked to, and a runner that is working notices between
+    batches — which is what finishing the batch you hold means mechanically.
+    """
+
+    def __init__(self) -> None:
+        self._asked = asyncio.Event()
+
+    def ask(self) -> None:
+        """Ask the runner to end after the work it holds."""
+        self._asked.set()
+
+    @property
+    def asked(self) -> bool:
+        return self._asked.is_set()
+
+    async def wait(self, seconds: float) -> bool:
+        """Wait up to `seconds` to be asked. True when asked, False on timeout."""
+        try:
+            await asyncio.wait_for(self._asked.wait(), timeout=seconds)
+        except TimeoutError:
+            return False
+        return True
+
+
+@dataclass(slots=True)
+class WorkerRun:
+    """What one run of a runner did, for the caller to report."""
+
+    batches: int = 0
+    units: int = 0
+
+
+async def run_worker(
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    pool: ThreadPoolExecutor,
+    stop: Stop,
+    once: bool = False,
+) -> WorkerRun:
+    """Work the queue until asked to stop — the runner that is its own process.
+
+    Three lines of policy around `run_batch`, and every one of them is a
+    decision the design names. A batch that took something is followed by
+    another at once, because more may be due. A batch that took nothing is
+    followed by a wait — and that wait is the wait for `stop`, so being asked
+    while idle ends the run immediately instead of a poll interval later. The
+    request to stop is read **between** batches and never inside one: work
+    already claimed is finished, and nothing new is taken.
+
+    It prints nothing. What it did comes back as a value, because the command
+    owns the output and this owns the work.
+    """
+    run = WorkerRun()
+    while True:
+        taken = await run_batch(
+            session_factory=session_factory, storage=storage, settings=settings, pool=pool
+        )
+        if taken:
+            run.batches += 1
+            run.units += taken
+            log.info("worker batch finished", jobs=taken)
+        if once:
+            break
+        if stop.asked:
+            break
+        if taken:
+            continue  # more may be due; look again without waiting
+        if await stop.wait(settings.worker_poll_seconds):
+            break
+    return run
 
 
 # --- finishing a named set of work -------------------------------------------

@@ -11,24 +11,24 @@ badly looks exactly like one that stopped well until the lease expires.
 
 ## 1. The loop
 
-- [ ] 1.1 `app/services/indexing.py` gains the runner's loop, built from the
+- [x] 1.1 `app/services/indexing.py` gains the runner's loop, built from the
   existing `run_batch`: take a batch, and when it took nothing, wait the
   configured interval and look again (design decision 1). It reports what it did
   — batches, units, failures — as a value the caller prints, not by printing
   itself. Verify: a unit test over a fake `run_batch` asserts that a queue
   yielding two batches and then nothing is worked through in order, and that the
   loop asks again after an empty pass.
-- [ ] 1.2 The idle wait **is** the wait for the stop token (design decision 2):
+- [x] 1.2 The idle wait **is** the wait for the stop token (design decision 2):
   the loop waits on the token with the interval as its timeout, so a stop while
   idle ends it at once. Verify: a unit test with a fake clock/token asserts that
   an idle loop asked to stop returns without consuming its interval, and that an
   idle loop not asked to stop waits exactly the interval before claiming again.
   Demonstrated failing input: sleeping first and checking the token afterwards
   makes the stop take up to a full interval, which that test catches.
-- [ ] 1.3 One batch on request: `--once` takes at most one batch, reports, and
+- [x] 1.3 One batch on request: `--once` takes at most one batch, reports, and
   returns. Verify: a unit test over the fake `run_batch` asserts exactly one
   call and no wait, on both an empty and a non-empty queue.
-- [ ] 1.4 `WORKER_POLL_SECONDS` in `app/core/settings.py`, bounded like its
+- [x] 1.4 `WORKER_POLL_SECONDS` in `app/core/settings.py`, bounded like its
   neighbours (`gt=0`), default 2. Verify: a unit test asserts the default, that
   the environment overrides it, and that zero and a negative value are refused
   at construction — not at the first claim.

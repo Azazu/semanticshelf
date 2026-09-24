@@ -80,8 +80,15 @@ class Settings(BaseSettings):
     #: How many times a job may be attempted before it is failed for good.
     job_max_attempts: int = Field(default=3, gt=0)
     #: How many jobs a single run of a runner takes. A runner that drained
-    #: while work remained would never end.
+    #: while work remained would never end — and the bound is also what lets
+    #: several runners share a queue and what keeps a stop from waiting for an
+    #: unbounded amount of work.
     worker_batch_size: int = Field(default=4, gt=0)
+    #: How long a runner of its own waits before looking again when the queue
+    #: held nothing for it. It is a floor on how late a vector can be, and the
+    #: cost of not having it is a claim query in a loop; two seconds is the
+    #: trade this service makes (change 13, design decision 7).
+    worker_poll_seconds: float = Field(default=2.0, gt=0)
 
     # --- search --------------------------------------------------------------
     #: How hard the vector index looks for each search. Raised per query to at
