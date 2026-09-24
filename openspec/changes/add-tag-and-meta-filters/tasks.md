@@ -177,10 +177,10 @@ three shapes answered the query.
   mind, what each plan costs, what an iterative scan buys on the path that uses
   the index, and what stale statistics do to all of it. Verify: every command in
   the page was run in the form shown, and the numbers are from that run.
-- [ ] 6.3 `docs/how-to/searching.md` gains how to narrow a search on all three
+- [x] 6.3 `docs/how-to/searching.md` gains how to narrow a search on all three
   endpoints, with output from a real run against the demo corpus, and says what
   a short page means when a narrowing is in force.
-- [ ] 6.4 `docs/explanation/requirements.md` reads as the implementation
+- [x] 6.4 `docs/explanation/requirements.md` reads as the implementation
   behaves: FR-FLT-2's promise is the one the service makes (with the scan's
   bound named), FR-FLT-3's shape is what the parser accepts, and the row for
   this change says what it did. Verify: `openspec validate --all --strict`
@@ -188,8 +188,8 @@ three shapes answered the query.
 
 ## 7. Evidence
 
-- [ ] 7.1 `make check`, `make test-integration` and `make test-ui` green the way
+- [x] 7.1 `make check`, `make test-integration` and `make test-ui` green the way
   CI runs them (`FORCE_COLOR=1 CI=true`), `openspec validate --all --strict`,
   every `scripts/*_test.sh`, and `sh -n` over `scripts/*.sh`.
-- [ ] 7.2 A real run against the demo corpus: a narrowed search on each of the
+- [x] 7.2 A real run against the demo corpus: a narrowed search on each of the
   three endpoints and the narrowed listing, captured into the how-to.

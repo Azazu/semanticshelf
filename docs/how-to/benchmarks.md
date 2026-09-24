@@ -78,9 +78,11 @@ them — and the narrowing then removes most of them: 8 of 21 at 1 in 5, one at
 1 in 20, and **nothing at all** at 1 in 100 while thirty matching assets sit
 just past the candidate window. That is the defect this whole change exists to
 prevent, and it is not a bad ranking but an empty page. With `strict_order` the
-scan keeps going until the page is filled or the index is exhausted, and the
-same queries come back full. The service therefore sets `strict_order` for every
-narrowed query and leaves it off otherwise.
+scan keeps going — until the page is filled, until the index is exhausted, or
+until `hnsw.max_scan_tuples` (20 000 by default) stops it, which is the bound
+`scan_limited` reports — and the same queries come back full. The service
+therefore sets `strict_order` for every narrowed query and leaves it off
+otherwise.
 
 **Statistics decide which plan, and stale statistics are a real state.** A table
 freshly written — a restored dump, a bulk import, a corpus built by a demo

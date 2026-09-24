@@ -37,9 +37,9 @@ arrived late the vectors it has none of.
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 12 | `add-tag-and-meta-filters` | `tags_all`, `tags_any`, `meta.<key>` inside the vector query on every search and listing; filtered-HNSW measurement | medium |
+| 12 | `add-tag-and-meta-filters` | `tags_all`, `tags_any`, `meta.<key>` inside the vector query on every search and the listing; `hnsw.iterative_scan` for narrowed queries; `scan_limited` in the answer; `scripts/filter_benchmark.py` + `docs/how-to/benchmarks.md` | high |
 | 13 | `add-indexing-worker` | `worker` command with `SKIP LOCKED` claims, graceful shutdown, `INDEXING_RUNNER` switch, multi-worker test | high |
-| 14 | `tune-vector-indexes` | HNSW vs IVFFlat per model, recall@10, p95, `ef_search` curve, `docs/how-to/benchmarks.md`, ADR-002 | low |
+| 14 | `tune-vector-indexes` | HNSW vs IVFFlat per model, recall@10, p95, `ef_search` curve, extending `docs/how-to/benchmarks.md` (change 12 started it), ADR-002 | low |
 
 ## Stage 4 — full stack, quality, docs
 
