@@ -40,3 +40,23 @@
 - Reviewed only the specified commit diff and collateral relevant to findings 1–3, including the existing fake embedder, fencing tests, held-transaction test and CLI requirement. No unrelated minor findings added.
 - `openspec validate add-indexing-worker --strict` passed; this is structural validation, not proof of the outstanding concurrency claims.
 - Gate 1 artifact confirmation only. Modified only `review.md`; ran no git write commands.
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-24
+**Reviewed-Commit:** c204c6ccc0133b0f9cdbbe7d043a055b440208f6
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The delta specification qualifies normal concurrent execution with valid leases and no failures, explicitly permits overlapping execution after live lease expiry, and requires fenced completion and idempotent effects. The terminated-runner scenario now distinguishes termination from pause and removes the no-overlap promise. Proposal and design use the same guarantee; tasks 3.3–3.4 cover terminated-runner recovery and live expiry with stale completion, referencing the existing fencing tests. |
+| 2 | confirmed — Design decision 4, the proposal and the delta specification include commands that otherwise finish their own work. Tasks 4.4–4.5 cover `index-folder`, `index missing`, both runner settings, interaction with `--no-index`, truthful queued summaries and folder-to-worker integration. Task 6.3 explicitly reconciles FR-CLI-1. |
+| 3 | confirmed — Design decision 6 and tasks 2.3–2.5 now specify a test-only child harness using the worker runtime with fake inference held at an execution barrier. The parent waits for acknowledgement of the first real signal, then either releases work for graceful completion or sends the second signal while work remains held. Task 3.1 holds both child workers before releasing either, task 3.3 exercises actual termination with SIGKILL and recovery, and task 3.2 retains the existing held-transaction/timeout test as the authority for absence of lock waits. Harness waits are explicitly bounded. |
+
+### Validation
+
+- Verified `change/add-indexing-worker` at the requested HEAD with an initially clean working tree; all source-round findings have a disposition.
+- Reviewed the diff from `02a6fc6c9bad4e03c730ef881f5e98c50c9650a6` to `c204c6ccc0133b0f9cdbbe7d043a055b440208f6` and collateral relevant to findings 1–3, including CLI requirements and adapters, fake-model support, and the existing fencing and held-transaction tests. No unrelated findings added.
+- `openspec validate add-indexing-worker --strict` passed.
+- Gate 1 confirms the corrected artifacts and verification plan; worker implementation and process-test execution remain for Gate 2. Modified only `review.md`; ran no git write commands.
