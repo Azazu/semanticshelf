@@ -35,20 +35,20 @@ badly looks exactly like one that stopped well until the lease expires.
 
 ## 2. Stopping
 
-- [ ] 2.1 The stop token and the handlers that set it: the first signal
+- [x] 2.1 The stop token and the handlers that set it: the first signal
   (`SIGTERM`, `SIGINT`) sets it and logs that a stop was asked for; the second
   restores that signal's default disposition and re-raises it at this process,
   so the runner dies the way `kill` means it to (design decision 3). Verify: a
   unit test asserts the first call sets the token and installs nothing else, and
   that the second restores the default handler and re-signals — with the signal
   module replaced, so the test never kills its own runner.
-- [ ] 2.2 A stop is noticed **between** batches, never inside one. Verify: an
+- [x] 2.2 A stop is noticed **between** batches, never inside one. Verify: an
   integration test sets the token while a batch is being worked and asserts that
   the batch's vectors are stored, that no further batch is claimed, and that the
   loop returns. Demonstrated failing input: checking the token inside the batch
   loop abandons the units already claimed, which the same test catches by their
   jobs being left `running` with no vector.
-- [ ] 2.3 A test-only child process that is the worker, with a rendezvous the
+- [x] 2.3 A test-only child process that is the worker, with a rendezvous the
   parent controls (design decision 6): it installs the deterministic fake
   embedder, whose `embed_images` announces that it holds claimed work
   (`held-<pid>`) and then waits for the parent's `release`, and its stop handler
@@ -57,7 +57,7 @@ badly looks exactly like one that stopped well until the lease expires.
   reads `running` **while the child is still inside it**, releases, and asserts
   the work finishes — the harness is worth nothing if it is not the same runner,
   and the barrier is worth nothing if the child can pass it unheld.
-- [ ] 2.4 A real `SIGTERM` to a runner that is demonstrably working: it finishes
+- [x] 2.4 A real `SIGTERM` to a runner that is demonstrably working: it finishes
   the batch it holds and exits 0. Verify: an integration test holds the child at
   the barrier, sends the signal, **waits for `signalled-<pid>`**, then releases;
   it asserts the process exits 0, that the units of that batch are `done` with
@@ -65,7 +65,7 @@ badly looks exactly like one that stopped well until the lease expires.
   was printed. Demonstrated failing input: a handler that cancels the running
   batch instead of setting the token leaves those units `running` with no
   vector, which this test catches.
-- [ ] 2.5 A second signal, delivered while the work is still held, ends the
+- [x] 2.5 A second signal, delivered while the work is still held, ends the
   runner at once and leaves that work to the lease. Verify: an integration test
   holds the child at the barrier, sends `SIGTERM`, waits for the
   acknowledgement, sends `SIGTERM` again **without releasing**, and asserts the
@@ -76,28 +76,28 @@ badly looks exactly like one that stopped well until the lease expires.
   waiting. Demonstrated failing input: a second signal that only sets the token
   again makes the process wait for a release that never comes, which this test
   catches as a timeout.
-- [ ] 2.6 A stop while idle ends promptly and reports what the run did. Verify:
+- [x] 2.6 A stop while idle ends promptly and reports what the run did. Verify:
   an integration test spawns the child against an **empty** queue (no model is
   ever loaded, no barrier is reached), sends one signal, and asserts it exits 0
   within a few seconds having printed its summary.
 
 ## 3. Two runners on one queue
 
-- [ ] 3.1 Nothing in the claim changes; this group proves it holds between
+- [x] 3.1 Nothing in the claim changes; this group proves it holds between
   processes. Verify: an integration test spawns **two** child workers against
   one queue of several units, waits until **both** are held at the barrier —
   so neither the result nor the test depends on which process started first —
   releases them together, and asserts that every unit ended `done`, that the
   store holds exactly one vector per asset, that no unit counted more than one
   attempt, and that both children did some of the work.
-- [ ] 3.2 That a claimer does not wait for work another claimer holds is
+- [x] 3.2 That a claimer does not wait for work another claimer holds is
   **already** proven deterministically, by holding a row in an open transaction
   and timing the other claim
   (`tests/integration/test_indexing.py::test_a_claimer_passes_over_work_another_holds`).
   This change adds no weaker version of it: a two-runner test cannot prove it,
   because a blocking claim would satisfy it too. Verify: that test still passes
   unchanged, and the design names it as the authority.
-- [ ] 3.3 A killed runner's work is covered by another. Verify: an integration
+- [x] 3.3 A killed runner's work is covered by another. Verify: an integration
   test holds a child at the barrier, kills it (`SIGKILL`, the case no handler
   can soften — and the case where "the runner is gone, not paused" is true by
   construction), then asserts the second runner executes that work after the
@@ -148,13 +148,13 @@ badly looks exactly like one that stopped well until the lease expires.
 
 ## 5. The command
 
-- [ ] 5.1 `semanticshelf worker [--once] [--batch N]` in `app/cli.py`: builds the
+- [x] 5.1 `semanticshelf worker [--once] [--batch N]` in `app/cli.py`: builds the
   engine, session factory, storage and inference pool, installs the handlers,
   runs the loop, and disposes both in a `finally` — the shape `index missing`
   already has. `--batch` overrides `WORKER_BATCH_SIZE` for this process only.
   Verify: a unit test asserts the command's options and that `--batch 0` is
   refused; the integration test of 2.4 covers the real process.
-- [ ] 5.2 What it says: one line when it starts (batch size, interval, which
+- [x] 5.2 What it says: one line when it starts (batch size, interval, which
   models are enabled), one per batch that did something, one when it ends
   gracefully with the totals, and — when it is forced — one line saying so and
   nothing else (the spec's report guarantee belongs to the graceful path).

@@ -80,15 +80,50 @@ async def test_it_works_through_what_is_due_and_then_waits(
     assert batches.calls == 3, "it asked again after each batch that took something"
 
 
-async def test_a_batch_that_took_nothing_is_not_counted(
+async def test_a_batch_that_took_nothing_is_not_counted_and_says_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """An idle runner is silent: a log line per empty pass would fill a
+    deployment's logs with the fact that nothing happened."""
+    said: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        indexing,
+        "log",
+        type(
+            "Recorder",
+            (),
+            {"info": lambda _self, event, **fields: said.append((event, fields))},
+        )(),
+    )
     stop = Stop()
     stop.ask()
 
     run = await worker(monkeypatch, Batches(0), stop=stop)
 
     assert (run.batches, run.units) == (0, 0)
+    assert said == [], "nothing was taken, so nothing is reported"
+
+
+async def test_a_batch_that_took_something_says_so(monkeypatch: pytest.MonkeyPatch) -> None:
+    said: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        indexing,
+        "log",
+        type(
+            "Recorder",
+            (),
+            {"info": lambda _self, event, **fields: said.append((event, fields))},
+        )(),
+    )
+    stop = Stop()
+
+    async def ask_after_the_first(**kwargs: object) -> int:
+        stop.ask()
+        return 2
+
+    await worker(monkeypatch, cast(Any, ask_after_the_first), stop=stop, poll=10.0)
+
+    assert said == [("worker batch finished", {"jobs": 2})]
 
 
 # --- when it waits ---------------------------------------------------------------

@@ -14,9 +14,12 @@ deleted with its asset, nothing lands at all.
 """
 
 import asyncio
-from collections.abc import Callable, Mapping, Sequence
+import os
+import signal
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from typing import Final
 from uuid import UUID
 
 import structlog
@@ -295,6 +298,59 @@ class Stop:
         except TimeoutError:
             return False
         return True
+
+
+#: What a runner is asked to stop with. `SIGINT` is here because a terminal is
+#: where a person stops one, and it should behave like a supervisor's `SIGTERM`
+#: rather than like a traceback.
+STOP_SIGNALS: Final[tuple[int, ...]] = (signal.SIGTERM, signal.SIGINT)
+
+
+def die_by(number: int) -> None:
+    """End this process the way the signal means to, not the way we would.
+
+    The default disposition is restored and the signal re-raised at this
+    process, so a supervisor sees the status it expects — rather than an exit
+    code this project invented for "asked twice". Work in flight returns by its
+    lease, exactly as it would after a crash, because that is what this is.
+    """
+    signal.signal(number, signal.SIG_DFL)
+    os.kill(os.getpid(), number)
+
+
+class StopSignals:
+    """The policy: the first request is polite, the second is not.
+
+    The first sets the token — the runner finishes the batch it holds and ends.
+    The second gives the process to the operating system. What a forced end does
+    NOT do is report totals: collecting them is a delay, and removing the delay
+    is the only reason the second request exists (change 13, design decision 3).
+    """
+
+    def __init__(self, stop: Stop, *, die: Callable[[int], None] = die_by) -> None:
+        self._stop = stop
+        self._die = die
+
+    def deliver(self, number: int) -> None:
+        if self._stop.asked:
+            log.warning("worker forced", signal=signal.Signals(number).name)
+            self._die(number)
+            return
+        log.info("worker stopping", signal=signal.Signals(number).name)
+        self._stop.ask()
+
+
+def install_stop_handlers(
+    loop: asyncio.AbstractEventLoop,
+    deliver: Callable[[int], None],
+    *,
+    signals: Iterable[int] = STOP_SIGNALS,
+) -> None:
+    """Wire `deliver` to each signal, on the loop rather than in the middle of
+    whatever was running: a handler that sets a token the loop is already
+    waiting on needs nothing else to be async-safe."""
+    for number in signals:
+        loop.add_signal_handler(number, deliver, number)
 
 
 @dataclass(slots=True)
