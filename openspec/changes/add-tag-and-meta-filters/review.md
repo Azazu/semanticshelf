@@ -189,3 +189,39 @@ current count/probe boundary and targeted integration-test references as context
 strict OpenSpec validation, with no warnings. No benchmark, database mutation
 or implementation test suite was run. Only `review.md` was modified; no git
 write commands were run.
+
+## Round 1 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-24
+**Reviewed-Commit:** 9e8506aa5c0f4507f42465bb36144799f885f3d7
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | blocker | scripts/filter_benchmark.py:341–346, 284–286 | The schema validator accepts `public\n`: Python's `$` matches before a final newline, while the subsequent equality check against `public` does not. SQL treats that newline as whitespace, so the generated statement is `DROP SCHEMA IF EXISTS public CASCADE`. Even though building the copies then fails and rolls back, `run()` executes the same DROP in a new transaction in `finally` and commits it, deleting the service schema and its contents. Reproduced without a database by passing this exact argument through `main()` and recording `run()`'s SQL and transaction exits with a fake engine. Require a full-string identifier match and enforce the protected-schema boundary before either build or cleanup can execute DDL; add a regression for trailing-newline input that proves no database mutation is attempted. | open |
+| 2 | major | scripts/filter_benchmark.py:100–101, 258–287; docs/how-to/benchmarks.md, schema isolation promise | The benchmark does not establish ownership of its schema: its first operation unconditionally drops whatever already occupies the requested name, and its cleanup drops that name even when setup failed. Thus an otherwise valid `--schema existing_data` destroys that schema's tables, and the default invocation also destroys pre-existing contents of `filter_benchmark`. The name check and the later table-resolution guard cannot protect either case. This is independent of finding 1 and violates the plan's boundary that a run deletes only a schema it created. Use a fresh per-run schema or refuse an existing target before mutation, and make cleanup conditional on successful ownership acquisition. Add preservation tests for an occupied default/custom target and a setup failure, including preservation of assets, embeddings and jobs promised by task 6.1a; the current preservation test checks only asset and embedding identifiers. Reconcile the documented safety claim with the implemented boundary. | open |
+| 3 | major | openspec/changes/add-tag-and-meta-filters/tasks.md, task 3.1; tests/integration/test_search_narrowing.py:359–398, 488–564 | Task 3.1 is checked, but its required service/repository regression for a scan stopping before OFFSET is absent. The only narrowed integration case with a nonzero offset tests genuine exhaustion and expects false; both positive scan-limit cases use offset zero. The threshold case obtains a lookahead and never probes. Unit tests supply `reached` directly, so they cannot prove that `_page_of` retains the pre-offset count or passes it to the probe/decision when the page is empty. Add the paired limited-before-offset and exhausted-before-offset service regressions promised at Gate 1, assert the actual count/probe bound, and demonstrate failure when the wiring counts after OFFSET or substitutes `offset + reached`. If the chosen real-index corpus cannot reach that condition, use a controlled repository boundary for this service-wiring case and retain the existing real-index positive tests. | open |
+| 4 | minor | app/services/tagging.py:124; tests/unit/test_narrowing.py | The metadata-key check has the same end-anchor edge case: `parse_narrowing(meta=[('dataset\n', 'coco')])` succeeds and keeps the newline. A URL parameter `meta.dataset%0A=coco` therefore reaches the search instead of producing the promised 422 for characters outside the key alphabet. Use a full-string match and add parser/wire regressions for the terminal newline, including the 64-character boundary. | open |
+
+### Validation
+
+Confirmed the requested branch and HEAD and an initially clean working tree.
+Read AGENTS.md, OpenSpec configuration, the change artifacts and prior decisions;
+reviewed the diff against `main`, including the API/parser, candidate/probe
+boundary, listing, UI, benchmark and changed tests and documentation.
+
+All 68 targeted unit tests passed via `make test` using the installed virtual
+environment and selecting `test_narrowing.py`, `test_search_cut.py` and
+`test_search_policy.py`. Non-mutating Python probes reproduced acceptance of
+both newline inputs. A fake connection/engine recorded the benchmark's DROP,
+rollback and subsequent committed cleanup DROP; no SQL was sent to a database.
+
+The Gate 2 mechanical floor passed its whitespace, strict OpenSpec, tier,
+task-path and documentation-link checks, but its `make check` stage did not
+finish in this environment and was interrupted after no further output. A
+separate full unit/API run collected 545 selected tests and stalled at
+`tests/api/test_asset_upload.py`; it too was interrupted. Consequently this
+review does not independently certify the full check suite as green. No
+database integration suite, live benchmark or GitHub Actions query was run.
+Only `review.md` was modified; no git write commands were run.
