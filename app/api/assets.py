@@ -65,7 +65,14 @@ from app.services.assets import (
     list_assets,
     update_asset,
 )
-from app.services.indexing import drain, jobs_of, known_models, reset_work, status_of
+from app.services.indexing import (
+    carries_out_work,
+    drain,
+    jobs_of,
+    known_models,
+    reset_work,
+    status_of,
+)
 from app.services.tagging import (
     METADATA_MAX_BYTES,
     MetadataError,
@@ -217,10 +224,13 @@ async def upload_asset(
     response.headers["Location"] = f"{PREFIX}/{asset.id}"
     # After the response, not before it: the caller waits for the asset, never
     # for its vectors. The task takes a session of its own, because this
-    # request's is closed by then.
-    background.add_task(
-        drain, session_factory=session_factory, storage=storage, settings=settings, pool=pool
-    )
+    # request's is closed by then. Under `INDEXING_RUNNER=worker` there is no
+    # task at all — the work is queued and `semanticshelf worker` is what runs
+    # it — and the answer to this request is the same either way.
+    if carries_out_work(settings):
+        background.add_task(
+            drain, session_factory=session_factory, storage=storage, settings=settings, pool=pool
+        )
     # The work was queued in the same transaction as the asset, so this says
     # `pending` for every enabled model — the state of the asset as the caller
     # is being told about it, before the runner above has touched anything.
@@ -481,10 +491,12 @@ async def reindex_asset(
         return _refuse(HTTPStatus.UNPROCESSABLE_ENTITY, UNKNOWN_MODEL_TYPE, str(exc))
 
     reset = await reset_work(session, asset_id, models=models)
-    # The same runner an upload schedules: work put back is work to do.
-    background.add_task(
-        drain, session_factory=session_factory, storage=storage, settings=settings, pool=pool
-    )
+    # The same runner an upload schedules, and the same switch: work put back is
+    # work to do, by whichever runner this deployment has.
+    if carries_out_work(settings):
+        background.add_task(
+            drain, session_factory=session_factory, storage=storage, settings=settings, pool=pool
+        )
     return ReindexResult(asset_id=asset_id, models=sorted(set(reset)), jobs=len(reset))
 
 

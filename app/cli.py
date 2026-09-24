@@ -83,6 +83,11 @@ def index_folder(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=2) from exc
 
+    from app.services.indexing import carries_out_work, queued_because
+
+    # Two instructions, one answer: this run may be told to leave the work
+    # queued, and so may the deployment (`INDEXING_RUNNER=worker`).
+    left_queued = queued_because(asked_to_leave_it=no_index, settings=settings)
     try:
         lines = asyncio.run(
             _run_import(
@@ -92,7 +97,7 @@ def index_folder(
                 tags=chosen_tags,
                 meta=chosen_meta,
                 dry_run=dry_run,
-                index=not no_index,
+                index=not no_index and carries_out_work(settings),
             )
         )
     except (DirectoryUnusableError, TagError, MetadataError) as exc:
@@ -101,6 +106,8 @@ def index_folder(
 
     for line in lines:
         typer.echo(line)
+    if left_queued is not None and not dry_run:
+        typer.echo(left_queued)
 
 
 async def _run_import(
@@ -198,8 +205,14 @@ def index_missing(
         )
         raise typer.Exit(code=2)
 
-    for line in asyncio.run(_run_backfill(settings, models=chosen, index=not no_index)):
+    from app.services.indexing import carries_out_work, queued_because
+
+    left_queued = queued_because(asked_to_leave_it=no_index, settings=settings)
+    index = not no_index and carries_out_work(settings)
+    for line in asyncio.run(_run_backfill(settings, models=chosen, index=index)):
         typer.echo(line)
+    if left_queued is not None:
+        typer.echo(left_queued)
 
 
 async def _run_backfill(settings: Settings, *, models: Sequence[str], index: bool) -> list[str]:

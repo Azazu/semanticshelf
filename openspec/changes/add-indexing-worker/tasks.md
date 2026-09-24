@@ -114,11 +114,11 @@ badly looks exactly like one that stopped well until the lease expires.
 
 ## 4. Which runner the deployment uses
 
-- [ ] 4.1 `INDEXING_RUNNER` in `app/core/settings.py`: `inline` (default) or
+- [x] 4.1 `INDEXING_RUNNER` in `app/core/settings.py`: `inline` (default) or
   `worker`, refused otherwise at construction. Verify: unit tests for the
   default, for both values from the environment, and for a third value being
   refused with the name in the message.
-- [ ] 4.2 One place decides whether a request schedules a drain (design decision
+- [x] 4.2 One place decides whether a request schedules a drain (design decision
   4), and both routers call it — upload and reindex. Verify: a unit test asserts
   the decision for both settings values; an api test asserts that under `worker`
   an upload answers exactly as it does under `inline` (same status, same body
@@ -126,11 +126,11 @@ badly looks exactly like one that stopped well until the lease expires.
   `inline` it still is. Demonstrated failing input: leaving one of the two call
   sites comparing the setting itself makes the reindex path index under
   `worker`, which the api test for that path catches.
-- [ ] 4.3 The HTTP contract is identical under both. Verify: an integration test
+- [x] 4.3 The HTTP contract is identical under both. Verify: an integration test
   uploads under `INDEXING_RUNNER=worker`, asserts the work is queued and no
   vector appears without a runner, then runs one `--once` batch and asserts the
   vector is there and the asset reads `done`.
-- [ ] 4.4 The commands that finish the work they create consult the same
+- [x] 4.4 The commands that finish the work they create consult the same
   decision (design decision 4, FR-CLI-1): `index-folder` and `index missing`
   import or queue as they do now and execute nothing under
   `INDEXING_RUNNER=worker`. Verify: unit tests over each command's runtime
@@ -140,7 +140,7 @@ badly looks exactly like one that stopped well until the lease expires.
   vectors, then runs the worker once and asserts they finish. Demonstrated
   failing input: leaving `index-folder` on its own `index=not no_index` makes
   the first of those tests find vectors that should not exist yet.
-- [ ] 4.5 `--no-index` and the switch say the same thing from two directions and
+- [x] 4.5 `--no-index` and the switch say the same thing from two directions and
   never contradict each other. Verify: unit tests assert the summary under
   `--no-index`, under `worker`, and under both at once report the work as queued
   and name which of the two decided it — and that no combination reports work as

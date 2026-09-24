@@ -26,7 +26,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.settings import Settings
-from app.domain import EMBEDDING_MODELS, IndexingJob, UnknownModelError
+from app.domain import EMBEDDING_MODELS, INLINE_RUNNER, IndexingJob, UnknownModelError
 from app.ml.pool import acquire, run_in_pool
 from app.repositories.assets import AssetRepository
 from app.repositories.embeddings import EmbeddingRepository
@@ -266,6 +266,42 @@ async def drain(
             log.info("indexing batch finished", jobs=taken)
     except Exception:
         log.exception("indexing batch failed")
+
+
+# --- which runner carries out the work ----------------------------------------
+
+
+def carries_out_work(settings: Settings) -> bool:
+    """May this process execute the work it just queued?
+
+    One question, asked in one place, by everything that would otherwise index:
+    the upload and reindex paths of the API, and the two commands that finish
+    what they imported. Under `INDEXING_RUNNER=worker` the answer is no for all
+    of them, and `semanticshelf worker` is the only runner (FR-IDX-2, FR-CLI-1).
+
+    A fact about a deployment stated in four places drifts in four directions,
+    which is the whole reason this is a function and not a comparison.
+    """
+    return settings.indexing_runner == INLINE_RUNNER
+
+
+def queued_because(*, asked_to_leave_it: bool, settings: Settings) -> str | None:
+    """Why the work a command created was left queued — or `None` if it was not.
+
+    Two instructions can say the same thing from different directions: `--no-
+    index` is about this run, `INDEXING_RUNNER=worker` is about the deployment.
+    They never contradict each other, and a summary that said "queued" without
+    saying which of them decided it would leave an operator guessing at their
+    own configuration.
+    """
+    reasons = []
+    if asked_to_leave_it:
+        reasons.append("--no-index")
+    if not carries_out_work(settings):
+        reasons.append(f"INDEXING_RUNNER={settings.indexing_runner}")
+    if not reasons:
+        return None
+    return f"work left queued ({', '.join(reasons)}); `semanticshelf worker` carries it out"
 
 
 # --- a runner of its own ------------------------------------------------------
