@@ -38,8 +38,8 @@ in between, and where stale statistics put a query: the index is used, the
 narrowing removes what it produced, and the page comes back short while the
 matches sit just past the candidate window. pgvector 0.8 has the mechanism that
 closes that gap; this change turns it on for narrowed queries, bounds it, says
-when the bound was reached, and publishes where the line between the two plans
-falls — which is the number change 14 needs and cannot get anywhere else.
+when the bound was reached, and publishes where the lines between the plans
+fall — which is the number change 14 needs and cannot get anywhere else.
 
 ## What Changes
 

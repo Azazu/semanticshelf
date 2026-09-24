@@ -239,10 +239,12 @@ async def test_no_narrowed_page_is_answered_by_reading_every_vector(
     """The statement the search endpoint runs when a narrowing is given.
 
     Which plan answers it is the planner's choice and depends on how selective
-    the narrowing is: a selective one is answered exactly, by driving from the
-    narrowed `assets` rows, and a broad one by the vector index. Both are right,
-    and change 12's benchmark measures where the line falls — what must never
-    happen is a sequential scan of the vectors.
+    the narrowing is, on the size of the corpus and on whether the planner has
+    statistics: `docs/how-to/benchmarks.md` measures all three shapes it picks
+    between, one of which does read every vector when that is cheapest. What
+    this asserts is the thing the service is responsible for — that an index
+    *can* serve the narrowing — which is why sequential scans are made expensive
+    first.
     """
     await seed_two_models(session)
     statement = EmbeddingRepository(session).nearest_statement(

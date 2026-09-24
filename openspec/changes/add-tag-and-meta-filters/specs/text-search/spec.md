@@ -145,21 +145,24 @@ exist — so that a deeper page does not quietly return a worse ranking than a
 shallow one, and so that the answer about more items is read rather than
 assumed.
 
-A narrowed search SHALL NOT be answered by reading every stored vector either,
-but SHALL NOT be required to use that index. The narrowing SHALL be part of what
-the database plans, never a filter applied to a result already chosen, and the
-database MAY answer it in either of two ways: by the vector index, or by
-computing distances over exactly the assets the narrowing admits when it judges
-that cheaper.
+A narrowed search SHALL NOT be required to use that index. The narrowing SHALL
+be part of what the database plans — a condition of the query, never a filter
+applied to a page the database already chose — and which access path answers it
+SHALL be the database's own judgement: the vector index, the distances of
+exactly the assets the narrowing admits, or, on a corpus small enough for that
+to be the cheapest thing to do, the distances of every vector of the search
+model. An index able to serve the narrowing on both columns SHALL exist, so that
+the choice is a matter of cost rather than of what is possible.
 
-What the two ways SHALL share is the meaning of the answer: only assets that
+What those ways SHALL share is the meaning of the answer: only assets that
 satisfy the narrowing, nearest first with the same tie-break, the same page
 bounds, the same threshold behaviour and the same rule for whether more exist.
-What they need NOT share is completeness. The index is bounded: it MAY stop
-before the page is filled, and MUST then say so (above). Computing the distances
-exactly is not bounded and always says nothing stopped it. So two answers to one
-question MAY differ in what they hold, and the one that is short SHALL say why —
-which is the difference a client can act on, and the only one it is told.
+What they need NOT share is completeness. Only the index is bounded: it MAY stop
+before the page is filled, and MUST then say so (above). A path that computes
+distances — over the narrowed assets or over all of them — is not bounded and
+always says nothing stopped it. So two answers to one question MAY differ in
+what they hold, and the one that is short SHALL say why — which is the
+difference a client can act on, and the only one it is told.
 
 #### Scenario: The index answers the query
 - **WHEN** the execution plan of a search that narrows nothing is inspected
@@ -171,10 +174,12 @@ which is the difference a client can act on, and the only one it is told.
 - **THEN** the search effort for that query is at least the size and offset it
   asks for, plus the item beyond them
 
-#### Scenario: A narrowed query is not answered by reading every vector
-- **WHEN** the execution plan of a narrowed search is inspected
-- **THEN** it shows no sequential scan of the stored vectors, whichever of the
-  two ways the database chose
+#### Scenario: The narrowing is a condition of the query, and an index can serve it
+- **WHEN** the execution plan of a narrowed search is inspected with sequential
+  scans made expensive
+- **THEN** it shows the narrowing inside the query rather than above it, and no
+  sequential scan of the stored vectors: an index can answer it, whichever path
+  the database picks when the costs are its own
 
 #### Scenario: The vector index still answers a narrowed query when it is chosen
 - **WHEN** a narrowing broad enough for the database to use the vector index is

@@ -5,41 +5,49 @@
 See `proposal.md` — Why. What the design has to work with, and one thing it was
 allowed to stop guessing about:
 
-- **What a narrowed vector query actually does was measured, twice, and the
-  second measurement corrected the first.** On the integration database: 3 000
-  assets, a page of 21 candidates asked for, `ef_search` 40, the narrowing's
-  assets shuffled through the ranking rather than gathered at its head.
+- **What a narrowed vector query does is measured by a command, not by a
+  paragraph.** `scripts/filter_benchmark.py` builds 3 000 assets in a schema of
+  its own, asks for a page of 21 candidates at `ef_search` 40 with the
+  narrowing's assets shuffled through the ranking, and runs the service's own
+  statement; `docs/how-to/benchmarks.md` carries its output, which is the
+  authority for the numbers below.
 
-  The first run, on a table that had never been `ANALYZE`d, showed the defect
-  FR-FLT-2 names: `tags_all=rare` (one asset in three hundred) returned **0 of
-  20** with `hnsw.iterative_scan = off` — the index produced its 40 candidates,
-  the narrowing removed all of them — and 10 of 20, every match there is, with
-  `strict_order`.
+  **Three** shapes answer one query, and which one PostgreSQL picks turns on
+  whether it has statistics:
 
-  The second run, after `ANALYZE`, shows what a real store does:
-
-  | narrowing | matches | `off` | `strict_order` | the plan PostgreSQL chose |
+  | statistics | narrowing | the plan chosen | rows of 21, `off` | rows of 21, `strict_order` |
   |---|---|---|---|---|
-  | 1 in 2 | 1 500 | 21 | 21 | the vector index |
-  | 1 in 5 | 600 | 21 | 21 | driven from `assets`, distances computed exactly |
-  | 1 in 10 | 300 | 21 | 21 | driven from `assets`, exact |
-  | 1 in 20 | 150 | 21 | 21 | driven from `assets`, exact |
-  | 1 in 50 | 60 | 21 | 21 | driven from `assets`, exact |
-  | 1 in 100 | 30 | 21 | 21 | driven from `assets`, exact |
+  | none | 1 in 2 | the vector index | 21 | 21 |
+  | none | 1 in 5 | the vector index | 8 | 21 |
+  | none | 1 in 20 | the vector index | 1 | 21 |
+  | none | 1 in 100 | the vector index | **0** | 21 |
+  | none | 1 in 300 | the vector index | **0** | 10, every match there is |
+  | fresh | 1 in 2 | the vector index | 21 | 21 |
+  | fresh | 1 in 5 … 1 in 100 | every vector of the model, sorted | 21 | 21 |
+  | fresh | 1 in 300 | driven from `assets`, distances exact | 10 | 10 |
 
-  Every one of them is a full page, with the iterative scan and without it,
-  because **the planner leaves the vector index as soon as the narrowing is at
-  all selective** and answers exactly over the narrowed rows — which is not a
-  worse answer than the index's, it is a better one: unbounded, and therefore
-  never short for a reason the caller has to be told about.
+  Three things follow, and this change is built on them.
 
-  So the empty page is real and conditional: it is what happens when the vector
-  index is used *and* the narrowing removes what it produced. Stale statistics
-  put a query there; so does a narrowing broad enough for the planner to prefer
-  the index while still selective enough to exhaust its candidates; so does a
-  corpus large enough that scanning the narrowed rows stops being cheap. This
-  change therefore does two things rather than one: it makes the index path
-  behave correctly when it is chosen, and it measures where the choice falls.
+  **The empty page is real, and it belongs to one plan.** On the index path with
+  `hnsw.iterative_scan = off`, the scan chooses its candidates once and the
+  narrowing then removes them: one asset in a hundred answers **nothing at all**
+  while thirty matching assets sit past the candidate window. `strict_order`
+  fills the same page. That path is where FR-FLT-2's defect lives, and turning
+  the iterative scan on is what fixes it.
+
+  **The other two shapes are exact and unbounded.** Given statistics, the
+  planner leaves the vector index as soon as the narrowing is at all selective:
+  on a corpus this size it reads every vector of the model and sorts, and for a
+  very selective narrowing it drives from the narrowed `assets` rows instead.
+  Neither is a worse answer than the index's — both are complete, and neither
+  can be cut short. Reading every vector is what a *small* corpus invites,
+  because it is genuinely the cheapest thing to do; a corpus large enough makes
+  the index path the common one again, which is the deployment this change has
+  to be right for.
+
+  **So the service cannot promise which plan answers, and must not.** What it
+  can promise is what the answer means, and that a bounded scan which stopped
+  early says so — which is decision 3.
 - The search statement already has three layers and a place for a predicate in
   each: the **window** the index answers, the **page** cut from it (which since
   change 11 carries the self-exclusion), and the **threshold** outside both. Two
@@ -250,12 +258,14 @@ reaches no further down, whichever layer performs either.
   point of measuring it. Mitigation: the bound (`max_scan_tuples`) is stated,
   the numbers are published, and a deployment that wants a different trade has
   one setting to turn. An unnarrowed search is untouched.
-- **The scan's bound, and therefore its report, belongs to one of the two plans
-  the planner may choose** — which is why the delta spec requires that a
-  narrowed search never read every stored vector, rather than requiring the
-  vector index: demanding the index would forbid the better answer the database
-  gives a selective narrowing. When a narrowing is answered exactly over the
-  narrowed rows there is no scan to bound and no report to make — the answer is
+- **The scan's bound, and therefore its report, belongs to one of the three
+  shapes the planner may choose** — which is why the delta spec requires that
+  the narrowing be a condition of the query and that an index be able to serve
+  it, rather than requiring the vector index or forbidding a read of every
+  vector: demanding the index would forbid the better answer the database gives
+  a selective narrowing, and forbidding the full read would forbid what a small
+  corpus makes cheapest, measured. When a narrowing is answered by computing
+  distances there is no scan to bound and no report to make — the answer is
   complete by construction. Mitigation: `scan_limited` is computed from what the
   query returned rather than from which plan ran, so it is false exactly when
   the answer is complete, whichever path produced it. Its rules are held by unit

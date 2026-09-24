@@ -31,10 +31,12 @@ that is *full* can be just as wrong.
 - [x] 2.1 `EmbeddingRepository.nearest_statement` takes the filter and joins
   `assets` inside the **window**, above nothing and below the page (design
   decision 1). Verify: an integration test reads the plan of the narrowed
-  statement and asserts **no sequential scan of `embeddings`** — which of the two
-  plans the database picks is its own judgement (`design.md`, Context), and a
-  test that demanded one of them would forbid the other; that the vector index
-  is still available and correct under a narrowing is task 3.5's regression.
+  statement **with sequential scans made expensive** and asserts no sequential
+  scan of `embeddings` — what that asserts is that an index can serve the
+  narrowing; which of the three shapes the database picks when the costs are
+  its own is its judgement (`design.md`, Context), and a test that demanded one
+  of them would forbid the others; that the vector index is still available and
+  correct under a narrowing is task 3.5's regression.
 - [x] 2.2 The search service sets `hnsw.iterative_scan = strict_order` for a
   narrowed query, beside the effort it already sets, and leaves it off
   otherwise (design decision 2). Verify: an integration test reads
@@ -57,7 +59,7 @@ that is *full* can be just as wrong.
 The four numbers of design decision 3 — window reach, candidates, reached,
 needed — are the vocabulary of this group. None of these tasks may decide
 anything from the shape of the answer, and none of them may assume which of the
-two plans answered the query.
+three shapes answered the query.
 
 - [x] 3.1 The repository returns the candidates in order — after the exclusion,
   **before** the offset and **before** the threshold — up to the window reach,
