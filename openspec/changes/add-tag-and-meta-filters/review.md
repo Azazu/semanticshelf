@@ -147,3 +147,45 @@ superseded claims. The Gate 1 mechanical floor passed, including strict OpenSpec
 validation. This confirms the contract and verification plan, not the partial
 implementation. No benchmark, database mutation or implementation test suite was
 run. Only `review.md` was modified; no git write commands were run.
+
+## Round 3 · Gate 1
+**Reviewer:** codex
+**Date:** 2026-09-24
+**Reviewed-Commit:** 3c612e47d032c0ae555077769f82d74370fbdf55
+**Verdict:** approved
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | minor | design.md, Risks / Trade-offs, scan-bound report | The risk paragraph still dismisses an integration test that forces the scan budget to bite as testing the fixture rather than the service. Task 3.5 now explicitly requires that positive integration path, including an asserted HNSW plan, real candidate retrieval and probe, and a true flag paired with a default-budget false result; `tests/integration/test_search_narrowing.py` also contains that coverage. Replace the stale dismissal with a reference to task 3.5 so the design does not advise abandoning required evidence. This does not block Gate 1 because the task's obligation is explicit and preserved. | open |
+
+### Assessment
+
+The renewed requirement permits PostgreSQL to choose a sequential scan for a
+narrowed search while retaining the predicate inside the ranking query. The
+published plans support the distinction between this complete exact path and
+the bounded HNSW path. The delta keeps the unnarrowed index requirement separate
+and no longer forbids the newly measured narrowed plan. Task 2.1 checks index
+availability under controlled costs; task 3.5 independently requires the
+positive bounded-scan regression, so planner freedom does not remove that
+verification obligation.
+
+The plan retains pre-offset, pre-threshold candidate counting, separate window
+and lookahead bounds, the model/filter/self-bound probe, the full-page limited
+case, benchmark isolation and preservation evidence, and the high-tier input
+validation obligations. No blocker or major finding was identified in the
+Gate 1 contract and verification plan. Implementation correctness and evidence
+for checked tasks remain subject to Gate 2.
+
+### Validation
+
+Confirmed branch `change/add-tag-and-meta-filters`, the requested HEAD, and an
+initially clean working tree. Read AGENTS.md, openspec/config.yaml, all change
+artifacts and prior review records; compared the renewed contract with the
+previously confirmed version, the existing text-search specification, the
+normative filter requirements and published benchmark output. Inspected the
+current count/probe boundary and targeted integration-test references as context.
+`scripts/pregate-verify.sh gate1 add-tag-and-meta-filters` passed, including
+strict OpenSpec validation, with no warnings. No benchmark, database mutation
+or implementation test suite was run. Only `review.md` was modified; no git
+write commands were run.
