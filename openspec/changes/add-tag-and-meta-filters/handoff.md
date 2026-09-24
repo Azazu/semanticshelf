@@ -1,7 +1,7 @@
 # Handoff — add-tag-and-meta-filters
 
 **Updated:** 2026-09-24 · claude
-**State:** awaiting-gate-2
+**State:** ready-to-merge
 **Branch:** change/add-tag-and-meta-filters
 **Security-sensitive:** yes — this change handles client input: a shared
 parser for tag and metadata narrowings on four public surfaces, including the
@@ -32,11 +32,13 @@ them). `make check` 552, integration 262, ui 59.
 
 ## Next step
 
-Push `change/add-tag-and-meta-filters` again and watch CI. On green:
-`/gate-review add-tag-and-meta-filters 2 confirm 1` — the confirmation reviews
-the diff since round 1 and the four findings, nothing else.
+`/git:merge add-tag-and-meta-filters` — **Gate 2 confirmed** (confirmation 1 of
+round 1, commit `6ace07c`, all four findings resolved), every task checked, the
+branch pushed and CI green on that head. Only `review.md` and this file differ
+from the reviewed commit, which is what the merge verifier allows.
 
-If it confirms: `/git:merge add-tag-and-meta-filters`, then `/opsx:archive`.
+After the merge: `/opsx:archive add-tag-and-meta-filters`, and the Russian
+companion document outside the repository is refreshed.
 
 ## Blockers
 
