@@ -48,37 +48,46 @@ badly looks exactly like one that stopped well until the lease expires.
   loop returns. Demonstrated failing input: checking the token inside the batch
   loop abandons the units already claimed, which the same test catches by their
   jobs being left `running` with no vector.
-- [ ] 2.3 A test-only child process that is the worker: it installs the
-  deterministic fake embedder (`tests/fake_models.py`) and then runs exactly what
-  the command runs (design decision 6), so a signal can be sent to a real
-  process without a real checkpoint. Verify: an integration test spawns it
-  against a seeded queue and asserts it indexes — the harness is worth nothing
-  if it is not the same runner.
-- [ ] 2.4 A real `SIGTERM` to a runner that is working: it finishes the batch it
-  holds and exits 0. Verify: an integration test seeds work, spawns the child,
-  waits (with a timeout, on the queue's own state) until it holds a batch, sends
-  the signal, and asserts the process exits 0, that the units of that batch are
-  `done` with their vectors stored, and that nothing further was claimed.
-  Demonstrated failing input: a handler that cancels the running batch instead
-  of setting the token leaves those units `running` with no vector, which this
-  test catches.
-- [ ] 2.5 A second signal ends it at once, and what it held returns by the
-  lease. Verify: an integration test sends `SIGTERM` twice, asserts the process
-  ends by that signal's own disposition (not a status this project invented),
-  that the unit it held is `running` with one attempt and **not** `failed`, and
-  that a runner claims it once the lease has expired — the lease shortened by
-  settings, never by waiting.
+- [ ] 2.3 A test-only child process that is the worker, with a rendezvous the
+  parent controls (design decision 6): it installs the deterministic fake
+  embedder, whose `embed_images` announces that it holds claimed work
+  (`held-<pid>`) and then waits for the parent's `release`, and its stop handler
+  writes `signalled-<pid>` before anything else. Verify: an integration test
+  spawns it against a seeded queue, waits for `held-<pid>`, asserts the unit
+  reads `running` **while the child is still inside it**, releases, and asserts
+  the work finishes — the harness is worth nothing if it is not the same runner,
+  and the barrier is worth nothing if the child can pass it unheld.
+- [ ] 2.4 A real `SIGTERM` to a runner that is demonstrably working: it finishes
+  the batch it holds and exits 0. Verify: an integration test holds the child at
+  the barrier, sends the signal, **waits for `signalled-<pid>`**, then releases;
+  it asserts the process exits 0, that the units of that batch are `done` with
+  their vectors stored, that nothing further was claimed, and that the summary
+  was printed. Demonstrated failing input: a handler that cancels the running
+  batch instead of setting the token leaves those units `running` with no
+  vector, which this test catches.
+- [ ] 2.5 A second signal, delivered while the work is still held, ends the
+  runner at once and leaves that work to the lease. Verify: an integration test
+  holds the child at the barrier, sends `SIGTERM`, waits for the
+  acknowledgement, sends `SIGTERM` again **without releasing**, and asserts the
+  process ends by that signal's own disposition (not a status this project
+  invented), that it printed only that it was forced, that the unit it held is
+  `running` with one attempt and **not** `failed`, and that a runner claims it
+  once the lease has expired — the lease shortened by settings, never by
+  waiting. Demonstrated failing input: a second signal that only sets the token
+  again makes the process wait for a release that never comes, which this test
+  catches as a timeout.
 - [ ] 2.6 A stop while idle ends promptly and reports what the run did. Verify:
   an integration test spawns the child against an **empty** queue (no model is
-  ever loaded), sends one signal, and asserts it exits 0 within a few seconds
-  and printed its summary; and that a forced end prints only that it was forced
-  (the spec's report guarantee is the graceful path's).
+  ever loaded, no barrier is reached), sends one signal, and asserts it exits 0
+  within a few seconds having printed its summary.
 
 ## 3. Two runners on one queue
 
 - [ ] 3.1 Nothing in the claim changes; this group proves it holds between
   processes. Verify: an integration test spawns **two** child workers against
-  one queue of several units and asserts that every unit ended `done`, that the
+  one queue of several units, waits until **both** are held at the barrier —
+  so neither the result nor the test depends on which process started first —
+  releases them together, and asserts that every unit ended `done`, that the
   store holds exactly one vector per asset, that no unit counted more than one
   attempt, and that both children did some of the work.
 - [ ] 3.2 That a claimer does not wait for work another claimer holds is
@@ -89,10 +98,11 @@ badly looks exactly like one that stopped well until the lease expires.
   because a blocking claim would satisfy it too. Verify: that test still passes
   unchanged, and the design names it as the authority.
 - [ ] 3.3 A killed runner's work is covered by another. Verify: an integration
-  test kills a child that holds a batch (`SIGKILL`, the case no handler can
-  soften), then asserts the second runner executes that work after the lease
-  expires, that the unit counts two attempts — one per claim — and that the
-  store still holds one vector for it.
+  test holds a child at the barrier, kills it (`SIGKILL`, the case no handler
+  can soften — and the case where "the runner is gone, not paused" is true by
+  construction), then asserts the second runner executes that work after the
+  lease expires, that the unit counts two attempts — one per claim — and that
+  the store still holds one vector for it.
 - [ ] 3.4 A lease that expires under a runner that is still working is
   at-least-once, not a fault. Verify: an integration test shortens the lease so
   that a unit is reclaimed while its first runner is still executing, and

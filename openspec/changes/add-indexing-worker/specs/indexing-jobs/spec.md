@@ -53,11 +53,15 @@ requirement adds none.
   result, and the first runner's completion, arriving after it lost the claim,
   changes nothing and is reported as discarded rather than retried
 
-#### Scenario: A runner that stopped mid-flight
-- **WHEN** a runner is stopped while it holds claimed work, and another runner
-  is working the same queue
-- **THEN** the work it was holding is executed by the other runner once its
-  lease has expired, and it is never executed twice at the same time
+#### Scenario: A runner that was terminated mid-flight
+- **WHEN** a runner **ends** while holding claimed work — it is gone, not
+  paused — and another runner is working the same queue
+- **THEN** the work it was holding becomes claimable once its lease expires, is
+  executed by the other runner, counts the second attempt, and leaves one
+  result in the store. No claim is made here about a runner that was merely
+  slow or paused: such a runner may still be computing, and what protects the
+  store from it is the rule above — its completion lands nowhere once it has
+  lost the claim, and the write is idempotent
 
 ### Requirement: A runner of its own stops without losing work
 

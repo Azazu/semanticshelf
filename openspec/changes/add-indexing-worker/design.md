@@ -117,7 +117,7 @@ would have been wrong for seven changes.
    worker would multiply it by the batch size. A deployment that wants more
    throughput starts more workers, which the queue has always supported.
 
-6. **The evidence is processes, because that is what the change claims.** A
+6. **The evidence is processes, and the processes are held still.** A
    child-process harness makes that affordable: a small test-only entry point
    installs the deterministic fake embedder (`tests/fake_models.py`, the same
    one every suite uses) and then calls the worker exactly as the command does.
@@ -125,19 +125,41 @@ would have been wrong for seven changes.
    and two inference pools, on one real queue — and it needs no weights, so it
    stays in the integration suite rather than becoming a `models` test.
 
-   What that harness carries:
-   - *Shared queue*: two child processes against one queue of several units.
-     Each unit ends finished, the store holds one vector per asset, and both
-     children did some of it.
-   - *A real signal on a working runner*: a child holding a batch is sent
-     `SIGTERM`, exits 0, and the batch it held is finished — the vectors are in
-     the store. Sent twice, it dies by the signal's own disposition, and the
-     work it held is left `running` with its attempt counted, then claimed by
-     another runner once the lease expires (shortened by settings for the test,
-     never by waiting).
-   - *Determinism*: the children are synchronised through the queue itself — the
-     test seeds a known number of units and waits, with a timeout, for the
-     states it expects — never through sleeps timed to hope.
+   **A test that observes a state cannot also depend on that state lasting.**
+   Watching the queue until a unit reads `running` says the child claimed it; it
+   says nothing about the child still being there a moment later, when the
+   signal arrives. So the harness carries two rendezvous, both of them files in
+   a directory the parent names (no dependency, works across processes, and a
+   missing file is a timeout rather than a hang):
+
+   - **A barrier inside the work.** The child's embedder announces that it is
+     holding claimed work (`held-<pid>`) and then waits for the parent to
+     release it (`release`). Between those two moments the child is
+     *deterministically* inside a claimed batch: it cannot finish, cannot claim
+     again, and cannot exit.
+   - **An acknowledgement of the signal.** The child's stop handler writes
+     `signalled-<pid>` before anything else. The parent never sends a second
+     signal until it has seen the first one acknowledged, which is what keeps
+     two signals from coalescing or from arriving after a graceful exit.
+
+   What the harness then carries:
+   - *Shared queue*: two children, **both** held at the barrier before either is
+     released, so neither test depends on which started first; released
+     together, they work the queue, and afterwards each unit is finished, the
+     store holds one vector per asset, and both children did some of it.
+   - *A graceful stop on a working runner*: hold the child at the barrier, send
+     `SIGTERM`, wait for the acknowledgement, release; the batch it held is
+     finished — its vectors are in the store — nothing further is claimed, the
+     summary is printed and the process exits 0.
+   - *A forced stop*: hold the child at the barrier, send `SIGTERM`, wait for
+     the acknowledgement, send the second **while it is still held**; the
+     process dies by that signal's own disposition, and the unit it held is
+     `running` with its attempt counted — claimable again once the lease
+     expires, which the test shortens by settings rather than by waiting.
+   - *A killed runner*: the same barrier, `SIGKILL`, and the other runner picks
+     the work up after the lease.
+
+   Every wait in the harness is bounded and fails with what it was waiting for.
 
    What does **not** need a process, and therefore does not get one: that a stop
    is noticed between batches rather than inside one (a token set mid-batch, in
@@ -149,8 +171,10 @@ would have been wrong for seven changes.
    be, because a blocking claim would eventually satisfy it too.
 
    Rejected: proving the signal with a fake (it proves the handler was called,
-   not that the process ends), and running the children against real weights
-   (CI never loads them).
+   not that the process ends); running the children against real weights (CI
+   never loads them); and sleeping instead of rendezvousing (a sleep that is
+   long enough on this machine is a flake on a slower one, and a sleep that is
+   short enough to be fast proves nothing at all).
 
 7. **The idle interval is a setting with a small default.** `WORKER_POLL_SECONDS`
    (default 2). It trades latency for idle queries against an indexed claim; a
