@@ -1,7 +1,7 @@
 # Handoff — add-tag-and-meta-filters
 
 **Updated:** 2026-09-24 · claude
-**State:** awaiting-gate-1
+**State:** implementing
 **Branch:** change/add-tag-and-meta-filters
 **Security-sensitive:** yes — this change handles client input: a shared
 parser for tag and metadata narrowings on four public surfaces, including the
@@ -35,23 +35,25 @@ edit are the asset's own and still answer `/errors/invalid-tags`.
 
 ## Next step
 
-`/gate-review add-tag-and-meta-filters 1` — **a requirement changed, so Gate 1
-is reopened** (its last confirmation was on the earlier wording).
+`/opsx:apply add-tag-and-meta-filters` — Gate 1 round 3 **approved** on the
+corrected requirement (the narrowing is a condition of the query and an index
+can serve it; which path answers is the database's judgement; only the index
+path is bounded). Its one `minor` finding is fixed: the design's Risks row no
+longer dismisses the very integration test task 3.5 requires.
 
-The benchmark measured a third plan the earlier hand-run missed: given
-statistics, on 3 000 assets, PostgreSQL answers a narrowing of 1 in 5 to 1 in
-100 by reading **every** vector of the model and sorting. That is exact,
-complete, and at that size the cheapest thing to do — and the delta spec
-forbade it. The claim is now what the service can actually promise: the
-narrowing is a condition of the query, never a filter over a page already
-chosen; an index able to serve it exists; which path answers is the database's
-judgement; only the index path is bounded and only it reports stopping. Swept
-through design, proposal, tasks, the spec delta and the plan test's docstring.
+24 of 28 tasks are done. The rest:
 
-After the gate: **6.3 / 6.4** (`docs/how-to/searching.md`, FR-FLT-2 and FR-FLT-3
-in `docs/explanation/requirements.md`), then **7.1 / 7.2** — every suite the way
-CI runs them, and a real run against the demo corpus captured into the how-to.
-Then the push, and Gate 2.
+- **6.3 / 6.4** `docs/how-to/searching.md` — how to narrow on all three
+  endpoints, what a short page means under a narrowing — and FR-FLT-2 / FR-FLT-3
+  in `docs/explanation/requirements.md`, which must read as the service behaves
+  (the scan's bound named, the parser's shape as it is).
+- **7.1 / 7.2** every suite the way CI runs them (`FORCE_COLOR=1 CI=true`:
+  `make check`, `make test-integration`, `make test-ui`, `openspec validate
+  --all --strict`, every `scripts/*_test.sh`, `sh -n` over `scripts/*.sh`), and
+  a real run against the demo corpus — a narrowed search on each of the three
+  endpoints and the narrowed listing — captured into the how-to.
+
+Then the push, CI green on that HEAD, and `/gate-review add-tag-and-meta-filters 2`.
 
 ## Blockers
 

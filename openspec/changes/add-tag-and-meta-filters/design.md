@@ -269,9 +269,12 @@ reaches no further down, whichever layer performs either.
   complete by construction. Mitigation: `scan_limited` is computed from what the
   query returned rather than from which plan ran, so it is false exactly when
   the answer is complete, whichever path produced it. Its rules are held by unit
-  tests (`tests/unit/test_search_cut.py`); an integration test that forced the
-  bound to bite would have to defeat the planner's statistics to do it, and
-  would then be testing the fixture rather than the service.
+  tests (`tests/unit/test_search_cut.py`), and the wiring by task 3.5: the index
+  path is reached deliberately (`enable_sort = off`, a lowered
+  `hnsw.max_scan_tuples`) over an `ANALYZE`d corpus, so the bound bites against
+  the real index while the planner keeps its statistics. Reaching that path on
+  purpose is the test saying which path it is about — not a fixture standing in
+  for the service.
 - **The extra existence query** costs one bounded index read. Mitigation: it
   runs only when the scan reached fewer candidates than the answer needed, and
   only when a narrowing was given; every unnarrowed search and every narrowing

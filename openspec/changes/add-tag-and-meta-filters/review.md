@@ -157,7 +157,7 @@ run. Only `review.md` was modified; no git write commands were run.
 ### Findings
 | # | Severity | Location | Finding | Status |
 |---|----------|----------|---------|--------|
-| 1 | minor | design.md, Risks / Trade-offs, scan-bound report | The risk paragraph still dismisses an integration test that forces the scan budget to bite as testing the fixture rather than the service. Task 3.5 now explicitly requires that positive integration path, including an asserted HNSW plan, real candidate retrieval and probe, and a true flag paired with a default-budget false result; `tests/integration/test_search_narrowing.py` also contains that coverage. Replace the stale dismissal with a reference to task 3.5 so the design does not advise abandoning required evidence. This does not block Gate 1 because the task's obligation is explicit and preserved. | open |
+| 1 | minor | design.md, Risks / Trade-offs, scan-bound report | The risk paragraph still dismisses an integration test that forces the scan budget to bite as testing the fixture rather than the service. Task 3.5 now explicitly requires that positive integration path, including an asserted HNSW plan, real candidate retrieval and probe, and a true flag paired with a default-budget false result; `tests/integration/test_search_narrowing.py` also contains that coverage. Replace the stale dismissal with a reference to task 3.5 so the design does not advise abandoning required evidence. This does not block Gate 1 because the task's obligation is explicit and preserved. | fixed |
 
 ### Assessment
 
