@@ -11,49 +11,51 @@ tier was raised at Gate 1 round 1.
 
 ## Done this session
 
-24 of 28 tasks, committed in six blocks:
+**All 28 tasks are done.** Since the Gate 1 round 3 approval:
 
-- **3.3 / 3.4** the window's extra row against what the answer needs
-  (`rows_needed`), and what the bounded question counts — its model, its
-  narrowing, the asking asset, and its bound. Two demonstrated failing inputs.
-- **3.7 / 4.x** the four surfaces take one narrowing. `meta.<key>` is read from
-  the raw query string, and from the raw form fields of the picture search,
-  because the framework cannot declare a parameter whose name the caller
-  invents; each operation's description carries the convention. The listing
-  passes the same filter object as the searches (`app/repositories/narrowing.py`
-  is the one definition of what it means in SQL). The envelope carries
-  `scan_limited`.
-- **5.x** the interface's tag box is the service's own filter now, and the page
-  says when the service stopped at its bound.
-- **6.1 / 6.1a / 6.2** `scripts/filter_benchmark.py` and
-  `docs/how-to/benchmarks.md`.
+- **6.3** `docs/how-to/searching.md` — a "Narrow it" section captured against
+  the demo corpus on a running service: the same query with and without a tag,
+  `tags_any`, `meta.<key>` on the text and picture searches, an asset asking
+  under a tag it does not carry, the narrowed listing, a narrowing nothing
+  satisfies, the four refusals, and what a short narrowed page means.
+- **6.4** `docs/explanation/requirements.md` — FR-FLT-2 rewritten to the
+  measurement, FR-FLT-3 to the parser and its one refusal type, **FR-FLT-6**
+  added for `scan_limited`, the envelope and parameter requirements updated, and
+  the change table's row 12 at the tier this change became. `ROADMAP.md` too.
+- **7.1** every suite the way CI runs them: `make check` 545, integration 257,
+  ui 59, `openspec validate --all --strict` 16, both `scripts/*_test.sh`, `sh -n`
+  over `scripts/*.sh`. `scripts/pregate-verify.sh gate2` passes.
+- **7.2** the run behind the how-to: 20 demo assets, both models `done`, service
+  on `APP_PORT=8010` (8000 is taken on this machine).
 
-One deliberate contract change: a bad tag in the **listing's** filter answers
-`/errors/invalid-filter`, not `/errors/invalid-tags`. One parser refusing a
-narrowing means one type for it on every surface; the tags of an upload or an
-edit are the asset's own and still answer `/errors/invalid-tags`.
+Earlier in the change: the parser and the filter value, the narrowing inside the
+vector query with `iterative_scan`, the four numbers of the scan's report, the
+four surfaces, the interface, and the benchmark.
+
+**A note on the local store:** the integration suite truncates `assets`, and
+this machine uses one database for development and for that suite, so the demo
+corpus was rebuilt afterwards (`storage prune --apply`, then `demo-dataset
+index --into .data/demo`, no download): 20 assets, both models `done`.
 
 ## Next step
 
-`/opsx:apply add-tag-and-meta-filters` — Gate 1 round 3 **approved** on the
-corrected requirement (the narrowing is a condition of the query and an index
-can serve it; which path answers is the database's judgement; only the index
-path is bounded). Its one `minor` finding is fixed: the design's Risks row no
-longer dismisses the very integration test task 3.5 requires.
+Push `change/add-tag-and-meta-filters` and watch CI. On green:
+`/gate-review add-tag-and-meta-filters 2`.
 
-24 of 28 tasks are done. The rest:
+Gate 2 reads the whole code diff. What is worth knowing before it:
 
-- **6.3 / 6.4** `docs/how-to/searching.md` — how to narrow on all three
-  endpoints, what a short page means under a narrowing — and FR-FLT-2 / FR-FLT-3
-  in `docs/explanation/requirements.md`, which must read as the service behaves
-  (the scan's bound named, the parser's shape as it is).
-- **7.1 / 7.2** every suite the way CI runs them (`FORCE_COLOR=1 CI=true`:
-  `make check`, `make test-integration`, `make test-ui`, `openspec validate
-  --all --strict`, every `scripts/*_test.sh`, `sh -n` over `scripts/*.sh`), and
-  a real run against the demo corpus — a narrowed search on each of the three
-  endpoints and the narrowed listing — captured into the how-to.
-
-Then the push, CI green on that HEAD, and `/gate-review add-tag-and-meta-filters 2`.
+- One deliberate contract change: a bad tag in the **listing's** filter answers
+  `/errors/invalid-filter`, not `/errors/invalid-tags`. One parser refusing a
+  narrowing means one type for it on every surface; the tags of an upload or an
+  edit are the asset's own and still answer `/errors/invalid-tags`.
+- Gate 1 was reopened once during the apply, because the benchmark measured a
+  third plan — a read of every vector, exact and cheapest at small scale — that
+  the spec had forbidden. Round 3 approved the corrected wording.
+- Every new check has a demonstrated failing input, run and restored: the
+  duplicate-key refusal, the counting of candidates before the offset, the
+  decision function's comparison, the bounded question's model, the window's
+  extra row, the wiring of `scan_limited`, and a benchmark that writes where the
+  service's rows are.
 
 ## Blockers
 
