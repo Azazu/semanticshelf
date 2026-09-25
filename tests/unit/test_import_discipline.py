@@ -13,6 +13,9 @@ import sys
 from pathlib import Path
 
 HEAVY = frozenset({"torch", "transformers"})
+#: The published measurement commands. They are operator tools that build and
+#: drop schemas; the service must not be able to reach one by importing itself.
+COMMANDS = frozenset({"bench_schema", "filter_benchmark", "index_benchmark"})
 APP = Path(__file__).resolve().parents[2] / "app"
 
 
@@ -74,3 +77,33 @@ def test_importing_the_application_does_not_pull_the_model_runtime_in() -> None:
         [sys.executable, "-c", program], capture_output=True, text=True, check=True
     )
     assert finished.stdout.strip() == "[]"
+
+
+def every_import(node: ast.AST) -> set[str]:
+    """Every top-level package a module imports anywhere — a function body and a
+    `TYPE_CHECKING` block included, because the question here is reachability,
+    not import cost."""
+    names: set[str] = set()
+    for child in ast.walk(node):
+        if isinstance(child, ast.Import):
+            names |= {alias.name.split(".")[0] for alias in child.names}
+        elif isinstance(child, ast.ImportFrom) and child.level == 0 and child.module:
+            names.add(child.module.split(".")[0])
+    return names
+
+
+def test_the_deeper_walker_sees_what_it_claims_to_see() -> None:
+    assert every_import(ast.parse("def f():\n    import index_benchmark")) == {"index_benchmark"}
+    assert every_import(ast.parse("from bench_schema import own")) == {"bench_schema"}
+    assert every_import(ast.parse("import app.cli")) == {"app"}
+
+
+def test_no_module_under_app_imports_a_measurement_command() -> None:
+    """A benchmark creates and drops schemas. It is a command a person runs, and
+    the service is never one import away from it — not even inside a function."""
+    offenders = {
+        str(path.relative_to(APP.parent)): sorted(found)
+        for path in sorted(APP.rglob("*.py"))
+        if (found := every_import(ast.parse(path.read_text(encoding="utf-8"))) & COMMANDS)
+    }
+    assert offenders == {}

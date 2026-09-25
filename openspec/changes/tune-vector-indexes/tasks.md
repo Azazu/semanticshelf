@@ -23,7 +23,7 @@
 
 ## 2. The measurement command
 
-- [ ] 2.1 Write `scripts/index_benchmark.py` — the corpus: K seeded centroids on
+- [x] 2.1 Write `scripts/index_benchmark.py` — the corpus: K seeded centroids on
   the unit sphere, each vector a centroid plus Gaussian noise, normalised, for
   every model in `EMBEDDING_MODELS` at its own width, inserted in batches inside
   the schema `bench_schema.py` owns, then `ANALYZE` (design decision 1). Verify:
@@ -31,47 +31,50 @@
   is measurably nearer than its hundredth on the seeded corpus (so the corpus
   has neighbour structure to find), and that the same seed gives the same
   corpus.
-- [ ] 2.2 The exact ranking: for each query vector, the ten nearest read with
+- [x] 2.2 The exact ranking: for each query vector, the ten nearest read with
   `enable_indexscan` and `enable_bitmapscan` off, its plan read and the run
   refused if the plan contains any index scan (design decision 2). Verify: an
   integration test asserts the plan of that statement has no index scan, and
   that the function refuses — with a message naming the plan — when index scans
   are left enabled.
-- [ ] 2.3 The four configurations per model (design decision 5): the shipped
+- [x] 2.3 The four configurations per model (design decision 5): the shipped
   HNSW as copied with the tables, HNSW at `m = 32, ef_construction = 128`, and
   IVFFlat at two `lists` values, each built with only its own index present on
   the embeddings copy, each timed as it is built and measured for size with
   `pg_relation_size`. Verify: an integration test asserts that exactly one
   vector index exists on the copy while a configuration is measured, and that
   the plan of the measured query names that index.
-- [ ] 2.4 `lists` and the probe range come from the installed pgvector's own
+- [x] 2.4 `lists` and the probe range come from the installed pgvector's own
   documentation for a corpus of this size, not from memory, and are printed with
   the results. Verify: the version is read at run time
   (`SELECT extversion FROM pg_extension WHERE extname = 'vector'`) and printed
   in the header of the output; the commit body records where the guidance was
   read.
-- [ ] 2.5 Recall@10 as `|index_top10 ∩ exact_top10| / 10` over Q seeded query
+- [x] 2.5 Recall@10 as `|index_top10 ∩ exact_top10| / 10` over Q seeded query
   vectors drawn from the corpus's distribution but not members of it, reported
   as the mean and the worst single query, ties counted by asset identifier
   (design decision 3). Verify: unit tests over the pure function — identical
   rankings give 1.0, disjoint give 0.0, a half-overlap gives 0.5, and a ranking
   that agrees on distance but differs in identity counts as a miss.
-- [ ] 2.6 Latency: Q timings of one page at `limit = 20` with the service's own
+- [x] 2.6 Latency: Q timings of one page at `limit = 20` with the service's own
   `effort_for`, one warm-up discarded, p95 by nearest rank
   (`ceil(0.95 × Q)`-th smallest), the query vectors prepared before timing
   starts (design decision 4). Verify: a unit test pins the percentile on a known
   sample (including Q not divisible by 20) against the stated definition.
-- [ ] 2.7 The curves: `hnsw.ef_search` over 20, 40, 80, 120, 200 and
+- [x] 2.7 The curves: `hnsw.ef_search` over 20, 40, 80, 120, 200 and
   `ivfflat.probes` over its matching range, each applied with `SET LOCAL` inside
   the measuring transaction, each reporting recall@10 and p95 (design decision
-  6). Verify: an integration test reads `current_setting('hnsw.ef_search')`
-  inside that transaction and finds the value the curve step asks for.
-- [ ] 2.8 What each family does under a narrowing: which values its
+  6). Verify: the sweep reads `current_setting` back after every step and
+  refuses to report when the knob did not take — a knob that was sent and
+  ignored gives a flat curve that reads like an index with nothing to gain; and
+  an integration test sweeps the shipped index at 1 and at 200 and finds the
+  recall moves, which a setting that never applied could not do.
+- [x] 2.8 What each family does under a narrowing: which values its
   iterative-scan setting accepts on the installed pgvector, and what a narrowed
   page returns under each (design decision 8). Verify: the command prints that
   per family, and an integration test asserts the setting's accepted values are
   read from the database rather than declared in the script.
-- [ ] 2.9 Output: Markdown tables — one per model for the configurations, one
+- [x] 2.9 Output: Markdown tables — one per model for the configurations, one
   per model for the curves, plus a header naming the corpus size, the seed, the
   distribution's constants, the pgvector version and the effort the service
   would use; `--assets`, `--queries`, `--seed`, `--schema` as options with the
@@ -81,23 +84,23 @@
 
 ## 3. Evidence that stays in the suite
 
-- [ ] 3.1 `tests/integration/test_index_benchmark.py`: the published command run
+- [x] 3.1 `tests/integration/test_index_benchmark.py`: the published command run
   against a populated store leaves every asset, embedding and job exactly as
   they were, the schema it built is gone afterwards, a name already taken is
   refused with its contents intact, and a refused name reaches no database at
   all — the battery `test_filter_benchmark.py` already applies, now over the
   shared module. Verify: `uv run pytest tests/integration/test_index_benchmark.py`
   passes with the database up.
-- [ ] 3.2 A measurement that cannot report a miss is worthless: a test that asks
+- [x] 3.2 A measurement that cannot report a miss is worthless: a test that asks
   the index to look less far than the ranking requires and asserts the reported
   recall falls below 1 (spec scenario "A miss is reported as a miss"). Verify:
   the test fails when the recall function is replaced by one that returns 1.0,
   and that demonstration is recorded in the commit body.
-- [ ] 3.3 Recall at the default effort clears the bound on a corpus small enough
+- [x] 3.3 Recall at the default effort clears the bound on a corpus small enough
   for CI, with margin (design decision 10). Verify: the test states its corpus
   size and threshold, and its wall time is recorded in the commit body so a
   later reader can see what it costs.
-- [ ] 3.4 Nothing in the service imports either script. Verify: the existing
+- [x] 3.4 Nothing in the service imports either script. Verify: the existing
   layering test covers it, or a case is added to `tests/unit/test_import_discipline.py`.
 
 ## 4. The run, and the numbers it produces

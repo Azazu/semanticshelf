@@ -5,11 +5,7 @@ CI does that before running the marked suite. Each test starts from an empty
 store: truncating `assets` cascades to embeddings and jobs.
 """
 
-import importlib.util
-import sys
 from collections.abc import AsyncIterator, Iterator
-from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import pytest
@@ -25,26 +21,6 @@ from app.domain import CLIP_VIT_L14
 from tests.fake_models import fake_models
 
 TABLES = "assets, embeddings, indexing_jobs"
-
-SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
-
-
-def script_module(name: str) -> ModuleType:
-    """A script under `scripts/`, imported as a module — it is not a package.
-
-    The directory goes on `sys.path` first: a published command run as
-    `python scripts/x.py` gets that for free (it is `sys.path[0]`), and one
-    loaded by file path does not, so without this line the script's own
-    `import bench_schema` raises `ModuleNotFoundError`. The test runs what the
-    how-to prints, so it has to resolve the imports that command resolves.
-    """
-    if str(SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SCRIPTS))
-    spec = importlib.util.spec_from_file_location(name, SCRIPTS / f"{name}.py")
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 @pytest.fixture(autouse=True)

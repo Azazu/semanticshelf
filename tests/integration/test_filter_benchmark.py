@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.db.engine import create_session_factory
 from app.domain import CLIP_VIT_L14, dimension_of
-from tests.integration.conftest import script_module
+from tests.scripts import script_module
 
 pytestmark = pytest.mark.integration
 
