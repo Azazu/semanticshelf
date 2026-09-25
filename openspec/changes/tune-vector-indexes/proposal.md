@@ -114,9 +114,12 @@ None.
   revision rebuilding an index.
 - **Unchanged:** the HTTP contract, the search service, the repositories, the
   ORM metadata, the queue. No API code is touched by the measurement.
-- **Dependencies:** none added. The corpus is built with the standard library's
-  `random` and the vectors are written as text, as change 12's benchmark already
-  does; nothing here needs numpy, a model or a network.
+- **Dependencies:** none added. The corpus is built with numpy — already a
+  dependency of the service, which `app/ml/` uses for every vector it
+  normalises — and written as text, as change 12's benchmark already does. Ten
+  thousand vectors of 768 and 1024 floats are millions of samples per run, which
+  is a minute of the standard library's `random` and a fraction of a second of
+  numpy; nothing here needs a model or a network.
 - **Runtime:** the command is an operator command. Nothing in the service, the
   worker or the UI imports it, and a test proves the layering.
 
