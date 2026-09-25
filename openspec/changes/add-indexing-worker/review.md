@@ -1,0 +1,101 @@
+# Review — add-indexing-worker
+
+## Round 1 · Gate 1
+**Reviewer:** codex
+**Date:** 2026-09-24
+**Reviewed-Commit:** 02a6fc6c9bad4e03c730ef881f5e98c50c9650a6
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `specs/indexing-jobs/spec.md:36–45`; `design.md` Applicability / Concurrent writers | The new scenarios promise exactly-once execution and no simultaneous duplicate execution without the preconditions that make those statements true. A live worker can exceed its lease while computing; another worker then reclaims and computes the same job. The unchanged claim/execute/finish mechanism permits this, as the design explicitly acknowledges and FR-IDX-3 requires. Qualify the normal concurrency scenario with valid leases and no retries, distinguish a terminated worker from a paused or slow one, and state the actual general guarantee: at-least-once execution with fenced completion and idempotent effects. Cover live lease expiry and a stale completion in the verification plan, referencing existing tests where sufficient. | fixed |
+| 2 | major | `design.md` Decision 4; `tasks.md` section 4 and task 6.3 | The switch is planned only for upload and reindex, but normative FR-CLI-1 in `docs/explanation/requirements.md:127` explicitly says that from change 13 `INDEXING_RUNNER` also selects between the folder command's own runner and the worker process. Currently `app/cli.py::index_folder` passes `index=not no_index`, so implementing these tasks leaves `index-folder` computing locally under `INDEXING_RUNNER=worker`. Add the folder-command behavior, its interaction with `--no-index`, and implementation/verification coverage to the artifacts; alternatively explicitly reconcile the normative requirement if the intended scope is HTTP-only. Task 6.3 currently updates FR-IDX-2 and FR-CLI-2 but leaves this conflicting promise intact. | fixed |
+| 3 | major | `proposal.md` What Changes / several workers; `design.md` Decision 6; `tasks.md` 2.3–2.4 and 3.1–3.3 | The proposal explicitly promises to prove shared-queue operation and dead-runner recovery with processes, but the design substitutes two tasks and permits only an empty-queue subprocess. That cannot exercise independent worker runtimes taking work or a real second signal terminating an active worker and leaving reclaimable jobs. Rejecting nonempty subprocess tests because they require real weights is not necessary: a test-only child-process harness can inject the existing fake embedder before invoking the worker adapter. Specify such process evidence with deterministic synchronization and real signals, or reconcile the claimed scope explicitly. Also correct task 3.2: both loops eventually taking work does not prove absence of lock waits; a blocking claim can pass that assertion. Reuse the existing held-transaction/timeout test (`tests/integration/test_indexing.py::test_a_claimer_passes_over_work_another_holds`) as the authority or plan an equivalent deterministic check. | fixed |
+| 4 | minor | `specs/indexing-jobs/spec.md:58`; `design.md` Decision 3; `tasks.md` 5.2 | The spec requires an ending report for both graceful and forced shutdown, whereas the second-signal design restores the default disposition and terminates immediately, bypassing the normal return/finally reporting path. The planned output test covers only graceful shutdown. Either limit the final-summary guarantee to graceful shutdown and document forced termination as best effort, or specify and verify what can be reported before re-signalling without delaying the forced exit. | fixed |
+
+### Validation
+
+- Verified that the clean working tree was on `change/add-indexing-worker` at the requested commit before review.
+- Read the proposal, design, tasks, delta specification, handoff, repository instructions and OpenSpec configuration; checked relevant living requirements, queue implementation, CLI adapters and existing concurrency tests.
+- `openspec validate add-indexing-worker --strict` passed. This validates artifact structure, not the semantic contradictions above.
+- Gate 1 artifact review only; no implementation changes or git write commands.
+
+## Confirmation 1 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-24
+**Reviewed-Commit:** 601dc9ee52aeb117f57764e30a157874551894ff
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — The general at-least-once guarantee, normal-case lease preconditions, live-expiry scenario and task 3.4 now address most of the finding. However, `specs/indexing-jobs/spec.md:56–60` still retains the original unqualified promise that work from a runner that is "stopped" is "never executed twice at the same time". A paused runner can resume after reclamation; even a replacement for a terminated runner can itself outlive its lease. Explicitly require termination of the original process and valid leases/no retries for the replacement scenario, or replace its no-overlap assertion with fenced completion and idempotent effects. The new general paragraph does not remove this contradictory scenario. |
+| 2 | confirmed — Proposal and design decision 4 now include `index-folder` and `index missing`; the delta spec covers commands leaving work queued. Tasks 4.4–4.5 cover implementation, both setting values, `--no-index` combinations, truthful summaries and folder-to-worker integration. Task 6.3 explicitly reconciles FR-CLI-1. |
+| 3 | changes-requested — Real child processes with fake models and reuse of the held-transaction no-wait test are now planned. Deterministic synchronization is still missing: design decision 6 and tasks 2.4–2.5 observe queue state but never hold the child at that state. The existing fake embedder has no barrier; after the parent observes `running`, the child can finish or claim another batch before the signal arrives. Two SIGTERMs without acknowledgement of the first can also coalesce or arrive after graceful exit, so they do not reliably exercise forced termination with unfinished work. Specify a test-only execution barrier and parent/child acknowledgement: hold claimed work while delivering and acknowledging the first signal, release it for the graceful test, or deliver the second while it remains held for the forced test. Also coordinate both children before releasing their claimed batches so task 3.1 cannot depend on startup timing to make both perform work. |
+
+### Validation
+
+- Confirmed the branch and HEAD match the requested review target and the working tree was initially clean.
+- Reviewed only the specified commit diff and collateral relevant to findings 1–3, including the existing fake embedder, fencing tests, held-transaction test and CLI requirement. No unrelated minor findings added.
+- `openspec validate add-indexing-worker --strict` passed; this is structural validation, not proof of the outstanding concurrency claims.
+- Gate 1 artifact confirmation only. Modified only `review.md`; ran no git write commands.
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-24
+**Reviewed-Commit:** c204c6ccc0133b0f9cdbbe7d043a055b440208f6
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The delta specification qualifies normal concurrent execution with valid leases and no failures, explicitly permits overlapping execution after live lease expiry, and requires fenced completion and idempotent effects. The terminated-runner scenario now distinguishes termination from pause and removes the no-overlap promise. Proposal and design use the same guarantee; tasks 3.3–3.4 cover terminated-runner recovery and live expiry with stale completion, referencing the existing fencing tests. |
+| 2 | confirmed — Design decision 4, the proposal and the delta specification include commands that otherwise finish their own work. Tasks 4.4–4.5 cover `index-folder`, `index missing`, both runner settings, interaction with `--no-index`, truthful queued summaries and folder-to-worker integration. Task 6.3 explicitly reconciles FR-CLI-1. |
+| 3 | confirmed — Design decision 6 and tasks 2.3–2.5 now specify a test-only child harness using the worker runtime with fake inference held at an execution barrier. The parent waits for acknowledgement of the first real signal, then either releases work for graceful completion or sends the second signal while work remains held. Task 3.1 holds both child workers before releasing either, task 3.3 exercises actual termination with SIGKILL and recovery, and task 3.2 retains the existing held-transaction/timeout test as the authority for absence of lock waits. Harness waits are explicitly bounded. |
+
+### Validation
+
+- Verified `change/add-indexing-worker` at the requested HEAD with an initially clean working tree; all source-round findings have a disposition.
+- Reviewed the diff from `02a6fc6c9bad4e03c730ef881f5e98c50c9650a6` to `c204c6ccc0133b0f9cdbbe7d043a055b440208f6` and collateral relevant to findings 1–3, including CLI requirements and adapters, fake-model support, and the existing fencing and held-transaction tests. No unrelated findings added.
+- `openspec validate add-indexing-worker --strict` passed.
+- Gate 1 confirms the corrected artifacts and verification plan; worker implementation and process-test execution remain for Gate 2. Modified only `review.md`; ran no git write commands.
+
+## Round 1 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-25
+**Reviewed-Commit:** 9a9389b3a76b0c0df46d3d7e1b66b3d52ed58f6a
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `app/services/indexing.py:422–437`; `tests/unit/test_worker_loop.py::test_a_batch_that_took_nothing_is_not_counted_and_says_nothing` | `run_worker` calls `run_batch` before checking `stop.asked`. A SIGTERM received after handlers are installed but before the first claim, or just as an idle wait times out, can therefore claim and execute a fresh batch after the stop request. This contradicts the delta spec's requirement to stop taking new work when asked. Check the token before each new batch, and verify with due work and an already-requested stop; the existing pre-stopped test supplies an empty batch and explicitly expects the extra call. | fixed |
+| 2 | major | `tests/worker_child.py:96–125`; `tests/integration/test_worker_process.py:172–194`; `app/cli.py:316–382` | The process tests launch `tests.worker_child`, which independently recreates engine/pool setup, signal registration, loop invocation, cleanup and output instead of calling the production `worker` command or `_run_worker` adapter. They establish the shared service-layer policy but cannot detect a broken production adapter, despite tasks 2.3–2.6 and 5.1–5.2 claiming process evidence for the command's signals and lifecycle. Make the child invoke the production adapter with the fake embedder/barrier injected, or add equivalent process coverage of the actual CLI entry point. | fixed |
+| 3 | minor | `docs/how-to/indexing.md:452–456`; `Makefile:34–39` | The documented startup command sets only `INDEXING_RUNNER=worker`, so `make run` listens on its default port 8000 while the immediately following commands call port 8010. Include `APP_PORT=8010` in the startup command or make the shown requests use port 8000; the page says these exact commands were run. | fixed |
+
+### Validation
+
+- Confirmed a clean working tree on `change/add-indexing-worker` at the requested commit before reviewing the artifacts, changed code and tests against `main`.
+- `git diff --check main...change/add-indexing-worker` and `openspec validate add-indexing-worker --strict` passed. No test suite was rerun in this review.
+- Modified only `review.md`; ran no git write commands.
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-25
+**Reviewed-Commit:** 3f47574600ce41da2c53f0231c0d18728b400b2d
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — `run_worker` now reads `stop.asked` before every batch, including the first and the pass after an idle wait. The new unit tests supply due work with an already-requested stop, both for continuous operation and `--once`, and assert that no batch is claimed. The older empty-batch test now requests its stop after the first pass. |
+| 2 | confirmed — `tests.worker_child` now injects only fake, held embedders and a signal acknowledgement, then invokes the production `app.cli` command with its actual arguments. The process tests therefore exercise the command's engine and pool setup, signal policy, loop, summary and cleanup; their assertions cover graceful and forced signals, idle exit, batch completion and `--once`. |
+| 3 | confirmed — The documented startup command sets `APP_PORT=8010`, matching the requests that follow it and the port read by `make run`. |
+
+### Validation
+
+- Reviewed only the diff from `9a9389b3a76b0c0df46d3d7e1b66b3d52ed58f6a` to `3f47574600ce41da2c53f0231c0d18728b400b2d` and collateral relevant to the named findings. No unrelated findings were added.
+- `git diff --check` for that range, `openspec validate add-indexing-worker --strict`, and `tests/unit/test_worker_loop.py` (10 passed) succeeded.
+- The database container was not running, so the process integration tests were inspected but not rerun in this confirmation.
+- Modified only `review.md`; ran no git write commands.

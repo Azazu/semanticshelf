@@ -11,7 +11,7 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-from app.domain import CLIP_VIT_L14, IMPLEMENTED_MODELS
+from app.domain import CLIP_VIT_L14, IMPLEMENTED_MODELS, INLINE_RUNNER, IndexingRunner
 
 ASYNCPG_SCHEME = "postgresql+asyncpg://"
 
@@ -80,8 +80,21 @@ class Settings(BaseSettings):
     #: How many times a job may be attempted before it is failed for good.
     job_max_attempts: int = Field(default=3, gt=0)
     #: How many jobs a single run of a runner takes. A runner that drained
-    #: while work remained would never end.
+    #: while work remained would never end — and the bound is also what lets
+    #: several runners share a queue and what keeps a stop from waiting for an
+    #: unbounded amount of work.
     worker_batch_size: int = Field(default=4, gt=0)
+    #: Which runner carries out queued work. `inline` (the default) is the
+    #: runner inside whatever process created it — the API after a response, a
+    #: command after its import — so a deployment nobody configured still
+    #: indexes what it accepts. `worker` leaves all of it to
+    #: `semanticshelf worker`, and nothing else executes anything.
+    indexing_runner: IndexingRunner = INLINE_RUNNER
+    #: How long a runner of its own waits before looking again when the queue
+    #: held nothing for it. It is a floor on how late a vector can be, and the
+    #: cost of not having it is a claim query in a loop; two seconds is the
+    #: trade this service makes (change 13, design decision 7).
+    worker_poll_seconds: float = Field(default=2.0, gt=0)
 
     # --- search --------------------------------------------------------------
     #: How hard the vector index looks for each search. Raised per query to at

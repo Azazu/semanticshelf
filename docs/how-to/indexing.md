@@ -8,7 +8,10 @@ Every command here was run in the form shown against a local service on a
 migrated database, with `MEDIA_ROOT=.data/media` and — so that one failure is
 final rather than retried three times — `JOB_MAX_ATTEMPTS=1`. The answers are
 the answers it gave; identifiers are shortened in the commands and differ from
-run to run.
+run to run. The worker section was captured separately, against a service
+started with `INDEXING_RUNNER=worker` on `APP_PORT=8010` (8000 was taken on that
+machine) and the real models; its log lines are trimmed to the fields that
+matter.
 
 ## The four states
 
@@ -396,20 +399,34 @@ skipped: 2
 indexing: not run
 ```
 
-The queue then behaves as it always does: the next upload's runner, or a
-`reindex`, carries it out. With `--no-index` the command never loads a model,
-which is what you want when the import is a first step and the machine that
-indexes is another one.
+The queue then behaves as it always does: the next upload's runner, a `reindex`,
+or `semanticshelf worker`, carries it out. With `--no-index` the command never
+loads a model, which is what you want when the import is a first step and the
+machine that indexes is another one.
+
+`INDEXING_RUNNER=worker` says the same thing about the whole deployment rather
+than about one run, and the command tells you which of the two decided it:
+
+```console
+$ INDEXING_RUNNER=worker uv run semanticshelf index-folder ~/incoming
+…
+indexing: not run
+work left queued (INDEXING_RUNNER=worker); `semanticshelf worker` carries it out
+```
 
 ## Who actually does the work
 
-In this stage, the API process and the import command: every upload and every
-reset schedules a background task that claims at most `WORKER_BATCH_SIZE`
-jobs, does them, and stops; `index-folder` runs the same claim, restricted to
-the assets it created, until they are done or nothing of theirs is claimable. A runner that drained while work remained would never end, so anything
-left over waits for the next upload or reset. The separate `worker` process,
-which loops over the same claim, execute and finish functions, arrives with
-its own change.
+Two runners, and `INDEXING_RUNNER` decides which one a deployment has.
+
+**`inline`** (the default) is the runner inside whatever process created the
+work: every upload and every reset schedules a background task that claims at
+most `WORKER_BATCH_SIZE` jobs, does them, and stops; `index-folder` and
+`index missing` run the same claim, restricted to the assets they created,
+until those are done or nothing of theirs is claimable. A runner that drained
+while work remained would never end, so anything left over waits for the next
+upload or reset.
+
+**`worker`** leaves all of it to `semanticshelf worker` — the next section.
 
 Two consequences worth knowing:
 
@@ -423,13 +440,119 @@ Two consequences worth knowing:
 Why the queue is a table in PostgreSQL rather than a broker, and what the
 lease buys, is [ADR-003](../adr/ADR-003-queue-in-postgresql.md).
 
+## Run the worker
+
+A process whose only job is the queue. It claims the same way, executes the same
+way and finishes the same way — what it adds is that it keeps going, and that it
+is not sharing a process with your requests.
+
+Tell the service that a worker will do the work, and it stops doing it itself:
+
+```console
+$ APP_PORT=8010 INDEXING_RUNNER=worker make run    # both in the environment file, for good
+$ curl -s -F "file=@photo.jpg" http://127.0.0.1:8010/api/v1/assets | jq -c '{id, index_status}'
+{"id":"1a9afd94-…","index_status":{"clip-vit-l14":"pending","dinov2-large":"pending"}}
+
+$ sleep 3 && curl -s http://127.0.0.1:8010/api/v1/stats | jq -c '{work, oldest_waiting_seconds}'
+{"work":[{"model":"clip-vit-l14","status":"pending","jobs":1},
+         {"model":"dinov2-large","status":"pending","jobs":1}],"oldest_waiting_seconds":8.269634}
+```
+
+Nothing is wrong there: the work is queued and waiting for a runner that is not
+running yet. Start one:
+
+```console
+$ uv run semanticshelf worker
+worker started: batch 4, poll 2.0s, models clip-vit-l14, dinov2-large
+{"jobs": 2, "event": "worker batch finished", "level": "info", …}
+```
+
+```console
+$ curl -s http://127.0.0.1:8010/api/v1/assets/1a9afd94-… | jq -c '{index_status}'
+{"index_status":{"clip-vit-l14":"done","dinov2-large":"done"}}
+```
+
+An idle worker claims, finds nothing, waits `WORKER_POLL_SECONDS` and claims
+again. It says nothing while it is idle — a line per empty pass would bury the
+lines that matter.
+
+### Stopping it
+
+`SIGTERM` (what a supervisor sends, and what `kill` sends by default) or Ctrl-C:
+
+```console
+$ kill -TERM <pid>
+{"signal": "SIGTERM", "event": "worker stopping", "level": "info", …}
+worker stopped: 1 batch(es), 2 unit(s)
+```
+
+It stops **after** the batch it is holding: the vectors it was computing are
+stored, nothing new is claimed, and it ends with a summary. It releases nothing
+by hand — work it could not finish returns when its lease expires
+(`JOB_LEASE_SECONDS`), which is the same path a crash takes.
+
+A second signal ends it at once. It says `worker forced` and dies by that
+signal's own disposition, so a supervisor sees the status it expects; whatever
+it was holding returns by the lease.
+
+### Running several
+
+Nothing coordinates them. The claim takes rows with `FOR UPDATE SKIP LOCKED`, so
+a second worker passes over what a first is holding and takes the next thing
+due:
+
+```console
+$ INDEXING_RUNNER=worker uv run semanticshelf index-folder ~/incoming
+import
+folder: /home/…/incoming
+created: 4
+already stored: 0
+refused: 0
+skipped: 0
+indexing: not run
+work left queued (INDEXING_RUNNER=worker); `semanticshelf worker` carries it out
+
+$ uv run semanticshelf worker --batch 2 &    # twice, in two terminals
+$ curl -s http://127.0.0.1:8010/api/v1/stats | jq -c '.work'
+[{"model":"clip-vit-l14","status":"done","jobs":5},{"model":"dinov2-large","status":"done","jobs":5}]
+
+$ kill -TERM %1 %2
+worker stopped: 2 batch(es), 4 unit(s)
+worker stopped: 2 batch(es), 4 unit(s)
+```
+
+Ten units, four each to two workers plus the two that were already done — and no
+unit was attempted twice, which is what the claim guarantees and what
+`tests/integration/test_worker_process.py` asserts with two child processes.
+
+What the queue promises with several runners is **at-least-once** execution, not
+exactly-once: if a lease expires while its runner is still working — a very slow
+model, a suspended process — another runner may take the same unit and compute
+the same vector. That is harmless by construction: only the runner that still
+holds the claim can finish the job, and the vector write replaces the row for
+that asset and model.
+
+### When nothing is being indexed
+
+The one failure mode this switch introduces: `INDEXING_RUNNER=worker` and no
+worker running. Everything looks healthy — uploads answer 201, `/ready` is
+ready — and nothing is ever indexed. What shows it:
+
+- `index_status` stays `pending` on every asset;
+- `/api/v1/stats` reports `oldest_waiting_seconds` climbing;
+- the worker's own log says nothing, because there is none.
+
+Start a worker, or set `INDEXING_RUNNER=inline` and let the API do it again.
+
 ## The settings that shape it
 
 | Setting | Default | What it does |
 |---|---|---|
+| `INDEXING_RUNNER` | `inline` | which runner carries out the work: the process that created it, or `semanticshelf worker` |
 | `JOB_LEASE_SECONDS` | 600 | how long a claim is good for; after it, another runner may take the job |
 | `JOB_MAX_ATTEMPTS` | 3 | how many attempts a job gets before it is `failed` for good |
 | `WORKER_BATCH_SIZE` | 4 | how many jobs one run of a runner takes |
+| `WORKER_POLL_SECONDS` | 2 | how long the worker waits before looking again when nothing was due |
 
 They sit with every other setting in
 [`../reference/settings.md`](../reference/settings.md).

@@ -207,3 +207,63 @@ async def test_tags_and_metadata_reach_the_assets(
         row = (await connection.execute(sa.text("SELECT tags, meta FROM assets"))).one()
     assert row.tags == ["dragon", "blue"]
     assert row.meta == {"origin": "handbook", "source_path": "good.png"}
+
+
+async def test_under_a_worker_the_import_queues_and_indexes_nothing(
+    runner: CliRunner, incoming: Path, engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Task 4.4, and FR-CLI-1's promise: `INDEXING_RUNNER` selects between this
+    command's own runner and the worker. Under `worker` it imports and stops."""
+    monkeypatch.setenv("INDEXING_RUNNER", "worker")
+    (incoming / "good.png").write_bytes(picture_bytes(seed=1))
+
+    result = await run_cli(runner, "index-folder", str(incoming))
+
+    assert result.exit_code == 0, result.output
+    assert "created: 1" in result.output
+    assert "INDEXING_RUNNER=worker" in result.output, "and it says which decided it"
+    assert "--no-index" not in result.output, "because this run did not ask"
+    async with engine.connect() as connection:
+        status = (
+            await connection.execute(sa.text("SELECT status FROM indexing_jobs"))
+        ).scalar_one()
+        vectors = (
+            await connection.execute(sa.text("SELECT count(*) FROM embeddings"))
+        ).scalar_one()
+    assert (status, vectors) == ("pending", 0), "the work is there, and nobody here did it"
+
+
+async def test_both_instructions_at_once_say_the_same_thing(
+    runner: CliRunner, incoming: Path, engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Task 4.5: `--no-index` is about this run, the setting is about the
+    deployment, and they cannot contradict each other."""
+    monkeypatch.setenv("INDEXING_RUNNER", "worker")
+    (incoming / "good.png").write_bytes(picture_bytes(seed=1))
+
+    result = await run_cli(runner, "index-folder", str(incoming), "--no-index")
+
+    assert result.exit_code == 0, result.output
+    assert "--no-index" in result.output and "INDEXING_RUNNER=worker" in result.output
+    async with engine.connect() as connection:
+        vectors = (
+            await connection.execute(sa.text("SELECT count(*) FROM embeddings"))
+        ).scalar_one()
+    assert vectors == 0
+
+
+async def test_the_default_deployment_still_carries_the_work_out(
+    runner: CliRunner, incoming: Path, engine: AsyncEngine
+) -> None:
+    """The control for the two above: nothing said, so this command indexes."""
+    (incoming / "good.png").write_bytes(picture_bytes(seed=1))
+
+    result = await run_cli(runner, "index-folder", str(incoming))
+
+    assert result.exit_code == 0, result.output
+    assert "work left queued" not in result.output
+    async with engine.connect() as connection:
+        status = (
+            await connection.execute(sa.text("SELECT status FROM indexing_jobs"))
+        ).scalar_one()
+    assert status == "done"

@@ -83,6 +83,11 @@ def index_folder(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=2) from exc
 
+    from app.services.indexing import carries_out_work, queued_because
+
+    # Two instructions, one answer: this run may be told to leave the work
+    # queued, and so may the deployment (`INDEXING_RUNNER=worker`).
+    left_queued = queued_because(asked_to_leave_it=no_index, settings=settings)
     try:
         lines = asyncio.run(
             _run_import(
@@ -92,7 +97,7 @@ def index_folder(
                 tags=chosen_tags,
                 meta=chosen_meta,
                 dry_run=dry_run,
-                index=not no_index,
+                index=not no_index and carries_out_work(settings),
             )
         )
     except (DirectoryUnusableError, TagError, MetadataError) as exc:
@@ -101,6 +106,8 @@ def index_folder(
 
     for line in lines:
         typer.echo(line)
+    if left_queued is not None and not dry_run:
+        typer.echo(left_queued)
 
 
 async def _run_import(
@@ -198,8 +205,14 @@ def index_missing(
         )
         raise typer.Exit(code=2)
 
-    for line in asyncio.run(_run_backfill(settings, models=chosen, index=not no_index)):
+    from app.services.indexing import carries_out_work, queued_because
+
+    left_queued = queued_because(asked_to_leave_it=no_index, settings=settings)
+    index = not no_index and carries_out_work(settings)
+    for line in asyncio.run(_run_backfill(settings, models=chosen, index=index)):
         typer.echo(line)
+    if left_queued is not None:
+        typer.echo(left_queued)
 
 
 async def _run_backfill(settings: Settings, *, models: Sequence[str], index: bool) -> list[str]:
@@ -298,6 +311,75 @@ def demo_index(
     index_folder(
         directory=corpus, recursive=True, tags=None, meta=None, dry_run=False, no_index=False
     )
+
+
+@app.command("worker")
+def worker(
+    once: Annotated[
+        bool, typer.Option("--once", help="Take a single batch, report it, and stop.")
+    ] = False,
+    batch: Annotated[
+        int | None,
+        typer.Option("--batch", min=1, help="Jobs per batch, overriding WORKER_BATCH_SIZE."),
+    ] = None,
+) -> None:
+    """Carry out queued indexing work until asked to stop.
+
+    The runner the queue was built for: it claims with `FOR UPDATE SKIP LOCKED`,
+    so several of these may run at once with nothing coordinating them, and it
+    uses the same claim/execute/finish the API's own runner uses — which is why
+    turning it on changes no contract.
+
+    A `SIGTERM` (or `SIGINT`) stops it after the batch it holds: work already
+    claimed is finished, nothing new is taken, and nothing is handed back by
+    hand — anything it could not finish returns when its lease expires. A second
+    signal ends it at once, and that work returns the same way.
+
+    With `INDEXING_RUNNER=worker` this is the only runner: the API and the
+    import commands then queue work and execute none of it.
+    """
+    # Values come from the environment; mypy cannot see that the required field is read there.
+    settings = Settings()  # type: ignore[call-arg]
+    if batch is not None:
+        settings = settings.model_copy(update={"worker_batch_size": batch})
+    typer.echo(
+        f"worker started: batch {settings.worker_batch_size}, "
+        f"poll {settings.worker_poll_seconds}s, "
+        f"models {', '.join(settings.enabled_models) or 'none'}"
+    )
+    typer.echo(asyncio.run(_run_worker(settings, once=once)))
+
+
+async def _run_worker(settings: Settings, *, once: bool) -> str:
+    from app.core.logging import configure_logging
+    from app.db.engine import create_engine, create_session_factory
+    from app.ml.pool import create_pool
+    from app.services import indexing
+    from app.storage import MediaStorage
+
+    # Unlike the other commands, this one is a server: it runs until it is
+    # stopped, and its log lines are the only way to see what it is doing.
+    configure_logging(settings.log_level, settings.log_json)
+
+    engine = create_engine(settings)
+    pool = create_pool(settings)
+    try:
+        stop = indexing.Stop()
+        indexing.install_stop_handlers(
+            asyncio.get_running_loop(), indexing.StopSignals(stop).deliver
+        )
+        run = await indexing.run_worker(
+            session_factory=create_session_factory(engine),
+            storage=MediaStorage.at(settings.media_root),
+            settings=settings,
+            pool=pool,
+            stop=stop,
+            once=once,
+        )
+        return f"worker stopped: {run.batches} batch(es), {run.units} unit(s)"
+    finally:
+        pool.shutdown(wait=True)
+        await engine.dispose()
 
 
 @storage_app.command("prune")

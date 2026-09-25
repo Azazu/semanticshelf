@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.settings import Settings
 from app.db.engine import create_session_factory
-from app.domain import CLIP_VIT_L14, dimension_of
+from app.domain import CLIP_VIT_L14, WORKER_RUNNER, dimension_of
 from app.main import create_app
 from app.ml import registry
 from app.ml.base import EmbeddingResult
@@ -266,3 +266,108 @@ async def test_the_event_loop_keeps_running_while_a_model_is_busy(
 
     assert taken == 1
     assert ticks > 10, f"the loop was blocked while the model ran (ticks: {ticks})"
+
+
+# --- which runner a deployment has ------------------------------------------------
+
+
+@pytest.fixture
+def worker_app(settings: Settings) -> FastAPI:
+    """The same service, told that a runner of its own will do the work."""
+    return create_app(settings.model_copy(update={"indexing_runner": WORKER_RUNNER}))
+
+
+async def test_under_a_worker_the_api_queues_and_executes_nothing(
+    worker_app: FastAPI, engine: AsyncEngine
+) -> None:
+    """Task 4.2. The answer is the one `inline` gives — same status, same body,
+    `pending` for every enabled model — and nothing runs after it."""
+    embedder = FakeEmbedder(CLIP_VIT_L14, CLIP_WIDTH)
+    called: list[int] = []
+
+    def note(images: Any) -> EmbeddingResult:
+        called.append(len(images))
+        return embedder.embed_images(images)
+
+    registry.FACTORIES[CLIP_VIT_L14] = lambda settings: FakeEmbedder(CLIP_VIT_L14, CLIP_WIDTH)
+    registry.clear()
+
+    async for client in make_client(worker_app):
+        response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+
+    assert response.status_code == 201, response.text
+    assert response.json()["index_status"] == {CLIP_VIT_L14: "pending"}
+    assert called == [], "nothing embedded anything in this process"
+    vectors, states = await vectors_and_states(engine)
+    assert (vectors, states) == (0, ["pending"]), "queued, and waiting for a runner"
+
+
+async def test_under_a_worker_a_reindex_queues_and_executes_nothing(
+    worker_app: FastAPI, engine: AsyncEngine, sessions: async_sessionmaker[AsyncSession]
+) -> None:
+    """The other path that schedules a drain. Leaving one of the two comparing
+    the setting itself is the mistake this catches."""
+    registry.FACTORIES[CLIP_VIT_L14] = lambda settings: FakeEmbedder(CLIP_VIT_L14, CLIP_WIDTH)
+    registry.clear()
+
+    async for client in make_client(worker_app):
+        created = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+        asset_id = created.json()["id"]
+        # It was never indexed, so a reindex is the second scheduler under test.
+        response = await client.post(f"{ASSETS}/{asset_id}/reindex", json={})
+
+    assert response.status_code == 202, response.text
+    vectors, states = await vectors_and_states(engine)
+    assert (vectors, states) == (0, ["pending"]), "reset, and still nobody executed it"
+
+
+async def test_the_same_upload_under_the_default_runner_is_indexed(
+    app: FastAPI, engine: AsyncEngine
+) -> None:
+    """The control: the same request, the same assertions, the other setting —
+    so what the switch changes is exactly one thing."""
+    registry.FACTORIES[CLIP_VIT_L14] = lambda settings: FakeEmbedder(CLIP_VIT_L14, CLIP_WIDTH)
+    registry.clear()
+
+    async for client in make_client(app):
+        response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+
+    assert response.status_code == 201, response.text
+    assert response.json()["index_status"] == {CLIP_VIT_L14: "pending"}, "the same answer"
+    vectors, states = await vectors_and_states(engine)
+    assert (vectors, states) == (1, ["done"]), "and this one was carried out"
+
+
+async def test_work_a_worker_deployment_queued_is_finished_by_the_worker(
+    worker_app: FastAPI,
+    engine: AsyncEngine,
+    sessions: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    pool: ThreadPoolExecutor,
+) -> None:
+    """Task 4.3: the contract is identical, and the work is not lost — one batch
+    of the runner that owns it finishes what the API refused to touch."""
+    registry.FACTORIES[CLIP_VIT_L14] = lambda settings: FakeEmbedder(CLIP_VIT_L14, CLIP_WIDTH)
+    registry.clear()
+
+    async for client in make_client(worker_app):
+        response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
+    assert (await vectors_and_states(engine)) == (0, ["pending"])
+
+    # `once=True` is what ends it after a pass. Asking the stop as well would
+    # now end it *before* one, which is the window Gate 2 found (round 1,
+    # finding 1): a runner asked to stop takes no new work at all.
+    stop = indexing.Stop()
+    run = await indexing.run_worker(
+        session_factory=sessions,
+        storage=storage,
+        settings=settings,
+        pool=pool,
+        stop=stop,
+        once=True,
+    )
+
+    assert (run.batches, run.units) == (1, 1)
+    assert await vectors_and_states(engine) == (1, ["done"])
+    assert response.json()["index_status"] == {CLIP_VIT_L14: "pending"}, "as the answer said"

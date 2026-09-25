@@ -20,11 +20,19 @@ ContentType = Literal["image/jpeg", "image/png", "image/webp"]
 FileExtension = Literal["jpg", "png", "webp"]
 AssetSource = Literal["upload", "folder"]
 JobStatus = Literal["pending", "running", "done", "failed"]
+#: Which runner carries out queued work (FR-IDX-2). `inline` is the runner in
+#: the process that created the work — the API after a response, or a command
+#: that finishes what it imported. `worker` means only `semanticshelf worker`
+#: executes anything, and everything else queues and stops there.
+IndexingRunner = Literal["inline", "worker"]
 
 CONTENT_TYPES: Final[tuple[ContentType, ...]] = get_args(ContentType)
 FILE_EXTENSIONS: Final[tuple[FileExtension, ...]] = get_args(FileExtension)
 ASSET_SOURCES: Final[tuple[AssetSource, ...]] = get_args(AssetSource)
 JOB_STATUSES: Final[tuple[JobStatus, ...]] = get_args(JobStatus)
+INDEXING_RUNNERS: Final[tuple[IndexingRunner, ...]] = get_args(IndexingRunner)
+INLINE_RUNNER: Final[IndexingRunner] = "inline"
+WORKER_RUNNER: Final[IndexingRunner] = "worker"
 
 # The file extension each accepted content type is stored under.
 EXTENSION_BY_CONTENT_TYPE: Final[Mapping[ContentType, FileExtension]] = {

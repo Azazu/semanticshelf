@@ -13,16 +13,20 @@ ownership the claim handed out — if the job has since been reclaimed, reset, o
 deleted with its asset, nothing lands at all.
 """
 
-from collections.abc import Callable, Mapping, Sequence
+import asyncio
+import os
+import signal
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from typing import Final
 from uuid import UUID
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.settings import Settings
-from app.domain import EMBEDDING_MODELS, IndexingJob, UnknownModelError
+from app.domain import EMBEDDING_MODELS, INLINE_RUNNER, IndexingJob, UnknownModelError
 from app.ml.pool import acquire, run_in_pool
 from app.repositories.assets import AssetRepository
 from app.repositories.embeddings import EmbeddingRepository
@@ -262,6 +266,178 @@ async def drain(
             log.info("indexing batch finished", jobs=taken)
     except Exception:
         log.exception("indexing batch failed")
+
+
+# --- which runner carries out the work ----------------------------------------
+
+
+def carries_out_work(settings: Settings) -> bool:
+    """May this process execute the work it just queued?
+
+    One question, asked in one place, by everything that would otherwise index:
+    the upload and reindex paths of the API, and the two commands that finish
+    what they imported. Under `INDEXING_RUNNER=worker` the answer is no for all
+    of them, and `semanticshelf worker` is the only runner (FR-IDX-2, FR-CLI-1).
+
+    A fact about a deployment stated in four places drifts in four directions,
+    which is the whole reason this is a function and not a comparison.
+    """
+    return settings.indexing_runner == INLINE_RUNNER
+
+
+def queued_because(*, asked_to_leave_it: bool, settings: Settings) -> str | None:
+    """Why the work a command created was left queued — or `None` if it was not.
+
+    Two instructions can say the same thing from different directions: `--no-
+    index` is about this run, `INDEXING_RUNNER=worker` is about the deployment.
+    They never contradict each other, and a summary that said "queued" without
+    saying which of them decided it would leave an operator guessing at their
+    own configuration.
+    """
+    reasons = []
+    if asked_to_leave_it:
+        reasons.append("--no-index")
+    if not carries_out_work(settings):
+        reasons.append(f"INDEXING_RUNNER={settings.indexing_runner}")
+    if not reasons:
+        return None
+    return f"work left queued ({', '.join(reasons)}); `semanticshelf worker` carries it out"
+
+
+# --- a runner of its own ------------------------------------------------------
+
+
+class Stop:
+    """What asks a runner to end, and what an idle runner waits on.
+
+    One object rather than a flag, because the loop's idle wait *is* the wait
+    for it (change 13, design decision 2): a runner that is doing nothing ends
+    the moment it is asked to, and a runner that is working notices between
+    batches — which is what finishing the batch you hold means mechanically.
+    """
+
+    def __init__(self) -> None:
+        self._asked = asyncio.Event()
+
+    def ask(self) -> None:
+        """Ask the runner to end after the work it holds."""
+        self._asked.set()
+
+    @property
+    def asked(self) -> bool:
+        return self._asked.is_set()
+
+    async def wait(self, seconds: float) -> bool:
+        """Wait up to `seconds` to be asked. True when asked, False on timeout."""
+        try:
+            await asyncio.wait_for(self._asked.wait(), timeout=seconds)
+        except TimeoutError:
+            return False
+        return True
+
+
+#: What a runner is asked to stop with. `SIGINT` is here because a terminal is
+#: where a person stops one, and it should behave like a supervisor's `SIGTERM`
+#: rather than like a traceback.
+STOP_SIGNALS: Final[tuple[int, ...]] = (signal.SIGTERM, signal.SIGINT)
+
+
+def die_by(number: int) -> None:
+    """End this process the way the signal means to, not the way we would.
+
+    The default disposition is restored and the signal re-raised at this
+    process, so a supervisor sees the status it expects — rather than an exit
+    code this project invented for "asked twice". Work in flight returns by its
+    lease, exactly as it would after a crash, because that is what this is.
+    """
+    signal.signal(number, signal.SIG_DFL)
+    os.kill(os.getpid(), number)
+
+
+class StopSignals:
+    """The policy: the first request is polite, the second is not.
+
+    The first sets the token — the runner finishes the batch it holds and ends.
+    The second gives the process to the operating system. What a forced end does
+    NOT do is report totals: collecting them is a delay, and removing the delay
+    is the only reason the second request exists (change 13, design decision 3).
+    """
+
+    def __init__(self, stop: Stop, *, die: Callable[[int], None] = die_by) -> None:
+        self._stop = stop
+        self._die = die
+
+    def deliver(self, number: int) -> None:
+        if self._stop.asked:
+            log.warning("worker forced", signal=signal.Signals(number).name)
+            self._die(number)
+            return
+        log.info("worker stopping", signal=signal.Signals(number).name)
+        self._stop.ask()
+
+
+def install_stop_handlers(
+    loop: asyncio.AbstractEventLoop,
+    deliver: Callable[[int], None],
+    *,
+    signals: Iterable[int] = STOP_SIGNALS,
+) -> None:
+    """Wire `deliver` to each signal, on the loop rather than in the middle of
+    whatever was running: a handler that sets a token the loop is already
+    waiting on needs nothing else to be async-safe."""
+    for number in signals:
+        loop.add_signal_handler(number, deliver, number)
+
+
+@dataclass(slots=True)
+class WorkerRun:
+    """What one run of a runner did, for the caller to report."""
+
+    batches: int = 0
+    units: int = 0
+
+
+async def run_worker(
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    pool: ThreadPoolExecutor,
+    stop: Stop,
+    once: bool = False,
+) -> WorkerRun:
+    """Work the queue until asked to stop — the runner that is its own process.
+
+    Three lines of policy around `run_batch`, and every one of them is a
+    decision the design names. A batch that took something is followed by
+    another at once, because more may be due. A batch that took nothing is
+    followed by a wait — and that wait is the wait for `stop`, so being asked
+    while idle ends the run immediately instead of a poll interval later. The
+    request to stop is read **between** batches and never inside one: work
+    already claimed is finished, and nothing new is taken.
+
+    It prints nothing. What it did comes back as a value, because the command
+    owns the output and this owns the work.
+    """
+    run = WorkerRun()
+    # Asked before anything else: a stop that arrived while the handlers were
+    # being installed, or while the last idle wait was timing out, must not be
+    # answered with one more claim. "Stop taking new work" is read here.
+    while not stop.asked:
+        taken = await run_batch(
+            session_factory=session_factory, storage=storage, settings=settings, pool=pool
+        )
+        if taken:
+            run.batches += 1
+            run.units += taken
+            log.info("worker batch finished", jobs=taken)
+        if once or stop.asked:
+            break
+        if taken:
+            continue  # more may be due; look again without waiting
+        if await stop.wait(settings.worker_poll_seconds):
+            break
+    return run
 
 
 # --- finishing a named set of work -------------------------------------------
