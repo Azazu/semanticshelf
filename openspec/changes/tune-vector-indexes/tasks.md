@@ -26,7 +26,7 @@
 - [x] 2.1 Write `scripts/index_benchmark.py` — the corpus: K seeded centroids on
   the unit sphere, each vector a centroid plus Gaussian noise, normalised, for
   every model in `EMBEDDING_MODELS` at its own width, inserted in batches inside
-  the schema `bench_schema.py` owns, then `ANALYZE` (design decision 1). Verify:
+  the schema `scripts/bench_schema.py` owns, then `ANALYZE` (design decision 1). Verify:
   a unit test asserts the vectors are unit length, that a query's tenth nearest
   is measurably nearer than its hundredth on the seeded corpus (so the corpus
   has neighbour structure to find), and that the same seed gives the same
@@ -88,7 +88,7 @@
   against a populated store leaves every asset, embedding and job exactly as
   they were, the schema it built is gone afterwards, a name already taken is
   refused with its contents intact, and a refused name reaches no database at
-  all — the battery `test_filter_benchmark.py` already applies, now over the
+  all — the battery `tests/integration/test_filter_benchmark.py` already applies, now over the
   shared module. Verify: `uv run pytest tests/integration/test_index_benchmark.py`
   passes with the database up.
 - [x] 3.2 A measurement that cannot report a miss is worthless: a test that asks
@@ -157,13 +157,18 @@
 
 ## 7. Closing the change
 
-- [ ] 7.1 `openspec validate tune-vector-indexes --strict` passes and every task
-  above is checked with its evidence. Verify: the command's output is recorded.
-- [ ] 7.2 Run locally everything CI runs, in CI's own form:
+- [x] 7.1 `openspec validate tune-vector-indexes --strict` passes and every task
+  above is checked with its evidence. Verify: `Change 'tune-vector-indexes' is
+  valid`; `openspec validate --all --strict` reports 16 passed, 0 failed.
+- [x] 7.2 Run locally everything CI runs, in CI's own form:
   `FORCE_COLOR=1 CI=true make check`, `openspec validate --all --strict`,
   `sh -n scripts/*.sh`, every `scripts/*_test.sh`, and
   `FORCE_COLOR=1 CI=true make test-integration` with the database up. Verify:
-  all green before the branch is offered for a push.
-- [ ] 7.3 Handoff to `awaiting-gate-2` after the user's push and a green CI run
-  on that exact HEAD; `scripts/pregate-verify.sh gate2 tune-vector-indexes`
-  passes. Verify: its output is recorded in the handoff.
+  602 unit/api passed, 287 integration passed, `scripts/workflow_verify_test.sh`
+  23 passed, `scripts/gate_run_test.sh` 77 passed, validation 16/16, `sh -n`
+  clean over every shell script.
+- [x] 7.3 Hand the change over for the push: `handoff.md` at `awaiting-gate-2`
+  naming what is green locally, and `scripts/pregate-verify.sh gate2
+  tune-vector-indexes` passing. Verify: the verifier's output is recorded in the
+  handoff. The gate itself follows the user's push and a green CI run on that
+  exact HEAD — the executor never queries GitHub Actions.

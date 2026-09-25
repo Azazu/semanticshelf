@@ -1,35 +1,44 @@
 # Handoff — tune-vector-indexes
 
 **Updated:** 2026-09-25 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/tune-vector-indexes
 
 ## Done this session
-- Branch and scaffold (`chore(tune-vector-indexes): start change`).
-- All four planning artifacts written and `openspec validate
-  tune-vector-indexes --strict` passes:
-  - `proposal.md` — **Risk-Tier: medium**, raised from the roadmap's `low`
-    because the change moves the guard that keeps a published measurement
-    command out of the service's tables and adds a second command beside it.
-    Gate 2 only; no Gate 1 (no new architecture).
-  - `specs/embedding-storage/spec.md` — one added requirement: what the vector
-    index approximates is measured, published and bounded (recall@10 ≥ 0.95 at
-    the default effort on ≥ 10 000 vectors per model, an exact ground truth, a
-    reproducible command that cannot touch the store, the decision recorded as
-    an ADR).
-  - `design.md` — ten decisions: a seeded clustered synthetic corpus and why the
-    demo corpus cannot serve, an exact ground truth proven by its plan, the
-    recall and p95 definitions, four index configurations measured one at a
-    time, the two knob curves, the shared guard, IVFFlat's narrowed behaviour as
-    structural evidence, where a shortfall lands, and what CI keeps.
-  - `tasks.md` — 7 groups, 24 tasks, each with its verification.
+- Planning artifacts (proposal, spec delta on `embedding-storage`, design,
+  tasks), tier **medium**.
+- `scripts/bench_schema.py`: the guard that keeps a published benchmark out of
+  the service's tables, shared by both commands. `filter_benchmark.py` imports
+  it; what it measures, prints and accepts is unchanged.
+- `scripts/index_benchmark.py`: per model, a seeded clustered corpus, an exact
+  ranking to grade against, four indexes built one at a time (shipped HNSW as
+  the migration declares it, HNSW m=32/ef_construction=128, IVFFlat at
+  lists = rows/1000 and lists = sqrt(rows)), recall@10 with its worst query, p95
+  by nearest rank, both knob curves, and what a narrowed page does under each
+  family's strictest iterative scan.
+- Evidence: 18 unit tests for the arithmetic and the corpus, 11 integration
+  tests (store untouched, schema gone, names refused, the ground truth's plan,
+  one index at a time, a miss reported as a miss, the bound cleared at 2 000
+  vectors, the iterative-scan values read from the database), and a case in
+  `test_import_discipline.py` that the service imports no measurement command.
+- The published run at 10 000 assets per model, twice; **ADR-002** written from
+  it; `docs/how-to/benchmarks.md` now carries both measurements.
+- Reconciliation: NFR-PERF-4's "demo corpus", requirements §3.2 and §7 row 14,
+  ROADMAP row 14 (tier), AGENTS.md's index-choice line, `searching.md`.
+
+## The result, in one line
+Both bounds are met by the shipped configuration — recall@10 1.000 at
+`ef_search` 40 for both models, p95 1.6 ms and 1.2 ms — so design decision 9's
+first row applies: no migration, no setting changed, nothing in the service
+touched. IVFFlat also loses structurally: it has no `strict_order` iterative
+scan, which change 12's narrowed search rests on.
 
 ## Next step
-`/opsx:apply tune-vector-indexes` — implement in task order: the shared
-`scripts/bench_schema.py` first (with `filter_benchmark.py` unchanged in
-behaviour), then `scripts/index_benchmark.py`, then the evidence, the real run
-at 10 000 vectors per model, ADR-002 and the documents.
+The user pushes `change/tune-vector-indexes` and watches CI; on green,
+`/gate-review tune-vector-indexes 2`.
 
 ## Blockers
-None. The database container is currently down (`make up` before the
-integration work).
+None. `scripts/pregate-verify.sh gate2 tune-vector-indexes` — all checks passed
+(0 warnings). Locally green: `make check` (602), `make test-integration` (287),
+`scripts/workflow_verify_test.sh` (23), `scripts/gate_run_test.sh` (77),
+`openspec validate --all --strict` (16/16).
