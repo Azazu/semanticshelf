@@ -355,8 +355,10 @@ async def test_work_a_worker_deployment_queued_is_finished_by_the_worker(
         response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes())})
     assert (await vectors_and_states(engine)) == (0, ["pending"])
 
+    # `once=True` is what ends it after a pass. Asking the stop as well would
+    # now end it *before* one, which is the window Gate 2 found (round 1,
+    # finding 1): a runner asked to stop takes no new work at all.
     stop = indexing.Stop()
-    stop.ask()  # one pass, then end: `--once` in the shape a test can run
     run = await indexing.run_worker(
         session_factory=sessions,
         storage=storage,

@@ -449,7 +449,7 @@ is not sharing a process with your requests.
 Tell the service that a worker will do the work, and it stops doing it itself:
 
 ```console
-$ INDEXING_RUNNER=worker make run          # or set it in the environment file
+$ APP_PORT=8010 INDEXING_RUNNER=worker make run    # both in the environment file, for good
 $ curl -s -F "file=@photo.jpg" http://127.0.0.1:8010/api/v1/assets | jq -c '{id, index_status}'
 {"id":"1a9afd94-…","index_status":{"clip-vit-l14":"pending","dinov2-large":"pending"}}
 

@@ -80,6 +80,37 @@ async def test_it_works_through_what_is_due_and_then_waits(
     assert batches.calls == 3, "it asked again after each batch that took something"
 
 
+async def test_a_stop_that_arrived_first_takes_no_work_at_all(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The window Gate 2 found: a signal can arrive while the handlers are being
+    installed, or while the last idle wait is timing out. A loop that claims
+    first and asks afterwards answers it with one more batch — of work that is
+    due, and that it then has to finish before it may end."""
+    batches = Batches(4, 4)
+    stop = Stop()
+    stop.ask()
+
+    run = await worker(monkeypatch, batches, stop=stop, poll=10.0)
+
+    assert batches.calls == 0, "nothing was claimed after the stop was asked for"
+    assert (run.batches, run.units) == (0, 0)
+
+
+async def test_a_stop_that_arrived_first_stops_even_a_single_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--once` means one batch at most, not one batch regardless."""
+    batches = Batches(4)
+    stop = Stop()
+    stop.ask()
+
+    run = await worker(monkeypatch, batches, stop=stop, once=True, poll=10.0)
+
+    assert batches.calls == 0
+    assert (run.batches, run.units) == (0, 0)
+
+
 async def test_a_batch_that_took_nothing_is_not_counted_and_says_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -96,9 +127,12 @@ async def test_a_batch_that_took_nothing_is_not_counted_and_says_nothing(
         )(),
     )
     stop = Stop()
-    stop.ask()
 
-    run = await worker(monkeypatch, Batches(0), stop=stop)
+    async def ask_after_the_first(**kwargs: object) -> int:
+        stop.ask()
+        return 0
+
+    run = await worker(monkeypatch, cast(Any, ask_after_the_first), stop=stop, poll=10.0)
 
     assert (run.batches, run.units) == (0, 0)
     assert said == [], "nothing was taken, so nothing is reported"

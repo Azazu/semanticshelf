@@ -420,7 +420,10 @@ async def run_worker(
     owns the output and this owns the work.
     """
     run = WorkerRun()
-    while True:
+    # Asked before anything else: a stop that arrived while the handlers were
+    # being installed, or while the last idle wait was timing out, must not be
+    # answered with one more claim. "Stop taking new work" is read here.
+    while not stop.asked:
         taken = await run_batch(
             session_factory=session_factory, storage=storage, settings=settings, pool=pool
         )
@@ -428,9 +431,7 @@ async def run_worker(
             run.batches += 1
             run.units += taken
             log.info("worker batch finished", jobs=taken)
-        if once:
-            break
-        if stop.asked:
+        if once or stop.asked:
             break
         if taken:
             continue  # more may be due; look again without waiting

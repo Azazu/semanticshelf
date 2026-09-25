@@ -169,8 +169,13 @@ def release(barrier: Path) -> None:
     (barrier / "release").write_text("go")
 
 
-def start(settings: Settings, barrier: Path, **overrides: str) -> Child:
-    """The worker's own runtime, in a process of its own."""
+def start(settings: Settings, barrier: Path, *arguments: str, **overrides: str) -> Child:
+    """The worker's own command, in a process of its own.
+
+    `arguments` are the command's, parsed by the command: the child hands its
+    argv straight to `app.cli`, so what runs here is the production adapter and
+    not a copy of it.
+    """
     environment = {
         **os.environ,
         "DATABASE_URL": settings.database_url,
@@ -184,7 +189,7 @@ def start(settings: Settings, barrier: Path, **overrides: str) -> Child:
         **overrides,
     }
     process = subprocess.Popen(  # noqa: S603 - the command is built here, not taken from input
-        [sys.executable, "-m", "tests.worker_child"],
+        [sys.executable, "-m", "tests.worker_child", "worker", *arguments],
         cwd=ROOT,
         env=environment,
         stdout=subprocess.PIPE,
@@ -204,8 +209,8 @@ def spawn() -> Iterator[Callable[..., Child]]:
     """
     started: list[Child] = []
 
-    def spawning(settings: Settings, barrier: Path, **overrides: str) -> Child:
-        child = start(settings, barrier, **overrides)
+    def spawning(settings: Settings, barrier: Path, *arguments: str, **overrides: str) -> Child:
+        child = start(settings, barrier, *arguments, **overrides)
         started.append(child)
         return child
 
@@ -222,7 +227,7 @@ def run_once(
     spawning: Callable[..., Child], settings: Settings, barrier: Path, **overrides: str
 ) -> str:
     """One batch in a child that ends by itself, and what it printed."""
-    child = spawning(settings, barrier, WORKER_ONCE="1", **overrides)
+    child = spawning(settings, barrier, "--once", **overrides)
     return child.output()
 
 
@@ -289,7 +294,7 @@ async def test_the_child_is_the_runner_and_the_barrier_holds_it(
     asset_id = await stored_asset(sessions, media_root, settings)
     # `--once` here: this test is about the runtime being the real one, and a
     # single batch ends by itself, so no signal is needed to prove it.
-    child = spawn(settings, barrier, WORKER_ONCE="1")
+    child = spawn(settings, barrier, "--once")
 
     child.wait_until_holding()
     status, attempts = await job_of(engine, asset_id)
@@ -487,7 +492,7 @@ async def test_a_lease_that_expires_under_a_working_runner_is_at_least_once(
     first.wait_until_holding()
 
     await asyncio.sleep(1.5)  # the lease, which is one second here, expires
-    second = spawn(settings, barrier, JOB_LEASE_SECONDS="600", WORKER_ONCE="1")
+    second = spawn(settings, barrier, "--once", JOB_LEASE_SECONDS="600")
     second.wait_until_holding()  # it took the very unit the first is still working
 
     release(barrier)  # both finish their embedding; only one of them owns the claim

@@ -1,7 +1,7 @@
 # Handoff — add-indexing-worker
 
 **Updated:** 2026-09-24 · claude
-**State:** implementing
+**State:** fixing-g2
 **Branch:** change/add-indexing-worker
 
 ## Done this session
@@ -34,29 +34,27 @@ them). `make check` 580, integration 275, ui 59, both script suites, `sh -n`,
 
 ## Next step
 
-Push `change/add-indexing-worker` and watch CI. On green:
-`/gate-review add-indexing-worker 2`.
+Push, then `/gate-review add-indexing-worker 2 confirm 1`. Round 1 asked for
+changes (two major, one minor) and all three are fixed:
 
-All 27 tasks are done. `scripts/pregate-verify.sh gate2 add-indexing-worker`
-passes.
+1. **A real bug.** `run_worker` claimed a batch before reading the stop, so a
+   signal arriving while the handlers were being installed — or while an idle
+   wait was timing out — was answered with one more batch of due work. The stop
+   is now read at the top of the loop, and two unit tests cover an
+   already-requested stop against a queue that has work, with and without
+   `--once`. The fix caught a bad assumption in one of my own tests, which asked
+   for a stop it did not mean.
+2. **The harness was a copy.** The child recreated the engine, the pool, the
+   handlers and the summary instead of running the command, so a broken
+   production adapter could not fail these tests. It now installs the fake
+   embedder and one seam — the acknowledgement — and hands its argv to
+   `app.cli`: the engine, the logging, the loop, the summary and the disposal
+   under test are the real ones. Demonstrated: removing `install_stop_handlers`
+   from the adapter now fails two process tests, where before it would not have.
+3. **The documented startup command** lacked `APP_PORT=8010` while the requests
+   that follow it use that port.
 
-What Gate 2 should know before reading the diff:
-
-- **The guarantee is at-least-once with a fenced completion**, stated that way
-  in the delta spec, the requirements and the how-to. A test holds one runner
-  inside the work while its lease expires, lets a second take the same unit, and
-  asserts one vector with the loser's completion discarded.
-- **The evidence is processes.** `tests/worker_child.py` is the command's
-  runtime with the fake embedder and a barrier; seven integration tests
-  rendezvous through `held-<pid>`, `signalled-<pid>` and `ready-<pid>`. The
-  fixture that starts children kills any survivor — the first run of these tests
-  leaked one, and it went on claiming work from every test after it.
-- **The switch has four callers**, because FR-CLI-1 promised it would.
-- **One thing outside the change's scope was corrected**: `settings.md` carried
-  a copy of the environment template that had drifted from it by nine lines. The
-  copy is gone, replaced by a reference — the repository's own rule about one
-  authority. The template's own two new lines were added by the user, since the
-  permission rules keep the executor out of that directory.
+`make check` 582, integration 276, ui 59.
 
 ## Blockers
 

@@ -18,28 +18,29 @@ A third file closes the loop in the other direction: the stop handler writes
 `signalled-<pid>` before anything else, so the parent knows the first signal
 arrived before it decides whether to send a second.
 
-Run as `python -m tests.worker_child`, with `WORKER_BARRIER_DIR` naming a
-directory both sides can see. Without that variable it refuses to start: a child
-with no rendezvous is a test that waits for nothing.
+It **is** the command: after the two additions above it hands control to
+`app.cli`, arguments and all, so the engine, the inference pool, the logging,
+the loop, the summary and the disposal under test are the production ones.
+
+Run as `python -m tests.worker_child worker [--once] [--batch N]`, with
+`WORKER_BARRIER_DIR` naming a directory both sides can see. Without that
+variable it refuses to start: a child with no rendezvous is a test that waits
+for nothing.
 """
 
 import asyncio
 import os
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from PIL.Image import Image
 
-from app.core.settings import Settings
-from app.db.engine import create_engine, create_session_factory
 from app.ml import registry
 from app.ml.base import EmbeddingResult
 from app.ml.fake import FakeEmbedder
-from app.ml.pool import create_pool
 from app.services import indexing
-from app.storage import MediaStorage
 from tests.fake_models import fake_for
 
 #: How long the child will wait at the barrier before giving up. Long enough
@@ -93,36 +94,27 @@ def install_held_models(directory: Path) -> None:
         registry.FACTORIES[key] = lambda _settings, key=key: HeldEmbedder(key, directory)
 
 
-async def main(directory: Path) -> str:
-    settings = Settings()  # type: ignore[call-arg]
-    install_held_models(directory)
-    engine = create_engine(settings)
-    pool = create_pool(settings)
-    try:
-        stop = indexing.Stop()
-        policy = indexing.StopSignals(stop)
+def announce_signals(directory: Path) -> None:
+    """Write the acknowledgement before the runner's own policy runs.
 
+    The one seam this harness replaces. Everything else the child does — the
+    engine, the inference pool, the logging, the loop, the summary, the
+    disposal — is the production command's, so a broken adapter fails these
+    tests instead of hiding behind a copy of itself (Gate 2 round 1, finding 2).
+    """
+    installing = indexing.install_stop_handlers
+
+    def install(
+        loop: asyncio.AbstractEventLoop, deliver: Callable[[int], None], **kwargs: object
+    ) -> None:
         def acknowledged(number: int) -> None:
-            """The parent's half of the handshake, written before anything the
-            policy does — including the exit a second signal causes."""
             signalled_marker(directory).write_text(str(number))
-            policy.deliver(number)
+            deliver(number)
 
-        indexing.install_stop_handlers(asyncio.get_running_loop(), acknowledged)
+        installing(loop, acknowledged, **kwargs)  # type: ignore[arg-type]
         ready_marker(directory).write_text(str(os.getpid()))
-        print(f"worker started: pid {os.getpid()}", flush=True)
-        run = await indexing.run_worker(
-            session_factory=create_session_factory(engine),
-            storage=MediaStorage.at(settings.media_root),
-            settings=settings,
-            pool=pool,
-            stop=stop,
-            once=os.environ.get("WORKER_ONCE") == "1",
-        )
-        return f"worker stopped: {run.batches} batch(es), {run.units} unit(s)"
-    finally:
-        pool.shutdown(wait=True)
-        await engine.dispose()
+
+    indexing.install_stop_handlers = install  # type: ignore[assignment]
 
 
 if __name__ == "__main__":
@@ -130,4 +122,13 @@ if __name__ == "__main__":
     if not named:
         print("WORKER_BARRIER_DIR is required", file=sys.stderr)
         raise SystemExit(2)
-    print(asyncio.run(main(Path(named))), flush=True)
+
+    barrier = Path(named)
+    install_held_models(barrier)
+    announce_signals(barrier)
+
+    # The production command, with the production argument parsing: the test
+    # passes `worker --once` exactly as a terminal would.
+    from app.cli import app
+
+    app()
