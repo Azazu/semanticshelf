@@ -2,7 +2,7 @@
 
 ## 1. One guard, shared by both measurement commands
 
-- [ ] 1.1 Write `scripts/bench_schema.py`: the schema-name pattern (`\Z`, never
+- [x] 1.1 Write `scripts/bench_schema.py`: the schema-name pattern (`\Z`, never
   `$`), the protected names, `SchemaInUse`, the `CREATE SCHEMA` that refuses a
   name already taken, the copy of the service's tables
   (`LIKE ... INCLUDING ALL`, autovacuum off), the resolution check that refuses
@@ -11,12 +11,12 @@
   `uv run python -c "import sys; sys.path.insert(0, 'scripts'); import
   bench_schema"` imports it, and `uv run ruff check scripts/bench_schema.py`
   passes.
-- [ ] 1.2 Make `scripts/filter_benchmark.py` import that module instead of
+- [x] 1.2 Make `scripts/filter_benchmark.py` import that module instead of
   carrying its own copy, with no change to what it measures, prints or accepts
   on the command line. Verify: `uv run pytest tests/integration/test_filter_benchmark.py`
   passes with its assertions unchanged, and `git diff` shows no edit to its
   measurement, table or argument parsing beyond the names it now imports.
-- [ ] 1.3 Let a test that loads a script by file path resolve that import: the
+- [x] 1.3 Let a test that loads a script by file path resolve that import: the
   helper in `tests/integration/test_filter_benchmark.py` puts the scripts
   directory on `sys.path` before executing the module. Verify: the same test
   file passes; removing the `sys.path` line makes it fail with `ModuleNotFoundError`.

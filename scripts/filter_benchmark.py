@@ -10,14 +10,10 @@ of those two ways can run out of budget.
 
 **It never touches the tables the service uses.** The corpus is built in a
 schema of its own, created here and dropped here, inside the database
-`DATABASE_URL` names. That is not tidiness: a benchmark that truncated the
-service's tables would be a published command that erases a corpus, and on a
-machine where one database serves development and the integration suite it
-would do exactly that — it did, to this repository's demo corpus, while these
-measurements were being taken. The structure is copied from the real tables
-(`LIKE ... INCLUDING ALL`), so the indexes measured are the service's own
-indexes and cannot drift from them, and `to_regclass` is checked before a single
-row is written.
+`DATABASE_URL` names. That promise is not this file's alone: it lives in
+`bench_schema.py`, which every published measurement command imports, so that
+there is one guard to keep in step rather than one per command. Why it exists,
+and what it refuses, is written there.
 
     uv run python scripts/filter_benchmark.py --assets 3000 --seed 7
 """
@@ -26,14 +22,13 @@ import argparse
 import asyncio
 import math
 import random
-import re
 import sys
 import time
 from dataclasses import dataclass
 from uuid import uuid4
 
+import bench_schema
 import sqlalchemy as sa
-from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.core.settings import Settings
@@ -44,18 +39,6 @@ from app.services.search import effort_for, rows_needed
 
 #: The schema everything below lives in, and nothing outside it is written to.
 DEFAULT_SCHEMA = "filter_benchmark"
-#: A schema name is interpolated into DDL, so it is checked rather than trusted
-#: — the same rule the service applies to everything that arrives from outside.
-#:
-#: `\Z`, never `$`: Python's `$` also matches before a final newline, so
-#: `^...$` accepts `public\n` — which SQL reads as `public` followed by
-#: whitespace, and which the equality check below would not catch (change 12,
-#: Gate 2 finding 1).
-SCHEMA_PATTERN = re.compile(r"^[a-z_][a-z0-9_]{0,48}\Z")
-
-#: Names this script will not take whatever the pattern says: where the
-#: service's own tables live, and everything the database reserves.
-PROTECTED_SCHEMAS = frozenset({"public", "pg_catalog", "information_schema"})
 
 TABLES = ("assets", "embeddings")
 MODEL = CLIP_VIT_L14
@@ -98,48 +81,14 @@ class Measurement:
 # --- the corpus, in a schema of its own -----------------------------------------
 
 
-class SchemaInUse(Exception):
-    """The name asked for is already somebody's schema."""
-
-
-async def own(connection: AsyncConnection, *, schema: str) -> None:
-    """Create the schema, or refuse the run.
-
-    Plain `CREATE SCHEMA`: no `IF NOT EXISTS`, and above all no `DROP` first.
-    A schema that is already there belongs to someone — the default name reused
-    between runs, or a schema of the person's own — and this script's promise is
-    that it deletes only what it created (change 12, Gate 2 finding 2). Whether
-    the create succeeded is what the caller's cleanup turns on.
-    """
-    try:
-        await connection.execute(sa.text(f"CREATE SCHEMA {schema}"))
-    except ProgrammingError as error:
-        raise SchemaInUse(
-            f"schema {schema!r} already exists: this script only ever drops a schema it "
-            f"created. Remove it yourself, or pass --schema with another name."
-        ) from error
-
-
 async def build(connection: AsyncConnection, *, schema: str, assets: int, seed: int) -> None:
     """The tables copied from the service's own, and the rows.
 
-    The copy carries every index the real tables have, the partial HNSW index
-    over the dimension cast included (ADR-001), so what is measured here is what
-    a request meets. Autovacuum is switched off on the copies: a background
-    ANALYZE arriving mid-run would silently turn the statistics-free half of the
-    table into something else.
-
-    The schema itself is `own()`'s: this writes only inside it.
+    The copy and the check that the search path reaches it are
+    `bench_schema.prepare`'s; what is left here is the corpus this measurement
+    needs. The schema itself is `bench_schema.own`'s: this writes only inside it.
     """
-    for table in TABLES:
-        await connection.execute(
-            sa.text(f"CREATE TABLE {schema}.{table} (LIKE public.{table} INCLUDING ALL)")
-        )
-        await connection.execute(
-            sa.text(f"ALTER TABLE {schema}.{table} SET (autovacuum_enabled = false)")
-        )
-    await connection.execute(sa.text(f"SET search_path TO {schema}, public"))
-    await guard(connection, schema=schema)
+    await bench_schema.prepare(connection, schema=schema, tables=TABLES)
 
     order = list(range(assets))
     random.Random(seed).shuffle(order)
@@ -177,47 +126,6 @@ async def build(connection: AsyncConnection, *, schema: str, assets: int, seed: 
         ),
         vectors,
     )
-
-
-async def guard(connection: AsyncConnection, *, schema: str) -> None:
-    """Refuse to write unless every unqualified name resolves inside the schema.
-
-    The one check between this script and the corpus of whoever runs it: with
-    the search path set, `assets` must be *this* schema's `assets`. If the copy
-    failed, or the path did not take, the next statement would write to the
-    service's own table — so there is no next statement.
-    """
-    for table in TABLES:
-        # `to_regclass` alone prints the name unqualified while the schema is in
-        # the search path, which is exactly the case this has to tell apart.
-        resolved = (
-            await connection.execute(
-                sa.text(
-                    "SELECT namespace.nspname || '.' || class.relname FROM pg_class AS class"
-                    " JOIN pg_namespace AS namespace ON namespace.oid = class.relnamespace"
-                    " WHERE class.oid = to_regclass(:name)"
-                ),
-                {"name": table},
-            )
-        ).scalar_one_or_none()
-        if resolved != f"{schema}.{table}":
-            raise SystemExit(
-                f"refusing to run: {table!r} resolves to {resolved!r}, not {schema}.{table}"
-            )
-
-
-async def hnsw_index(connection: AsyncConnection, *, schema: str) -> str:
-    """The name of the copied vector index for this model's dimension."""
-    name = (
-        await connection.execute(
-            sa.text(
-                "SELECT indexname FROM pg_indexes WHERE schemaname = :schema"
-                " AND tablename = 'embeddings' AND indexdef LIKE :shape"
-            ),
-            {"schema": schema, "shape": f"%hnsw%vector({DIMENSION})%"},
-        )
-    ).scalar_one()
-    return str(name)
 
 
 # --- the measurement -------------------------------------------------------------
@@ -296,19 +204,19 @@ async def run(*, assets: int, seed: int, schema: str) -> list[Measurement]:
     cleanup happens only then. A run that is refused the name leaves everything
     exactly as it found it, the name included.
     """
-    if schema in PROTECTED_SCHEMAS or schema.startswith("pg_"):
-        raise SystemExit(f"refusing to run: {schema!r} is not a schema this script may create")
+    if (why := bench_schema.unusable(schema)) is not None:
+        raise SystemExit(f"refusing to run: {why}")
     settings = Settings()  # type: ignore[call-arg]
     engine = create_engine(settings)
     measurements: list[Measurement] = []
     created = False
     try:
         async with engine.begin() as connection:
-            await own(connection, schema=schema)
+            await bench_schema.own(connection, schema=schema)
         created = True
         async with engine.begin() as connection:
             await build(connection, schema=schema, assets=assets, seed=seed)
-            index = await hnsw_index(connection, schema=schema)
+            index = await bench_schema.vector_index(connection, schema=schema, dimension=DIMENSION)
             for analysed in (False, True):
                 if analysed:
                     await connection.execute(
@@ -327,12 +235,12 @@ async def run(*, assets: int, seed: int, schema: str) -> list[Measurement]:
                                 settings=settings,
                             )
                         )
-    except SchemaInUse as error:
+    except bench_schema.SchemaInUse as error:
         raise SystemExit(f"refusing to run: {error}") from error
     finally:
         if created:
             async with engine.begin() as connection:
-                await connection.execute(sa.text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
+                await bench_schema.drop(connection, schema=schema)
         await engine.dispose()
     return measurements
 
@@ -387,10 +295,8 @@ def main(argv: list[str] | None = None) -> int:
         help="print one full plan per shape that answered, under the table",
     )
     parsed = parser.parse_args(argv)
-    if not SCHEMA_PATTERN.match(parsed.schema):
-        parser.error(f"not a schema name this script will create: {parsed.schema!r}")
-    if parsed.schema in PROTECTED_SCHEMAS or parsed.schema.startswith("pg_"):
-        parser.error(f"{parsed.schema!r} is where the service's or the database's own tables are")
+    if (why := bench_schema.unusable(parsed.schema)) is not None:
+        parser.error(why)
 
     measurements = asyncio.run(run(assets=parsed.assets, seed=parsed.seed, schema=parsed.schema))
     settings = Settings()  # type: ignore[call-arg]
