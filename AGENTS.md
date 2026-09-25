@@ -412,7 +412,8 @@ tests/               unit/ (fake embedder, no DB), integration/ (pgvector, marke
   `min_score`, `limit`/`offset` with `has_more` (no total); results
   carry `score`. Errors are RFC 9457 problem details.
 - Index choice (HNSW vs IVFFlat) is a per-model migration decision,
-  recorded in an ADR.
+  recorded in an ADR: measured in change 14 and decided in ADR-002 —
+  HNSW at `m = 16`, `ef_construction = 64` for both models.
 - Uploaded files are stored outside the web root under a generated name;
   the original filename is metadata only. Every path under `MEDIA_ROOT` is
   built in `app/storage.py` from an identifier the service generated — nothing

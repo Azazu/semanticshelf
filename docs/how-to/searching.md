@@ -515,7 +515,10 @@ thumbnails are not counted, and nothing walks the media root to produce it.
 - **A promise about recall.** A deep page is *searched* as deeply as it asks —
   `hnsw.ef_search` is raised per query to cover the page, the row beyond it and
   any row the search must discard — but how close an approximate ranking is to
-  an exact one is measured in its own change, not asserted here.
+  an exact one is a measurement rather than a promise of this page:
+  [`benchmarks.md`](benchmarks.md) has it, and
+  [ADR-002](../adr/ADR-002-vector-index-family-and-parameters.md) the decision
+  it supports.
 - **Which model is better at what.** This page says what each is *for*. The
   numbers — recall, latency, the cost of each — belong to the change that
   measures them.

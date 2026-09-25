@@ -105,12 +105,12 @@
 
 ## 4. The run, and the numbers it produces
 
-- [ ] 4.1 Run the published command for real at the requirement's size:
+- [x] 4.1 Run the published command for real at the requirement's size:
   `uv run python scripts/index_benchmark.py --assets 10000 --seed 7`, with the
   database up and nothing else loading the machine. Verify: its full output is
   kept and the wall time recorded; the run is repeated once to see how far the
   figures move between runs, and both are noted.
-- [ ] 4.2 Read the result against the two bounds: recall@10 ≥ 0.95 at the
+- [x] 4.2 Read the result against the two bounds: recall@10 ≥ 0.95 at the
   default effort (NFR-PERF-4) and p95 ≤ 100 ms at `limit = 20` (NFR-PERF-1), per
   model, and take the branch design decision 9 names. Verify: the branch taken
   is stated in the handoff and in ADR-002, with the numbers that chose it; if a
@@ -119,37 +119,38 @@
 
 ## 5. What the repository keeps
 
-- [ ] 5.1 Extend `docs/how-to/benchmarks.md` with the index measurement: how to
+- [x] 5.1 Extend `docs/how-to/benchmarks.md` with the index measurement: how to
   run it, what it builds, why the corpus is synthetic and why the demo corpus
   cannot serve instead, the tables from task 4.1, and the reading — what the
   numbers mean for a deployment. Change 12's section stays as it is. Verify: the
   page is re-read whole after the last edit and every command in it was run in
   the exact form printed.
-- [ ] 5.2 Write `docs/adr/ADR-002-vector-index-family-and-parameters.md`: the
+- [x] 5.2 Write `docs/adr/ADR-002-vector-index-family-and-parameters.md`: the
   context (what ADR-001 left open), the decision per model with its build
   parameters, the measured evidence, the alternatives and why each lost —
   including the structural argument of design decision 8 — what the record does
   not decide, and what would reopen it. Verify: every number in it came from the
   run of task 4.1; `docs/adr/README.md` gains its row; ADR-001's forward
   reference to ADR-002 now resolves.
-- [ ] 5.3 If task 4.2 moved a default or a build parameter, `docs/reference/settings.md`
-  and the migration state the new value with the measurement behind it. Verify:
-  the changed row is re-read whole; `uv run pytest tests/integration/test_migration_roundtrip.py`
-  passes if a revision was added. Otherwise the task is closed as not applicable
-  with the numbers that made it so.
+- [x] 5.3 Not applicable, and the numbers say why: the shipped configuration met
+  both bounds, so no default and no build parameter moved (design decision 9,
+  first row). recall@10 1.000 at `ef_search` 40 for both models against a bound
+  of 0.95, first miss at `ef_search` 20 (0.996); p95 1.6 ms and 1.2 ms against a
+  bound of 100 ms. No revision was added, so `docs/reference/settings.md` and
+  `0002_asset_schema` are unchanged and `HNSW_EF_SEARCH` stays 40.
 
 ## 6. Reconciling the claims this change touches
 
-- [ ] 6.1 Correct NFR-PERF-4 in `docs/explanation/requirements.md`: recall is
+- [x] 6.1 Correct NFR-PERF-4 in `docs/explanation/requirements.md`: recall is
   measured on the corpus the measurement builds, at the size NFR-PERF-1 already
   names, because the demo corpus is too small to discriminate — with that reason
   in the text. Verify: `rg -n "demo corpus" docs/explanation/requirements.md`
   leaves no sibling claim saying otherwise.
-- [ ] 6.2 Fix the claim, not the line: `rg -n "ADR-002|recall|IVFFlat|ef_search"`
+- [x] 6.2 Fix the claim, not the line: `rg -n "ADR-002|recall|IVFFlat|ef_search"`
   across `docs/`, `openspec/`, `README.md` and `AGENTS.md`, and reconcile every
   hit with what this change measured. Verify: the terms swept and the files
   touched are named in the commit body.
-- [ ] 6.3 Update `openspec/ROADMAP.md`: row 14's tier (`low` → `medium`, with the
+- [x] 6.3 Update `openspec/ROADMAP.md`: row 14's tier (`low` → `medium`, with the
   reason the proposal gives) and its scope line if the work differs from what the
   row promised; the stage-3 narrative gains the one sentence that says the stage
   is closed. Verify: the roadmap is re-read whole.
