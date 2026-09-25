@@ -214,10 +214,16 @@
   | `refuse_if_knob_ignored` returns at once | 1 failed, 27 passed |
   | `refuse_if_other_index` returns at once | 1 failed, 27 passed |
   | the `--assets` floor is never applied | 1 failed, 27 passed |
+  | `unusable()` stops refusing the protected names | 6 failed, 27 passed |
+  | the `--queries` bounds are never applied | 2 failed, 28 passed |
+  | `shipped_for()` returns a made-up index instead of refusing | 1 failed, 29 passed |
+  | `recall_at()` divides by an empty ranking | 1 failed, 29 passed |
+  | `percentile()` accepts no samples | 1 failed, 29 passed |
 
   Verify: each row is one run of the affected suites with that one edit and
   nothing else; every file was restored afterwards and `git status` is clean of
-  them.
+  them. The last five rows were added at Gate 1 round 1, finding 1 — the table
+  had stopped at eight and the enumeration was not complete.
 - [x] 8.7 Finding 2 (minor), fixed: the recall bound is asserted for **every**
   model in `EMBEDDING_MODELS`, not only `clip-vit-l14`. Verify:
   `tests/integration/test_index_benchmark.py` parametrises it and both cases
@@ -225,3 +231,29 @@
 - [x] 8.8 Gate 1 on the artifacts, which `high` requires and this change never
   had. Verify: `scripts/gate-run.sh tune-vector-indexes 1 full` records a round
   in `review.md`; its verdict decides whether Gate 2 is asked again.
+
+## 9. Gate 1 round 1 — three majors, all accepted
+
+- [x] 9.1 Finding 1: the removal table enumerated eight checks and the change
+  has thirteen. The five it missed — the protected-name branch of `unusable()`,
+  the `--queries` bounds, `shipped_for()`'s refusal, and the empty-input guards
+  of `recall_at()` and `percentile()` — are demonstrated the same way and added
+  to §8.6. Verify: thirteen rows, each one run of the affected suites with that
+  one edit; `tests/unit/test_index_benchmark.py` gained the two `shipped_for`
+  cases the table needed to have something to break.
+- [x] 9.2 Finding 2: the bound is on the **mean**, and the artifacts now all say
+  so. Over ten neighbours a per-query 0.95 is a demand for all ten, which is a
+  demand that an approximate index stop being approximate. Verify:
+  `specs/embedding-storage/spec.md` (requirement text and the recall scenario),
+  `design.md` decision 3, `docs/adr/ADR-002-vector-index-family-and-parameters.md`
+  and `docs/how-to/benchmarks.md` all state that the mean over at least fifty
+  queries is what clears 0.95 and that the worst single query is published
+  rather than bounded; the CI guard averages over fifty queries too, so it
+  measures the statistic the requirement names, and both models pass.
+- [x] 9.3 Finding 3: the claim that a real embedding corpus is easier than this
+  one — so that the measured recall would be a floor for it — is removed. No
+  comparison with real vectors was made, so no direction is claimed. Verify:
+  `rg -n "floor" openspec/changes/tune-vector-indexes docs/` finds nothing
+  claiming one; `design.md` Risks and ADR-002's "what it does not guarantee"
+  now say the same thing, and what establishing the direction would take is
+  named as its own change.

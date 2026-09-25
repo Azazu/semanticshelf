@@ -21,8 +21,14 @@ measurement that cannot report a miss is not a measurement, so the figure SHALL
 be sensitive to the index looking less far than the ranking requires.
 
 At the service's default search effort, on a corpus of at least ten thousand
-vectors per model, the index SHALL return at least nineteen of every twenty of
-the ten nearest vectors an exact ranking holds.
+vectors per model, the share described above — the ten nearest the index
+returned of the ten an exact ranking holds — SHALL be at least 0.95 **averaged
+over at least fifty queries**. The measurement SHALL also report the lowest
+share any single query reached; that one is published, not bounded. Over ten
+neighbours a per-query bound of 0.95 would be a demand for all ten of them on
+every query, which is a demand that the index stop being approximate; a mean is
+what an approximate index can be held to, and the worst query is what shows
+what the mean is hiding.
 
 The measurement SHALL be reproducible by a command the repository carries, which
 SHALL name the corpus it built, its size and how it was built. That command
@@ -42,10 +48,10 @@ the record does not decide.
 
 #### Scenario: Recall at the effort the service ships with
 - **WHEN** the measurement runs on a corpus of at least ten thousand vectors per
-  model, at the default search effort
-- **THEN** it reports, per model and per index family, the share of the ten
-  nearest vectors the index returned, and for the family the store uses that
-  share is at least 0.95
+  model, at the default search effort, over at least fifty queries
+- **THEN** it reports, per model and per index family, the mean share of the ten
+  nearest vectors the index returned and the lowest share any single query
+  reached, and for the family the store uses that mean is at least 0.95
 
 #### Scenario: The trade-off is a curve, not a point
 - **WHEN** the search effort is raised step by step across the documented range

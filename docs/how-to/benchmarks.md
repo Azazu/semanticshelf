@@ -237,7 +237,10 @@ tells you nothing about the index. The corpus here is the size NFR-PERF-1 names.
   declared by the script.
 - **recall@10** is `|the index's ten ∩ the true ten| / 10`, averaged over the 50
   queries, with the worst single query beside it: a mean of 0.97 hiding one
-  query at 0.4 is the shape that matters to somebody's search.
+  query at 0.4 is the shape that matters to somebody's search. NFR-PERF-4's
+  0.95 is a bound on that **mean**; the worst query is published, not bounded,
+  because over ten neighbours a per-query 0.95 would mean all ten of them every
+  time.
 - **p95** is the nearest-rank percentile of the 50 timings — the 48th smallest —
   warm, and excludes embedding the query, as NFR-PERF-1 does.
 

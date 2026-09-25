@@ -110,15 +110,25 @@ and look like success.
 *Alternative:* computing distances in Python from the same rows. Rejected — it
 would measure a different distance implementation, not the store's.
 
-### 3. Recall@10 is a set intersection, reported as a mean and a worst case
+### 3. Recall@10 is a set intersection; the bound is on the mean, and the worst query is reported beside it
 
 For each of Q seeded query vectors (default 50, drawn from the corpus's
 distribution but not members of it), recall is
-`|index_top10 ∩ exact_top10| / 10`. The command reports the mean over Q and the
-worst single query, because a mean of 0.97 hiding one query at 0.4 is the shape
-that matters to somebody's search. Ties at equal distance are counted by asset
-identifier, so a tie broken differently by the two rankings is a miss — the
-conservative direction.
+`|index_top10 ∩ exact_top10| / 10`. The command reports the **mean over Q** and
+the **worst single query**, because a mean of 0.97 hiding one query at 0.4 is
+the shape that matters to somebody's search. Ties at equal distance are counted
+by asset identifier, so a tie broken differently by the two rankings is a miss —
+the conservative direction.
+
+**The 0.95 bound is on that mean, and on nothing else** (Gate 1 round 1, finding
+2). Over ten neighbours a per-query 0.95 is not a threshold but a disguised
+demand for all ten: nine of ten is 0.9, so "every query at 0.95" and "every
+query exact" are the same sentence. An approximate index cannot promise that,
+and a requirement stated that way would be a requirement to stop being
+approximate. So the spec, the acceptance task and ADR-002 all say the same
+thing: the mean over at least fifty queries clears 0.95, the worst query is
+published beside it and is **not** bounded — it is what a reader needs in order
+to see what a mean is hiding.
 
 ### 4. Latency is p95 by nearest rank, warm, and excludes the query embedding
 
@@ -220,9 +230,14 @@ run by hand, its output pasted with the machine it ran on.
   figure, and the document says its numbers are one run on one machine, as
   change 12's already does.
 - **A synthetic distribution is not the service's distribution** → stated in the
-  document, with the direction of the bias named (a clustered real corpus is
-  easier for an ANN index than this one, so the measured recall is a floor, not
-  a promise); the demo corpus's size is given as the reason it cannot stand in.
+  document as a limit, with **no direction claimed**: nothing here compares this
+  corpus with real CLIP or DINOv2 vectors, so whether a real embedding space is
+  kinder or harsher to a graph index is not established and the measured recall
+  is not a floor for it (Gate 1 round 1, finding 3 — an earlier draft called it
+  one). What the numbers support is a decision at this size on this
+  distribution; the demo corpus's size is given as the reason it cannot stand
+  in, and establishing the direction would need real vectors at this scale,
+  which is its own change.
 - **The refactor could weaken the guard that protects the store** → the guard's
   tests keep running the published `filter_benchmark.py` end to end with their
   assertions unchanged, and the new command is put through the same battery;

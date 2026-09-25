@@ -209,11 +209,30 @@ def test_a_corpus_too_small_for_a_ranking_is_refused() -> None:
 
 def test_more_queries_than_the_corpus_holds_is_refused() -> None:
     with pytest.raises(SystemExit) as refused:
-        benchmark.main(["--queries", "51"])
+        benchmark.main(["--queries", "51", "--assets", "300"])
     assert refused.value.code == 2
 
 
 def test_no_queries_at_all_is_refused() -> None:
     with pytest.raises(SystemExit) as refused:
-        benchmark.main(["--queries", "0"])
+        benchmark.main(["--queries", "0", "--assets", "300"])
     assert refused.value.code == 2
+
+
+def test_a_width_the_store_has_no_shipped_index_for_stops_the_run() -> None:
+    """The shipped configuration is read from the copied table rather than
+    restated here, so a copy that arrived without it is a run that cannot
+    measure what it claims to."""
+    with pytest.raises(SystemExit) as refused:
+        benchmark.shipped_for(
+            {"ix_other": "CREATE INDEX ... USING hnsw (v vector(99))"}, dimension=768
+        )
+    assert "no shipped HNSW index" in str(refused.value)
+
+
+def test_the_shipped_index_is_the_one_whose_width_matches() -> None:
+    definitions = {
+        "ix_clip": "CREATE INDEX ix_clip ON b.embeddings USING hnsw ((vector::vector(768)) ...)",
+        "ix_dino": "CREATE INDEX ix_dino ON b.embeddings USING hnsw ((vector::vector(1024)) ...)",
+    }
+    assert benchmark.shipped_for(definitions, dimension=1024)[0] == "ix_dino"

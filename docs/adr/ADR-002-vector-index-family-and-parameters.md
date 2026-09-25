@@ -24,7 +24,12 @@ model around 64 seeded centroids, 50 queries from the same distribution and none
 of them stored, an exact ranking read with no index in existence and its plan
 checked, every index measured alone on the table with its plan read.
 
-| index | build | size (768) | at the shipped setting | recall@10 | worst query | p95 |
+Recall@10 below is the **mean over the fifty queries**, which is what the
+requirement bounds; the worst single query is beside it and is published rather
+than bounded — over ten neighbours a per-query 0.95 would mean all ten every
+time, which is a demand that an approximate index stop being approximate.
+
+| index | build | size (768) | at the shipped setting | recall@10 (mean) | worst query | p95 |
 |---|---|---|---|---|---|---|
 | **HNSW `m = 16, ef_construction = 64`** | 1.5 s | 39.1 MB | `ef_search` 40 | **1.000** | 1.00 | **1.6 ms** |
 | HNSW `m = 32, ef_construction = 128` | 4.4 s | 39.1 MB | `ef_search` 40 | 1.000 | 1.00 | 1.0 ms |
@@ -56,7 +61,9 @@ and `0002_asset_schema` remains the migration that states it.
 
 The measurement is part of the decision, not a one-off: `scripts/index_benchmark.py`
 is published, seeded and reproducible, the store's specification requires the
-figure to exist and to clear 0.95 at the default effort, and the integration
+figure to exist and requires its **mean over at least fifty queries** to clear
+0.95 at the default effort — with the worst single query published beside it —
+and the integration
 suite keeps the parts of it that are deterministic — an exact ground truth, a
 recall figure that can report a miss, and the bound cleared on a corpus CI can
 build.

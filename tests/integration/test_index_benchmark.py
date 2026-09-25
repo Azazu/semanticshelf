@@ -38,7 +38,10 @@ SCHEMA = "index_benchmark_tests"
 #: Small enough for CI to build in seconds, large enough that an index asked to
 #: look one candidate deep misses most of the ranking.
 ASSETS = 2000
-QUERIES = 5
+#: The requirement bounds the *mean* over at least fifty queries, so the guard
+#: averages over fifty too — a bound checked over five would be a different
+#: statistic wearing the same number (Gate 1 round 1, finding 2).
+QUERIES = 50
 
 
 def benchmark() -> ModuleType:
@@ -329,7 +332,10 @@ async def test_recall_at_the_effort_the_service_ships_with_clears_the_bound(
 
     points = await sweep_of(engine, corpus, at_shipped, model=model)
 
-    assert points[0].recall >= 0.95, f"{model}: {ASSETS} vectors, ef_search {configuration.shipped}"
+    assert points[0].recall >= 0.95, (
+        f"{model}: mean over {QUERIES} queries, {ASSETS} vectors, "
+        f"ef_search {configuration.shipped} (worst single query {points[0].worst})"
+    )
 
 
 async def test_which_iterative_scan_a_family_has_is_the_database_s_answer(
