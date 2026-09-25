@@ -30,14 +30,19 @@ with the first change of stage 3.)
 
 ## Stage 3 — image→image, filters, worker, index tuning
 
-Started: `add-dinov2-image-search` and `add-tag-and-meta-filters` are merged and
-archived. A picture is a query now — one sent in a request or one the store
+Started: `add-dinov2-image-search`, `add-tag-and-meta-filters` and
+`add-indexing-worker` are merged and archived. A picture is a query now — one sent in a request or one the store
 already holds — every search takes the model that answers it, and `semanticshelf
 index missing` gives a model that arrived late the vectors it has none of. Every
 search and the listing narrow by tags and metadata inside the vector query, an
 answer says when the scan stopped at its own bound rather than at the end of the
 ranking, and `scripts/filter_benchmark.py` measures which plan answers at which
 selectivity (`docs/how-to/benchmarks.md`) — the numbers change 14 starts from.
+And the queue finally has the process it was built for: `semanticshelf worker`
+claims with `SKIP LOCKED` alongside any number of its own kind, stops after the
+batch it holds when a signal arrives, and `INDEXING_RUNNER` decides whether the
+API and the import commands do the work themselves or leave all of it to it.
+Only change 14 is left in this stage.
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|

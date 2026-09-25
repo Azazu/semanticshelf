@@ -1,7 +1,7 @@
 # Handoff — add-indexing-worker
 
 **Updated:** 2026-09-24 · claude
-**State:** ready-to-merge
+**State:** merged
 **Branch:** change/add-indexing-worker
 
 ## Done this session
@@ -34,16 +34,13 @@ them). `make check` 580, integration 275, ui 59, both script suites, `sh -n`,
 
 ## Next step
 
-`/git:merge add-indexing-worker` — **Gate 2 confirmed** (confirmation 1 of round
-1, commit `3f47574`): all three findings resolved, nothing new raised. Every
-task checked, the branch pushed, CI green on that head.
+Merged into `main` as `28b80bf merge: add-indexing-worker (gate 2 approved)`,
+`--no-ff`, no conflicts; `openspec validate --strict` and `make check` (582)
+were green on the branch immediately before it.
 
-The reviewer notes it could not rerun the process integration tests (its
-database container was down) and inspected them instead; they were run here —
-`make check` 582, integration 276, ui 59 — on the commit it confirmed.
-
-After the merge: `/opsx:archive add-indexing-worker`, then the Russian companion
-document outside the repository.
+`/opsx:archive add-indexing-worker` — the `indexing-jobs` delta syncs into
+`openspec/specs/`, then this directory moves under `changes/archive/`. After
+that, the Russian companion document outside the repository.
 
 ## Blockers
 
