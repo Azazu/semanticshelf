@@ -513,6 +513,30 @@ async def exact_top(
     return [row.asset_id for row in await connection.execute(statement)]
 
 
+def refuse_if_knob_ignored(*, knob: str, asked: int, applied: str) -> None:
+    """Stop unless the search knob this step asked for is the one in force.
+
+    PostgreSQL accepts `SET hnsw.anything = whatever` without complaint while
+    the extension's library is not loaded in the session, and a knob that was
+    sent and ignored gives a flat curve — which reads exactly like an index with
+    nothing to gain from a deeper search.
+    """
+    if applied.strip() != str(asked):
+        raise SystemExit(
+            f"refusing to report: {knob} is {applied!r} inside the transaction that was "
+            f"told to set it to {asked}"
+        )
+
+
+def refuse_if_other_index(plan: str, *, name: str, key: str) -> None:
+    """Stop unless the index under measurement is the one that answered."""
+    if name not in plan:
+        raise SystemExit(
+            f"refusing to report: {key} was measured on a plan that does not use "
+            f"{name}:\n{brief(plan)}"
+        )
+
+
 def refuse_if_approximate(plan: str) -> None:
     """Stop unless the ground truth was read from the rows themselves."""
     if "Index Scan" in plan or "Index Only Scan" in plan:
@@ -552,11 +576,7 @@ async def sweep(
                 sa.text("SELECT current_setting(:knob)"), {"knob": configuration.knob}
             )
         ).scalar_one()
-        if int(applied) != setting:
-            raise SystemExit(
-                f"refusing to report: {configuration.knob} is {applied!r} inside the "
-                f"transaction that was told to set it to {setting}"
-            )
+        refuse_if_knob_ignored(knob=configuration.knob, asked=setting, applied=str(applied))
         # Warm: the first execution of a shape also prepares it, and that cost
         # belongs to no measurement.
         await connection.execute(page_statement(model=model, vector=queries[0]))
@@ -571,11 +591,7 @@ async def sweep(
             recalls.append(recall_at([row.asset_id for row in rows][:TOP], truth))
 
         plan = await plan_of(connection, page_statement(model=model, vector=queries[0]))
-        if configuration.name not in plan:
-            raise SystemExit(
-                f"refusing to report: {configuration.key} was measured on a plan that does "
-                f"not use {configuration.name}:\n{brief(plan)}"
-            )
+        refuse_if_other_index(plan, name=configuration.name, key=configuration.key)
         points.append(
             Point(
                 model=model,
@@ -907,6 +923,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(why)
     if not 1 <= parsed.queries <= QUERIES:
         parser.error(f"--queries takes 1 to {QUERIES}")
+    # A corpus smaller than the ranking has no recall@10 to report: the ground
+    # truth would be shorter than ten and every figure a division by what is
+    # missing. Refused at the edge rather than crashed at the arithmetic.
+    if parsed.assets < TOP:
+        parser.error(f"--assets takes {TOP} or more: recall@{TOP} needs {TOP} neighbours to find")
 
     report = asyncio.run(
         run(assets=parsed.assets, queries=parsed.queries, seed=parsed.seed, schema=parsed.schema)

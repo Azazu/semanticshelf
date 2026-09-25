@@ -1,44 +1,34 @@
 # Handoff — tune-vector-indexes
 
 **Updated:** 2026-09-25 · claude
-**State:** awaiting-gate-2
+**State:** fixing-g2
 **Branch:** change/tune-vector-indexes
 
 ## Done this session
-- Planning artifacts (proposal, spec delta on `embedding-storage`, design,
-  tasks), tier **medium**.
-- `scripts/bench_schema.py`: the guard that keeps a published benchmark out of
-  the service's tables, shared by both commands. `filter_benchmark.py` imports
-  it; what it measures, prints and accepts is unchanged.
-- `scripts/index_benchmark.py`: per model, a seeded clustered corpus, an exact
-  ranking to grade against, four indexes built one at a time (shipped HNSW as
-  the migration declares it, HNSW m=32/ef_construction=128, IVFFlat at
-  lists = rows/1000 and lists = sqrt(rows)), recall@10 with its worst query, p95
-  by nearest rank, both knob curves, and what a narrowed page does under each
-  family's strictest iterative scan.
-- Evidence: 18 unit tests for the arithmetic and the corpus, 11 integration
-  tests (store untouched, schema gone, names refused, the ground truth's plan,
-  one index at a time, a miss reported as a miss, the bound cleared at 2 000
-  vectors, the iterative-scan values read from the database), and a case in
-  `test_import_discipline.py` that the service imports no measurement command.
-- The published run at 10 000 assets per model, twice; **ADR-002** written from
-  it; `docs/how-to/benchmarks.md` now carries both measurements.
-- Reconciliation: NFR-PERF-4's "demo corpus", requirements §3.2 and §7 row 14,
-  ROADMAP row 14 (tier), AGENTS.md's index-choice line, `searching.md`.
-
-## The result, in one line
-Both bounds are met by the shipped configuration — recall@10 1.000 at
-`ef_search` 40 for both models, p95 1.6 ms and 1.2 ms — so design decision 9's
-first row applies: no migration, no setting changed, nothing in the service
-touched. IVFFlat also loses structurally: it has no `strict_order` iterative
-scan, which change 12's narrowed search rests on.
+- Gate 2 round 1 came back `changes-requested` with two findings; both are now
+  `fixed` in `review.md`.
+- **Finding 1 (major), accepted: the tier is `high`, not `medium`.** The
+  `--schema` value is checked and then interpolated into `CREATE SCHEMA`, table
+  DDL and `DROP SCHEMA ... CASCADE` — security-sensitive input handling and
+  deletion, both `high` triggers, and change 12 was raised for the same reason.
+  What `high` asks for is now there: the applicability table in `design.md`
+  (deletion, input, crash around the external effect, concurrent writers,
+  idempotent retries, empty inputs, with what each does **not** guarantee), the
+  two inline checks of `sweep` named as functions so they can be exercised, an
+  `--assets` floor, the shared guard's own unit and integration tests — including
+  the one that matters most: `guard()` refuses when an unqualified name resolves
+  to the service's own table — and a demonstrated failing input for every new or
+  changed check (§8.6 of `tasks.md`: eight removals, eight failures).
+- **Finding 2 (minor), fixed:** the recall bound is asserted for every model in
+  `EMBEDDING_MODELS`, not only `clip-vit-l14`.
+- Tier reconciled in `openspec/ROADMAP.md` row 14 and `docs/explanation/requirements.md`
+  §7 row 14.
 
 ## Next step
-The user pushes `change/tune-vector-indexes` and watches CI; on green,
-`/gate-review tune-vector-indexes 2`.
+`high` requires Gate 1 on the artifacts, which this change never had:
+`/gate-review tune-vector-indexes 1`. On its approval, Gate 2 confirmation of
+round 1 (`/gate-review tune-vector-indexes 2 confirm 1`).
 
 ## Blockers
-None. `scripts/pregate-verify.sh gate2 tune-vector-indexes` — all checks passed
-(0 warnings). Locally green: `make check` (602), `make test-integration` (287),
-`scripts/workflow_verify_test.sh` (23), `scripts/gate_run_test.sh` (77),
-`openspec validate --all --strict` (16/16).
+None. Locally green: `make check` (633), `make test-integration` (293),
+`openspec validate tune-vector-indexes --strict`.

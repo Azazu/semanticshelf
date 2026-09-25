@@ -172,3 +172,56 @@
   tune-vector-indexes` passing. Verify: the verifier's output is recorded in the
   handoff. The gate itself follows the user's push and a green CI run on that
   exact HEAD — the executor never queries GitHub Actions.
+
+## 8. Gate 2 round 1 — the tier, and what `high` asks for
+
+- [x] 8.1 Finding 1, accepted: `**Risk-Tier:** high` in `proposal.md` with the
+  reason (the `--schema` value is checked and then interpolated into
+  `CREATE SCHEMA`, table DDL and `DROP SCHEMA ... CASCADE` — security-sensitive
+  input handling and deletion, and change 12 was raised for the same reason).
+  Verify: the tier line reads `high`; `openspec/ROADMAP.md` row 14 and
+  `docs/explanation/requirements.md` §7 row 14 say the same.
+- [x] 8.2 The applicability table `high` requires, in `design.md`, covering only
+  the triggered questions — deletion, security-sensitive input, crash around the
+  external effect, concurrent writers, idempotent retries, empty inputs — with
+  one `n/a` line for the rest. Verify: every row names its mechanism and what it
+  does **not** guarantee; the table is re-read whole.
+- [x] 8.3 The two checks that were inline in `sweep` are named functions, so
+  they can be exercised on their own: `refuse_if_knob_ignored` and
+  `refuse_if_other_index` in `scripts/index_benchmark.py`. Verify: unit tests
+  cover each one's accepting and refusing case.
+- [x] 8.4 A corpus smaller than the ranking is refused at the edge (`--assets`
+  below ten), because recall@10 over fewer than ten neighbours is a division by
+  what is missing. Verify: `tests/unit/test_index_benchmark.py` asserts exit
+  code 2 for `--assets 9`, `--queries 0` and `--queries 51`.
+- [x] 8.5 The shared guard gets its own tests rather than only its commands':
+  `tests/unit/test_bench_schema.py` (every accepted and refused name, the `\Z`
+  case named) and `tests/integration/test_bench_schema.py` (a name already taken
+  is refused; the copy carries the migration's own indexes; **the guard refuses
+  when an unqualified name resolves to the service's own table**; a name that
+  resolves nowhere is refused too; the drop removes what it was given and
+  nothing else). Verify: 21 unit and 5 integration tests pass.
+- [x] 8.6 A demonstrated failing input for every new or changed check, run by
+  removing the check and recording what fell over:
+
+  | Check removed | What failed |
+  |---|---|
+  | `SCHEMA_PATTERN` ends with `$` instead of `\Z` | 3 failed, 30 passed |
+  | `own()` uses `CREATE SCHEMA IF NOT EXISTS` | 2 failed, 15 passed |
+  | `guard()` resolves no name | 2 failed, 3 passed |
+  | the cleanup drops whether or not this run created the schema | 1 failed, 11 passed |
+  | `refuse_if_approximate` returns at once | 2 failed, 38 passed |
+  | `refuse_if_knob_ignored` returns at once | 1 failed, 27 passed |
+  | `refuse_if_other_index` returns at once | 1 failed, 27 passed |
+  | the `--assets` floor is never applied | 1 failed, 27 passed |
+
+  Verify: each row is one run of the affected suites with that one edit and
+  nothing else; every file was restored afterwards and `git status` is clean of
+  them.
+- [x] 8.7 Finding 2 (minor), fixed: the recall bound is asserted for **every**
+  model in `EMBEDDING_MODELS`, not only `clip-vit-l14`. Verify:
+  `tests/integration/test_index_benchmark.py` parametrises it and both cases
+  pass (12 tests in that file).
+- [x] 8.8 Gate 1 on the artifacts, which `high` requires and this change never
+  had. Verify: `scripts/gate-run.sh tune-vector-indexes 1 full` records a round
+  in `review.md`; its verdict decides whether Gate 2 is asked again.

@@ -49,6 +49,24 @@ See `proposal.md` — Why. What shapes the approach is what already exists:
   own narrowed search keeps the contract change 12 wrote.
 - No sampling framework. Q query vectors, one seed, the arithmetic written out.
 
+## Applicability (high tier)
+
+Only the questions this change actually triggers; the rest get their `n/a` line.
+
+| Question | Answer |
+|---|---|
+| **Deletion / expiry** | The only deletion is `DROP SCHEMA <name> CASCADE`, and three things stand before it: the name is refused unless it matches `^[a-z_][a-z0-9_]{0,48}\Z` and is outside `public`, `information_schema` and `pg_*` (refused during argument parsing, before anything is connected to); the schema is *created* by the run with a plain `CREATE SCHEMA`, never `IF NOT EXISTS` and never a `DROP` first, so a name already taken is a refusal; and the cleanup runs only behind a flag set after that create committed. What it does **not** guarantee: a run killed between the create and its own cleanup leaves the schema behind — deliberately, because the alternative is a command that drops a schema it may not have made. The next run says so and names the two ways out. |
+| **Security-sensitive input handling** | One value arrives from outside: `--schema`. It cannot be a bound parameter (a schema name is an identifier, not a value), so it is validated against an allowlist pattern and a protected-name list, at the edge, in one function both commands call. Everything else interpolated into DDL comes from the code (`TABLES`, the configuration names) or from the database itself (the copied index definitions, read from `pg_indexes` of the schema this run created). |
+| **Crash before / after an external effect** | The external effect is the schema and its rows. A crash before the create leaves nothing; after it, the schema survives and is refused rather than reused. Nothing outside that schema is ever written, which the resolution check enforces before the first statement that writes. |
+| **Concurrent writers** | Two runs with the same `--schema` cannot both proceed: the second's `CREATE SCHEMA` fails and it exits without touching anything, including the first's schema. Two runs with different names do not share a row. Neither writes to the service's tables, so a run alongside a live service is safe in the direction that matters. |
+| **Idempotency of retries** | Re-running after a crash that left a schema behind is refused with a message naming the two remedies (remove it, or pass another name). Re-running after a clean run is an ordinary run. Recall figures repeat exactly for HNSW; IVFFlat's do not, because its lists come from a k-means over a sample — recorded in the ADR rather than smoothed over. |
+| **Authorization boundary** | n/a — an operator command with the credentials its operator already has; it adds no path from a request to any of this (a unit test proves the service imports no measurement command). |
+| **Money rounding** | n/a. |
+| **Empty / zero / null inputs** | `--assets` below ten is refused: recall@10 over fewer than ten neighbours is a division by what is missing. `--queries` is bounded to 1…50. A corpus with no vector of a model cannot occur — the corpus is built for every model in `EMBEDDING_MODELS`. |
+
+Every check named above has a test that fails when the check is removed; §8 of
+`tasks.md` records each removal and what fell over.
+
 ## Decisions
 
 ### 1. The corpus is synthetic, clustered and seeded — not uniform, not the demo corpus

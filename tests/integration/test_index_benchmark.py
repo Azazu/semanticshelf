@@ -22,7 +22,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.db.engine import create_session_factory
-from app.domain import CLIP_VIT_L14, dimension_of
+from app.domain import CLIP_VIT_L14, EMBEDDING_MODELS, dimension_of
 from tests.scripts import script_module
 
 pytestmark = pytest.mark.integration
@@ -314,18 +314,22 @@ async def test_an_index_that_looks_one_candidate_deep_reports_a_miss(
     assert deep.recall > shallow.recall, "and the knob is what made the difference"
 
 
+@pytest.mark.parametrize("model", sorted(EMBEDDING_MODELS))
 async def test_recall_at_the_effort_the_service_ships_with_clears_the_bound(
-    engine: AsyncEngine, corpus: Corpus
+    engine: AsyncEngine, corpus: Corpus, model: str
 ) -> None:
-    """NFR-PERF-4's bound, on a corpus CI can build in seconds. The published
-    measurement is the one at ten thousand vectors per model; what this keeps is
-    that the shipped configuration does not silently fall off it."""
-    configuration = shipped_configuration(corpus, CLIP_VIT_L14)
+    """NFR-PERF-4's bound, on a corpus CI can build in seconds, for **every**
+    model the store indexes — the requirement and ADR-002 cover each of them,
+    and a regression confined to one width would otherwise leave this green
+    (Gate 2 round 1, finding 2). The published measurement is the one at ten
+    thousand vectors per model; what this keeps is that the shipped
+    configuration does not silently fall off the bound."""
+    configuration = shipped_configuration(corpus, model)
     at_shipped = replace(configuration, curve=(configuration.shipped,))
 
-    points = await sweep_of(engine, corpus, at_shipped)
+    points = await sweep_of(engine, corpus, at_shipped, model=model)
 
-    assert points[0].recall >= 0.95, f"{ASSETS} vectors, ef_search {configuration.shipped}"
+    assert points[0].recall >= 0.95, f"{model}: {ASSETS} vectors, ef_search {configuration.shipped}"
 
 
 async def test_which_iterative_scan_a_family_has_is_the_database_s_answer(
@@ -364,32 +368,35 @@ def shipped_configuration(corpus: Corpus, model: str) -> Any:
     )
 
 
-async def sweep_of(engine: AsyncEngine, corpus: Corpus, configuration: Any) -> list[Any]:
+async def sweep_of(
+    engine: AsyncEngine, corpus: Corpus, configuration: Any, *, model: str = CLIP_VIT_L14
+) -> list[Any]:
     """Build the configuration if it is not there, and sweep its knob."""
     module = corpus.module
+    queries = corpus.queries[model][:QUERIES]
     async with module.inside(engine, schema=corpus.schema) as connection:
         present = await module.vector_indexes(connection, schema=corpus.schema)
         if configuration.name not in present:
             await module.create(
                 connection,
                 configuration=configuration,
-                model=CLIP_VIT_L14,
+                model=model,
                 schema=corpus.schema,
             )
 
     async with module.inside(engine, schema=corpus.schema) as connection:
         truths = [
-            await module.exact_top(connection, model=CLIP_VIT_L14, vector=vector, checked=False)
-            for vector in corpus.queries[CLIP_VIT_L14][:QUERIES]
+            await module.exact_top(connection, model=model, vector=vector, checked=False)
+            for vector in queries
         ]
 
     async with module.inside(engine, schema=corpus.schema) as connection:
         return list(
             await module.sweep(
                 connection,
-                model=CLIP_VIT_L14,
+                model=model,
                 configuration=configuration,
-                queries=corpus.queries[CLIP_VIT_L14][:QUERIES],
+                queries=queries,
                 truths=truths,
             )
         )

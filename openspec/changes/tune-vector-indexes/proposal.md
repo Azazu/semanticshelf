@@ -1,6 +1,6 @@
 # Proposal — tune-vector-indexes
 
-**Risk-Tier:** medium
+**Risk-Tier:** high
 
 The roadmap carried this change as `low`, and for its visible half that is
 right: a measurement command, a table in a how-to, an ADR. The half that raises
@@ -8,9 +8,18 @@ it is the guard between a published command and the person's own corpus. That
 guard exists because an earlier version of `scripts/filter_benchmark.py` erased
 this repository's demo corpus while change 12 was being measured; this change
 moves it into a module a second command shares and adds that second command
-beside it, which creates and drops schemas of its own. Gate 2 reads that diff.
-Gate 1 is not needed: no new architecture, and the artifacts here are a
-measurement plan.
+beside it, which creates and drops schemas of its own.
+
+Raised from `medium` to `high` at Gate 2 round 1, finding 1, and the reviewer is
+right by the letter of AGENTS.md and by this repository's own precedent. The
+`--schema` value is checked and then interpolated into `CREATE SCHEMA`, into
+table DDL and into `DROP SCHEMA ... CASCADE`: that is security-sensitive input
+handling and deletion, both `high` triggers, and change 12 — which wrote this
+guard — was itself raised to `high` at its Gate 1 for handling client input.
+What `high` costs here is what this change should have carried from the start:
+the applicability table in `design.md`, a demonstrated failing input for every
+new or changed check (§8 of `tasks.md`), and Gate 1 on the artifacts before
+Gate 2 is asked again.
 
 ## Why
 

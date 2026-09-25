@@ -54,7 +54,7 @@ search to rest on.
 |---|---|---|---|
 | 12 | `add-tag-and-meta-filters` | `tags_all`, `tags_any`, `meta.<key>` inside the vector query on every search and the listing; `hnsw.iterative_scan` for narrowed queries; `scan_limited` in the answer; `scripts/filter_benchmark.py` + `docs/how-to/benchmarks.md` | high |
 | 13 | `add-indexing-worker` | `semanticshelf worker` with `SKIP LOCKED` claims and a bounded poll; a stop that finishes the batch it holds and a second signal that does not; `INDEXING_RUNNER` governing the API and both importing commands; two child processes on one queue as the evidence | high |
-| 14 | `tune-vector-indexes` | HNSW vs IVFFlat per model, recall@10 against an exact ranking, p95, `ef_search` curve, extending `docs/how-to/benchmarks.md` (change 12 started it), ADR-002; the schema guard shared by both benchmarks | medium |
+| 14 | `tune-vector-indexes` | HNSW vs IVFFlat per model, recall@10 against an exact ranking, p95, `ef_search` curve, extending `docs/how-to/benchmarks.md` (change 12 started it), ADR-002; the schema guard shared by both benchmarks | high |
 
 ## Stage 4 — full stack, quality, docs
 

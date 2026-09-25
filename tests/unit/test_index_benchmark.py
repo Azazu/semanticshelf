@@ -135,3 +135,85 @@ def test_each_width_gets_its_own_vectors() -> None:
 def test_a_vector_is_written_as_pgvector_reads_it() -> None:
     written = benchmark.literal(np.array([0.5, -0.25, 0.125], dtype=np.float32))
     assert written == "[0.5,-0.25,0.125]"
+
+
+# --- the checks that stop a run rather than publish a wrong figure ----------------
+
+INDEX_PLAN = """Limit  (cost=53.33..74.31 rows=21 width=24)
+  ->  Index Scan using embeddings_vector_idx on embeddings  (cost=53.33..4249.00 rows=2000)
+        Order By: ((vector)::vector(768) <=> '[...]'::vector)"""
+
+SCAN_PLAN = """Limit  (cost=224.56..224.62 rows=21 width=24)
+  ->  Sort  (cost=224.56..226.06 rows=600 width=24)
+        ->  Seq Scan on embeddings  (cost=0.00..75.50 rows=3000 width=34)
+              Filter: (model = 'clip-vit-l14'::text)"""
+
+
+def test_a_ground_truth_an_index_answered_is_refused() -> None:
+    with pytest.raises(SystemExit) as refused:
+        benchmark.refuse_if_approximate(INDEX_PLAN)
+    assert "not a ground truth" in str(refused.value)
+
+
+def test_a_ground_truth_read_from_the_rows_is_accepted() -> None:
+    assert benchmark.refuse_if_approximate(SCAN_PLAN) is None
+
+
+def test_a_knob_that_did_not_take_stops_the_run() -> None:
+    """A flat curve reads like an index with nothing to gain from a deeper
+    search, so a setting that was sent and ignored may never be reported."""
+    with pytest.raises(SystemExit) as refused:
+        benchmark.refuse_if_knob_ignored(knob="hnsw.ef_search", asked=200, applied="40")
+    assert "hnsw.ef_search" in str(refused.value) and "200" in str(refused.value)
+
+
+def test_a_knob_in_force_passes() -> None:
+    assert benchmark.refuse_if_knob_ignored(knob="hnsw.ef_search", asked=40, applied="40") is None
+
+
+def test_a_measurement_on_another_index_is_refused() -> None:
+    with pytest.raises(SystemExit) as refused:
+        benchmark.refuse_if_other_index(SCAN_PLAN, name="ix_bench_ivfflat_10", key="ivfflat")
+    assert "does not use ix_bench_ivfflat_10" in str(refused.value)
+
+
+def test_a_measurement_on_the_index_named_passes() -> None:
+    assert (
+        benchmark.refuse_if_other_index(
+            INDEX_PLAN, name="embeddings_vector_idx", key="hnsw shipped"
+        )
+        is None
+    )
+
+
+def test_a_plan_in_a_message_is_shortened_but_kept_readable() -> None:
+    """Every line of a real plan here carries the query vector — a thousand
+    numbers — and none of them is the point."""
+    long_line = "Sort Key: " + "0.1234567," * 400
+    brief = benchmark.brief(long_line)
+    assert len(brief.splitlines()[0]) < 200
+    assert brief.startswith("Sort Key: 0.1234567")
+    assert "characters)" in brief
+
+
+# --- what the command refuses before it connects to anything ----------------------
+
+
+def test_a_corpus_too_small_for_a_ranking_is_refused() -> None:
+    """recall@10 over fewer than ten neighbours is a division by what is
+    missing, so it is refused at the edge rather than crashed at the arithmetic."""
+    with pytest.raises(SystemExit) as refused:
+        benchmark.main(["--assets", "9"])
+    assert refused.value.code == 2
+
+
+def test_more_queries_than_the_corpus_holds_is_refused() -> None:
+    with pytest.raises(SystemExit) as refused:
+        benchmark.main(["--queries", "51"])
+    assert refused.value.code == 2
+
+
+def test_no_queries_at_all_is_refused() -> None:
+    with pytest.raises(SystemExit) as refused:
+        benchmark.main(["--queries", "0"])
+    assert refused.value.code == 2
