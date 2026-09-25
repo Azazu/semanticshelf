@@ -79,3 +79,23 @@
 - Confirmed a clean working tree on `change/add-indexing-worker` at the requested commit before reviewing the artifacts, changed code and tests against `main`.
 - `git diff --check main...change/add-indexing-worker` and `openspec validate add-indexing-worker --strict` passed. No test suite was rerun in this review.
 - Modified only `review.md`; ran no git write commands.
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-25
+**Reviewed-Commit:** 3f47574600ce41da2c53f0231c0d18728b400b2d
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — `run_worker` now reads `stop.asked` before every batch, including the first and the pass after an idle wait. The new unit tests supply due work with an already-requested stop, both for continuous operation and `--once`, and assert that no batch is claimed. The older empty-batch test now requests its stop after the first pass. |
+| 2 | confirmed — `tests.worker_child` now injects only fake, held embedders and a signal acknowledgement, then invokes the production `app.cli` command with its actual arguments. The process tests therefore exercise the command's engine and pool setup, signal policy, loop, summary and cleanup; their assertions cover graceful and forced signals, idle exit, batch completion and `--once`. |
+| 3 | confirmed — The documented startup command sets `APP_PORT=8010`, matching the requests that follow it and the port read by `make run`. |
+
+### Validation
+
+- Reviewed only the diff from `9a9389b3a76b0c0df46d3d7e1b66b3d52ed58f6a` to `3f47574600ce41da2c53f0231c0d18728b400b2d` and collateral relevant to the named findings. No unrelated findings were added.
+- `git diff --check` for that range, `openspec validate add-indexing-worker --strict`, and `tests/unit/test_worker_loop.py` (10 passed) succeeded.
+- The database container was not running, so the process integration tests were inspected but not rerun in this confirmation.
+- Modified only `review.md`; ran no git write commands.
