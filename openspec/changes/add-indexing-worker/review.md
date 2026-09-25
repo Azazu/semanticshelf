@@ -60,3 +60,22 @@
 - Reviewed the diff from `02a6fc6c9bad4e03c730ef881f5e98c50c9650a6` to `c204c6ccc0133b0f9cdbbe7d043a055b440208f6` and collateral relevant to findings 1–3, including CLI requirements and adapters, fake-model support, and the existing fencing and held-transaction tests. No unrelated findings added.
 - `openspec validate add-indexing-worker --strict` passed.
 - Gate 1 confirms the corrected artifacts and verification plan; worker implementation and process-test execution remain for Gate 2. Modified only `review.md`; ran no git write commands.
+
+## Round 1 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-25
+**Reviewed-Commit:** 9a9389b3a76b0c0df46d3d7e1b66b3d52ed58f6a
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `app/services/indexing.py:422–437`; `tests/unit/test_worker_loop.py::test_a_batch_that_took_nothing_is_not_counted_and_says_nothing` | `run_worker` calls `run_batch` before checking `stop.asked`. A SIGTERM received after handlers are installed but before the first claim, or just as an idle wait times out, can therefore claim and execute a fresh batch after the stop request. This contradicts the delta spec's requirement to stop taking new work when asked. Check the token before each new batch, and verify with due work and an already-requested stop; the existing pre-stopped test supplies an empty batch and explicitly expects the extra call. | open |
+| 2 | major | `tests/worker_child.py:96–125`; `tests/integration/test_worker_process.py:172–194`; `app/cli.py:316–382` | The process tests launch `tests.worker_child`, which independently recreates engine/pool setup, signal registration, loop invocation, cleanup and output instead of calling the production `worker` command or `_run_worker` adapter. They establish the shared service-layer policy but cannot detect a broken production adapter, despite tasks 2.3–2.6 and 5.1–5.2 claiming process evidence for the command's signals and lifecycle. Make the child invoke the production adapter with the fake embedder/barrier injected, or add equivalent process coverage of the actual CLI entry point. | open |
+| 3 | minor | `docs/how-to/indexing.md:452–456`; `Makefile:34–39` | The documented startup command sets only `INDEXING_RUNNER=worker`, so `make run` listens on its default port 8000 while the immediately following commands call port 8010. Include `APP_PORT=8010` in the startup command or make the shown requests use port 8000; the page says these exact commands were run. | open |
+
+### Validation
+
+- Confirmed a clean working tree on `change/add-indexing-worker` at the requested commit before reviewing the artifacts, changed code and tests against `main`.
+- `git diff --check main...change/add-indexing-worker` and `openspec validate add-indexing-worker --strict` passed. No test suite was rerun in this review.
+- Modified only `review.md`; ran no git write commands.
