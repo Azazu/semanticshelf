@@ -184,7 +184,7 @@
 - [x] 8.2 The applicability table `high` requires, in `design.md`, covering only
   the triggered questions — deletion, security-sensitive input, crash around the
   external effect, concurrent writers, idempotent retries, empty inputs — with
-  one `n/a` line for the rest. Verify: every row names its mechanism and what it
+  one not-applicable line for the rest. Verify: every row names its mechanism and what it
   does **not** guarantee; the table is re-read whole.
 - [x] 8.3 The two checks that were inline in `sweep` are named functions, so
   they can be exercised on their own: `refuse_if_knob_ignored` and
