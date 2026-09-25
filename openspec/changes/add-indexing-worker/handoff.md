@@ -1,7 +1,7 @@
 # Handoff — add-indexing-worker
 
 **Updated:** 2026-09-24 · claude
-**State:** fixing-g2
+**State:** ready-to-merge
 **Branch:** change/add-indexing-worker
 
 ## Done this session
@@ -34,27 +34,16 @@ them). `make check` 580, integration 275, ui 59, both script suites, `sh -n`,
 
 ## Next step
 
-Push, then `/gate-review add-indexing-worker 2 confirm 1`. Round 1 asked for
-changes (two major, one minor) and all three are fixed:
+`/git:merge add-indexing-worker` — **Gate 2 confirmed** (confirmation 1 of round
+1, commit `3f47574`): all three findings resolved, nothing new raised. Every
+task checked, the branch pushed, CI green on that head.
 
-1. **A real bug.** `run_worker` claimed a batch before reading the stop, so a
-   signal arriving while the handlers were being installed — or while an idle
-   wait was timing out — was answered with one more batch of due work. The stop
-   is now read at the top of the loop, and two unit tests cover an
-   already-requested stop against a queue that has work, with and without
-   `--once`. The fix caught a bad assumption in one of my own tests, which asked
-   for a stop it did not mean.
-2. **The harness was a copy.** The child recreated the engine, the pool, the
-   handlers and the summary instead of running the command, so a broken
-   production adapter could not fail these tests. It now installs the fake
-   embedder and one seam — the acknowledgement — and hands its argv to
-   `app.cli`: the engine, the logging, the loop, the summary and the disposal
-   under test are the real ones. Demonstrated: removing `install_stop_handlers`
-   from the adapter now fails two process tests, where before it would not have.
-3. **The documented startup command** lacked `APP_PORT=8010` while the requests
-   that follow it use that port.
+The reviewer notes it could not rerun the process integration tests (its
+database container was down) and inspected them instead; they were run here —
+`make check` 582, integration 276, ui 59 — on the commit it confirmed.
 
-`make check` 582, integration 276, ui 59.
+After the merge: `/opsx:archive add-indexing-worker`, then the Russian companion
+document outside the repository.
 
 ## Blockers
 
