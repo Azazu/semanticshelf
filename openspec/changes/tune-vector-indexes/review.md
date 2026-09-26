@@ -50,3 +50,15 @@
 | 1 | confirmed — the removal demonstrations accepted in Confirmation 1 remain in `tasks.md` §8.6; this diff does not change the checks or their tests. |
 | 2 | confirmed — the mean-recall requirement and verification accepted in Confirmation 1 remain aligned across the spec, design, ADR, guide and integration test. |
 | 3 | confirmed — the remaining directional claims identified in Confirmation 1 were removed from `design.md` decision 1, the benchmark guide and the script's corpus comment. These now say the comparison with real embeddings is unmeasured, consistent with the design's risks section and ADR-002. |
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** 4ccede86b9c2ba9f5a953685fa300569bb902cce
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the proposal, roadmap and requirements now declare `high`; the design covers the applicable failure boundaries, and `tasks.md` §8.6 records a failing removal demonstration for each of the thirteen new or changed checks. Gate 1 round 1 was completed and its last confirmation is `confirmed`. The schema guard and ownership tests exercise protected names, name resolution into `public`, occupied schemas and cleanup. |
+| 2 | confirmed — the shipped-effort recall test is parametrized over every model in `EMBEDDING_MODELS`, including `dinov2-large`, and checks the mean over fifty queries against 0.95. |
