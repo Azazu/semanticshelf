@@ -1,7 +1,7 @@
 # Handoff — containerize-full-stack
 
 **Updated:** 2026-09-26 · claude
-**State:** ready-to-merge
+**State:** merged
 **Branch:** change/containerize-full-stack
 
 ## Done this session
@@ -65,7 +65,12 @@ one's containers because the project name comes from the environment file. Both
 fixed; the second is in the how-to.
 
 ## Next step
-`/git:merge containerize-full-stack`, then `/opsx:archive containerize-full-stack`.
+`/opsx:archive containerize-full-stack`: sync the new `deployment` capability and
+the modified `demo-ui` requirement into the main specs, then move the change
+into the archive.
+
+Merged into `main` as `d162a18 merge: containerize-full-stack (gate 2
+approved)`, twenty-nine commits, no conflicts.
 
 ## Blockers
 None. `scripts/pregate-verify.sh gate2 containerize-full-stack` — all checks

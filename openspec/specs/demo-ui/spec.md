@@ -14,8 +14,13 @@ the database, SHALL NOT read or write the media root, SHALL NOT load an
 embedding model, and SHALL NOT import the service's own code. Every picture it
 displays SHALL be fetched from an address the API gave it.
 
-It SHALL be configured by the address of the service alone, with a default that
-matches the documented development port.
+It SHALL be configured by the address of the service: the address the interface
+itself calls, and — where a browser cannot use that one — the address the
+pictures are given to the browser under. The second SHALL default to the first,
+so a deployment where they are the same is configured by one setting, and the
+interface SHALL NOT invent either of them from anything but configuration.
+
+Both SHALL have defaults that match the documented development port.
 
 #### Scenario: The interface does not import the service
 - **WHEN** the interface's own modules are read, including the imports inside
@@ -33,6 +38,18 @@ matches the documented development port.
 #### Scenario: A service somewhere else
 - **WHEN** the interface is told a different address for the service
 - **THEN** it talks to that one, and nothing else about it changes
+
+#### Scenario: The interface's server and the browser are on different networks
+- **WHEN** the interface is told one address to call and another for the
+  pictures — the case a container stack creates, where the service's name
+  resolves for the interface's server and not for the browser
+- **THEN** its own requests go to the first and every picture it shows is
+  addressed by the second
+
+#### Scenario: One address is enough when one address is true
+- **WHEN** the interface is told only the address it calls
+- **THEN** the pictures are addressed by that same one, and nothing about the
+  configuration got harder
 
 #### Scenario: The service is not answering
 - **WHEN** the service cannot be reached at all

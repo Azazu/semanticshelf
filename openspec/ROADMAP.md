@@ -54,9 +54,22 @@ iterative order for a narrowed search to rest on.
 
 ## Stage 4 — full stack, quality, docs
 
+Started: `containerize-full-stack` is merged and archived. The system runs as
+four processes and a database from one command, on a machine with nothing but
+Docker: two images from one Dockerfile (the service, and an interface image that
+carries neither `app` nor the model runtime), a one-shot migration the API waits
+for, health deciding every startup order, named volumes for the media root and
+the model cache, loopback publication, `INDEXING_RUNNER=worker` so the process
+serving requests extracts nothing, a scan behind `make sca-image` and an image
+built by CI on every change. `scripts/stack_smoke.sh` is the exit criterion
+executable — up, ready, an upload the worker indexes, a search that finds it, a
+real browser fetching the thumbnail — and `docs/how-to/running-the-stack.md` is
+what a reader follows.
+
+One change is left in the plan.
+
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 15 | `containerize-full-stack` | multi-stage Dockerfile (service and interface), Compose `db`/`migrate`/`api`/`worker`/`ui` with healthchecks and volumes, `make stack` writing the local environment file on a clean checkout, CI image build, `make sca-image` | high |
 | 16 | `harden-quality-and-docs` | README with screenshots, diagram and benchmarks, layering test, dependency audit in CI, ADR index, remaining how-to pages, OpenAPI examples backfilled on the operations of changes 2-7 (FR-OPS-4) | low |
 
 ## Stretch
