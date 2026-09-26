@@ -37,3 +37,15 @@
 |---|------------|
 | 1 | confirmed — `proposal.md` now names the change to the published OpenAPI document and the `app/core/openapi.py` / `app/main.py` mechanism; `design.md` explains why and how declared examples are restored after encoding. |
 | 2 | changes-requested — Tasks 1.3 and 5.3 are open pending CI on the reviewed head, and task 3.2 records a user report for the unchanged README. But `handoff.md` still asks the user to check the Mermaid rendering, contradicting that recorded evidence. Reconcile the handoff with the task before treating 3.2 as verified. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** a16976bfc3c8456701d6f9c64f5526b46e54138b
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The proposal and design still state that `app/core/openapi.py` changes the published OpenAPI document and explain the mechanism. |
+| 2 | changes-requested — `handoff.md` now agrees with task 3.2 that the unchanged README's Mermaid rendering was already reported by the user, and tasks 1.3 and 5.3 remain open pending CI on the current head. However, task 5.1 is still checked and says "every task above is checked with its evidence" while 1.3 above it is open. Leave 5.1 open or revise its completion condition so checked tasks state only completed evidence. |
