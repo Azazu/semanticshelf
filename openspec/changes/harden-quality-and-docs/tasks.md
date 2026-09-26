@@ -42,25 +42,37 @@
 
 ## 2. The examples the API owes
 
-- [ ] 2.1 Add an example to each operation that answers with a body and has
+- [x] 2.1 Add an example to each operation that answers with a body and has
   none: `GET /health`, `GET /ready`, `POST /api/v1/assets`, `GET /api/v1/assets`,
   `GET /api/v1/assets/{id}`, `PATCH /api/v1/assets/{id}`,
   `GET /api/v1/assets/{id}/jobs`, `POST /api/v1/assets/{id}/reindex` — as
   constants beside the schema they illustrate, referenced from the route
   (design decision 5). Verify: the OpenAPI document carries each one.
-- [ ] 2.2 Invert `tests/api/test_openapi_examples.py`: it reads every operation
+- [x] 2.2 Invert `tests/api/test_openapi_examples.py`: it reads every operation
   out of the document and requires an example unless the operation is in a
   table of exemptions with a reason — 204 with no body, and the two that answer
-  with image bytes. Verify: the test fails when an example is removed from any
-  operation, and fails when an operation is added without one (demonstrated by
-  deleting an exemption row).
-- [ ] 2.3 Every example parses as the answer it illustrates, by the model the
+  with image bytes. Demonstrated by breaking it four ways:
+
+  | What was broken | What failed |
+  |---|---|
+  | an operation loses its example | 2 failed, 19 passed |
+  | an exemption is deleted while the operation still has none | 1 failed, 20 passed |
+  | an exemption outlives its operation | 2 failed, 19 passed |
+  | an example carries a count that is not one | 1 failed, 20 passed |
+  | an example carries a timestamp that is not one | 2 failed, 19 passed |
+
+  Verify: every file restored afterwards. Worth recording: the first attempt at
+  the last two put `"finished-ish"` in a job's `status`, and **nothing failed** —
+  that field is a plain `str` in the schema, so the model accepts it. The
+  validation catches what the model constrains and no more, which is the honest
+  scope of "the example parses as the answer it illustrates".
+- [x] 2.3 Every example parses as the answer it illustrates, by the model the
   service answers with. Verify: the test validates each example through its
   model; an example with a wrong field fails it (demonstrated on one).
 
 ## 3. What the project looks like
 
-- [ ] 3.1 Rebuild the demo corpus (`make demo`) — the development database was
+- [x] 3.1 Rebuild the demo corpus (`make demo`) — the development database was
   truncated by integration runs — and extend `scripts/screenshots.py` to the two
   pages it does not visit (Find similar, Upload), filling the Upload form before
   it shoots (design decision 2). Verify: `make screenshots` produces five files

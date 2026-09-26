@@ -82,6 +82,46 @@ class AssetPage(BaseModel):
     has_more: bool
 
 
+#: One asset as the service answers with it, for the OpenAPI document
+#: (FR-OPS-4). Taken from a real response of the demo corpus — a COCO picture
+#: imported from a folder, with the tags the dataset's own annotations gave it
+#: and the provenance the sidecar carried — so a reader sees the shape and the
+#: kind of values an answer really has.
+ASSET_READ_EXAMPLE: dict[str, Any] = {
+    "id": "8e5567c3-22a2-4dd7-a625-61e07a03a46f",
+    "created_at": "2026-09-26T18:35:22.564927Z",
+    "content_type": "image/jpeg",
+    "width": 426,
+    "height": 640,
+    "size_bytes": 110761,
+    "sha256": "cecec146af7564d8229b996b99d25289924c039bf41475b0c533909699b39351",
+    "original_filename": "000000096493.jpg",
+    "source": "folder",
+    "tags": ["couch", "person", "remote"],
+    "meta": {
+        "dataset": "coco-val2017",
+        "licence": "http://creativecommons.org/licenses/by/2.0/",
+        "dataset_id": "96493",
+        "source_url": "http://farm4.staticflickr.com/3226/3076742158_8615337d86_z.jpg",
+        "source_path": "96493/000000096493.jpg",
+    },
+    "index_status": {"clip-vit-l14": "done", "dinov2-large": "done"},
+    "links": {
+        "file": "/api/v1/assets/8e5567c3-22a2-4dd7-a625-61e07a03a46f/file",
+        "thumbnail": "/api/v1/assets/8e5567c3-22a2-4dd7-a625-61e07a03a46f/thumbnail",
+    },
+}
+
+#: A page of them. `has_more` is true here because the corpus it came from holds
+#: sixty and the page asked for one.
+ASSET_PAGE_EXAMPLE: dict[str, Any] = {
+    "items": [ASSET_READ_EXAMPLE],
+    "limit": 1,
+    "offset": 0,
+    "has_more": True,
+}
+
+
 class AssetPatch(BaseModel):
     """What an edit may change.
 

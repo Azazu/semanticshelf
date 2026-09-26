@@ -49,13 +49,22 @@ from app.api.filters import INVALID_FILTER_TYPE, NARROWING_DESCRIPTION, narrowin
 from app.core.errors import instance_for_current_request, problem, problem_response
 from app.domain import ASSET_SOURCES, JOB_STATUSES, Asset, UnknownModelError
 from app.schemas.assets import (
+    ASSET_PAGE_EXAMPLE,
+    ASSET_READ_EXAMPLE,
     DUPLICATE_TYPE,
     AssetPage,
     AssetPatch,
     AssetRead,
     DuplicateAssetProblem,
 )
-from app.schemas.jobs import IndexingJobList, IndexingJobRead, ReindexRequest, ReindexResult
+from app.schemas.jobs import (
+    JOB_LIST_EXAMPLE,
+    REINDEX_RESULT_EXAMPLE,
+    IndexingJobList,
+    IndexingJobRead,
+    ReindexRequest,
+    ReindexResult,
+)
 from app.services import images
 from app.services.assets import (
     DuplicateAssetError,
@@ -141,6 +150,9 @@ def _refuse(status: HTTPStatus, type_: str, detail: str) -> JSONResponse:
         "limit, a tag or the metadata is not acceptable, and 400 when the multipart body "
         "itself is malformed."
     ),
+    responses={
+        HTTPStatus.CREATED: {"content": {"application/json": {"example": ASSET_READ_EXAMPLE}}}
+    },
     response_model=AssetRead,
 )
 async def upload_asset(
@@ -297,6 +309,7 @@ def _parse_index_status(value: str) -> tuple[str, str]:
         "state of that model's newest indexing job. The page says whether more items exist; "
         "there is no total, which would be stale the moment it was read."
     ),
+    responses={HTTPStatus.OK: {"content": {"application/json": {"example": ASSET_PAGE_EXAMPLE}}}},
     response_model=AssetPage,
 )
 async def list_asset_page(
@@ -346,6 +359,7 @@ async def list_asset_page(
     "/{asset_id}",
     summary="Read an asset",
     description="The asset's representation, or 404 when no asset carries that identifier.",
+    responses={HTTPStatus.OK: {"content": {"application/json": {"example": ASSET_READ_EXAMPLE}}}},
     response_model=AssetRead,
 )
 async def read_asset(asset_id: UUID, session: SessionDep) -> Any:
@@ -402,6 +416,7 @@ async def read_thumbnail(asset_id: UUID, session: SessionDep, storage: StorageDe
         "through the same rules as at upload. The picture itself — its bytes, its hash, its "
         "dimensions, its content type — cannot be changed through any endpoint."
     ),
+    responses={HTTPStatus.OK: {"content": {"application/json": {"example": ASSET_READ_EXAMPLE}}}},
     response_model=AssetRead,
 )
 async def patch_asset(asset_id: UUID, patch: AssetPatch, session: SessionDep) -> Any:
@@ -447,6 +462,7 @@ async def delete_one_asset(asset_id: UUID, session: SessionDep, storage: Storage
         "its last attempt failed, newest first per model. 404 when no asset carries that "
         "identifier."
     ),
+    responses={HTTPStatus.OK: {"content": {"application/json": {"example": JOB_LIST_EXAMPLE}}}},
     response_model=IndexingJobList,
 )
 async def read_asset_jobs(asset_id: UUID, session: SessionDep) -> Any:
@@ -468,6 +484,9 @@ async def read_asset_jobs(asset_id: UUID, session: SessionDep) -> Any:
         "the asset never had work for a model. 404 when no asset carries that identifier, "
         "422 when a model is one the service does not know."
     ),
+    responses={
+        HTTPStatus.ACCEPTED: {"content": {"application/json": {"example": REINDEX_RESULT_EXAMPLE}}}
+    },
     response_model=ReindexResult,
 )
 async def reindex_asset(

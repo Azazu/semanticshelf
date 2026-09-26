@@ -1,7 +1,8 @@
 """Capture the screenshots the README uses, from a real service and a real page.
 
 `make screenshots` starts the API and the demo interface on ports it picks,
-drives a headless browser through three pages and writes them to `docs/images/`.
+drives a headless browser through all five pages and writes them to
+`docs/images/`.
 
 Two rules this script keeps, because the alternative is a repository that grows
 stale pictures and a machine that grows orphaned servers:
@@ -117,8 +118,26 @@ def corpus_is_there(api: str) -> bool:
     return bool(stats["assets"])
 
 
+def a_picture_to_upload() -> Path:
+    """Something for the Upload page's form to be holding.
+
+    The demo corpus if it is there — a real picture with a real name is what the
+    page will show a person — and otherwise one drawn here, so the capture works
+    on a machine that has not fetched the dataset.
+    """
+    pictures = sorted((ROOT / ".data" / "demo" / "pictures").rglob("*.jpg"))
+    if pictures:
+        return pictures[0]
+    from PIL import Image
+
+    drawn = ROOT / ".data" / "screenshot-upload.png"
+    drawn.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (640, 480), (52, 96, 148)).save(drawn)
+    return drawn
+
+
 def capture(ui: str) -> None:
-    """Three pages, in the order a person meets them."""
+    """Five pages, in the order a person meets them."""
     from playwright.sync_api import sync_playwright
 
     IMAGES.mkdir(parents=True, exist_ok=True)
@@ -138,6 +157,28 @@ def capture(ui: str) -> None:
             page.wait_for_selector("img", timeout=60_000)
             page.wait_for_timeout(1_500)
             page.screenshot(path=IMAGES / "browse.png")
+
+            # "Find similar" is an action under a thumbnail, so the page it
+            # leads to is captured the way a person actually reaches it.
+            page.get_by_role("button", name="Find similar").first.click()
+            page.wait_for_selector("img", timeout=60_000)
+            page.wait_for_timeout(1_500)
+            page.screenshot(path=IMAGES / "similar.png")
+
+            # The Upload page is a form: empty, it shows nothing about what it
+            # accepts, so it is filled before it is photographed. Nothing is
+            # submitted — a screenshot run must not add to the corpus it is
+            # photographing.
+            page.get_by_role("link", name="Upload").click()
+            page.wait_for_timeout(1_000)
+            page.set_input_files("input[type=file]", str(a_picture_to_upload()))
+            page.get_by_label("Tags").fill("demo, sunset")
+            # Enter, so the field is a value rather than an edit in progress:
+            # Streamlit marks an unapplied input in red, which a screenshot
+            # would present as an error.
+            page.get_by_label("Tags").press("Enter")
+            page.wait_for_timeout(1_500)
+            page.screenshot(path=IMAGES / "upload.png")
 
             page.get_by_role("link", name="Status").click()
             page.wait_for_timeout(1_500)
@@ -190,7 +231,7 @@ def main() -> int:
         ):
             capture(ui)
 
-    for name in ("search.png", "browse.png", "status.png"):
+    for name in ("search.png", "similar.png", "browse.png", "upload.png", "status.png"):
         print(f"wrote docs/images/{name}")
     return 0
 
