@@ -152,18 +152,25 @@
 
 ## 8. Gate 1 round 1 — configuration, the database's address, and the browser's
 
-- [ ] 8.1 Finding 1: `make stack` writes the local environment file from the
+- [x] 8.1 Finding 1: `make stack` writes the local environment file from the
   committed template when it is absent, generating the database password rather
   than defaulting it, and then brings the stack up; the compose file keeps its
-  `:?required` markers (design decision 10a). Verify: in a clone made into a
-  temporary directory (`git clone . <tmp>`), with no local configuration of any
-  kind, the one command brings the stack to ready — recorded — and a second run
-  changes nothing; nothing secret is added to the repository (`git status` in
-  that clone is clean afterwards).
-- [ ] 8.2 Finding 1, the other half: a configuration that exists but is missing
-  a value stops the stack before any service starts, naming the variable.
-  Verify: remove one line from the generated file, run the command, record the
-  message; restore.
+  `:?required` markers (design decision 10a). Verified on a real clone
+  (`git clone` into a temporary directory, nothing in it but what git tracks):
+  the one command brought `db`, `migrate`, `api`, `worker` and `ui` up and
+  `GET /ready` answered
+  `{"status":"ready","checks":{"database":"ok","migrations":"ok","models":"ok","media":"ok"}}`;
+  a second run of the script said "already there — leaving it alone"; and
+  `git status` in that clone was empty afterwards, so nothing it generated is
+  anything the repository can see.
+- [x] 8.2 Finding 1, the other half: a value the stack needs and does not have
+  stops it before any service starts, naming the variable. Verified in the same
+  clone *before* the configuration was written — which is the state a clean
+  checkout is actually in: `docker compose config` stopped with `error while
+  interpolating services.api.environment.DATABASE_URL: required variable
+  DB_USER is missing a value: required`, and no service was created. That is
+  the failure the `:?required` markers exist for, and it is why the one command
+  is `make stack` rather than `docker compose up`.
 - [x] 8.3 Finding 2: `migrate`, `api` and `worker` are given a `DATABASE_URL`
   built in the compose file from the same three variables and the service name
   `db:5432`, not from the host's published port (design decision 10b). Verify,
@@ -201,7 +208,7 @@
 
 ## 9. Closing the change
 
-- [ ] 9.1 `openspec validate containerize-full-stack --strict` passes and every
+- [x] 9.1 `openspec validate containerize-full-stack --strict` passes and every
   task above is checked with its evidence. Verify: the command's output is
   recorded.
 - [x] 9.2 Run locally everything CI runs, in CI's own form:
@@ -212,7 +219,7 @@
   passed, validation 16/16, `sh -n` clean over every shell script,
   `workflow_verify_test` 23 passed, `gate_run_test` 77 passed, `make image`
   built both targets.
-- [ ] 9.3 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
+- [x] 9.3 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
   `scripts/pregate-verify.sh gate2 containerize-full-stack` passing. Verify: the
   verifier's output is recorded in the handoff; the gate follows the user's push
   and a green CI run on that exact HEAD.

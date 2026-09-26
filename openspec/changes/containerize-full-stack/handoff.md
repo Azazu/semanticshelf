@@ -1,7 +1,7 @@
 # Handoff — containerize-full-stack
 
 **Updated:** 2026-09-26 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/containerize-full-stack
 
 ## Done this session
@@ -29,18 +29,27 @@
   a task still described the old "runtime plus the ui group" shape, and two
   further sentences repeated it.
 
-## Blocked on one manual edit
-`.env.example` must carry `__GENERATED__` as its database password value —
-`scripts/stack-env.sh` replaces that marker when it writes the local file, and
-refuses with a message when it is absent. The policy plugin does not let me
-read or write that file. Until it is done, tasks 8.1 and 8.2 (the clean-clone
-run and the missing-value refusal) cannot be verified.
+## The clean checkout, on a real clone
+The template now carries the marker (the user's edit; the policy plugin does not
+let me touch that file). Verified by cloning the repository into a temporary
+directory and running the one command there:
+
+- before anything wrote configuration, `docker compose config` stopped with
+  `required variable DB_USER is missing a value: required` and created nothing —
+  the state every clean checkout is in, and the reason the command is
+  `make stack`;
+- `make stack` wrote the local file with a generated password and brought all
+  five services up; `/ready` answered ready on all four checks;
+- a second run said "already there — leaving it alone", and `git status` in the
+  clone was empty: nothing it generated is anything the repository can see.
 
 ## Next step
-The user makes that one-line edit; then the clean-clone verification, the
-handoff to `awaiting-gate-2`, the push, and `/gate-review containerize-full-stack 2`.
+The user pushes `change/containerize-full-stack` and watches CI — which now has
+an `image` job building both targets. On green:
+`/gate-review containerize-full-stack 2`.
 
 ## Blockers
-Only the edit above. Locally green: `make check` (663), `make test-integration`
+None. `scripts/pregate-verify.sh gate2 containerize-full-stack` — all checks
+passed. Locally green: `make check` (663), `make test-integration`
 (293), `openspec validate --all --strict` (16/16), both script suites,
 `make image`.
