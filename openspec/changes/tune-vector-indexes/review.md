@@ -24,3 +24,16 @@
 | 1 | major | `design.md` Applicability; `tasks.md:204-220` | High-tier review requires a demonstrated failing input for every new or changed check. The removal table covers eight checks but omits new input guards claimed in the same design and tasks, including protected schema names and the `--queries` bounds. Tests that pass with the checks present are not the required removal demonstrations. Enumerate the remaining checks and record a failing input for each, or explain which are not new or changed. | fixed |
 | 2 | major | `specs/embedding-storage/spec.md:23-25,43-48`; `design.md` decision 3; `tasks.md:113-118` | The normative phrase "at least nineteen of every twenty of the ten nearest vectors" reads as a per-query guarantee, which for ten neighbours requires all ten, while the design and acceptance task compare the mean recall over 50 queries with 0.95. State explicitly whether the threshold applies to the mean or to every query, and align the requirement, scenario, tasks and ADR decision with that rule. | fixed |
 | 3 | major | `design.md` decision 1 and Risks / Trade-offs; `docs/how-to/benchmarks.md` What the index approximates; `docs/adr/ADR-002-vector-index-family-and-parameters.md:69-75` | The design calls measured recall a floor for real embeddings because a clustered real corpus is supposedly easier than the synthetic one, but the ADR correctly says the direction of the difference is not established. The proposed benchmark contains no comparison with real embeddings that could prove a floor. Remove the directional guarantee from the design and reconcile the explanatory claims, or add evidence and a verification task that supports it. | fixed |
+
+## Confirmation 1 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** 6874f5654dec6b31d29e6876482bfecf60f18a08
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — `tasks.md` §8.6 now records removal demonstrations for the protected schema names, `--queries` bounds, shipped-index refusal, and empty-input guards; the affected query and shipped-index tests were updated. |
+| 2 | confirmed — the requirement, scenario, design, ADR and benchmark guide explicitly bind 0.95 to mean recall over at least fifty queries and publish the lowest single-query recall separately; the integration check now uses fifty queries. |
+| 3 | changes-requested — `design.md` decision 1 still says that an index is easy where data is clustered and, more directly, that real vectors would show a real distribution is *easier* than the synthetic corpus (`design.md:78-99`). The benchmark guide repeats the former claim (`docs/how-to/benchmarks.md:213-214`). These claims conflict with the revised risks section and ADR-002, which say the direction is not established. Remove or qualify the remaining directional claims. |
