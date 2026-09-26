@@ -77,22 +77,22 @@
   pages it does not visit (Find similar, Upload), filling the Upload form before
   it shoots (design decision 2). Verify: `make screenshots` produces five files
   under `docs/images/`, and each is of the page it is named after.
-- [ ] 3.2 Rewrite `README.md` (NFR-DOC-1): what it is, the five screenshots, the
+- [x] 3.2 Rewrite `README.md` (NFR-DOC-1): what it is, the five screenshots, the
   Mermaid architecture diagram (request path, job path, storage), both quick
   starts (`make stack` and the host), the `make` surface, "what this shows", the
   three boundaries of design decision 6 (no authentication, CPU latencies, the
   English-query limit), and links to the ADRs, the benchmarks and the
   specification. Verify: re-read whole after the last edit; every command in it
-  was run in its exact form; the Mermaid block renders (checked in the GitHub
-  preview by the user, who reports back).
+  was run in its exact form; the Mermaid block renders (GitHub's own renderer —
+  the user reports what the pushed page looks like).
 - [x] 3.3 Write `docs/explanation/architecture.md` — the diagram's long form:
   the request path, the job path, what each process owns, what is deliberately
   absent (no broker, no second store, no authentication) — citing the ADRs
   rather than restating them. Verify: re-read whole; `rg` finds no claim it
   duplicates from the requirements.
 - [x] 3.4 Refresh `docs/README.md`: the three pages it does not list
-  (`how-to/demo-ui.md`, `how-to/running-the-stack.md`,
-  `reference/demo-dataset.md`), the architecture page, and the benchmarks entry
+  (`docs/how-to/demo-ui.md`, `docs/how-to/running-the-stack.md`,
+  `docs/reference/demo-dataset.md`), the architecture page, and the benchmarks entry
   which still describes only its first half. Verify: every file under `docs/` is
   either listed or deliberately not (tutorials), checked by `ls` against the
   index.
@@ -105,7 +105,7 @@
 - [x] 4.2 Sweep for claims this change makes wrong: `rg -n "scaffolded|Stage:"`
   across the repository, and the README's own links. Verified: the only
   surviving mentions are the Makefile's `[SKIP] no alembic.ini — application not
-  scaffolded yet` guard and its description in `reference/commands.md`, which
+  scaffolded yet` guard and its description in `docs/reference/commands.md`, which
   describe a mechanism rather than the project's stage and are still accurate;
   no document calls the project a scaffold any more. Every link in `README.md`
   and in `docs/explanation/architecture.md` resolves (checked by walking them);
@@ -117,16 +117,18 @@
 
 ## 5. Closing the change
 
-- [ ] 5.1 `openspec validate harden-quality-and-docs --strict` passes and every
+- [x] 5.1 `openspec validate harden-quality-and-docs --strict` passes and every
   task above is checked with its evidence. Verify: the command's output is
   recorded.
-- [ ] 5.2 Run locally everything CI runs, in CI's own form:
+- [x] 5.2 Run locally everything CI runs, in CI's own form:
   `FORCE_COLOR=1 CI=true make check`, `openspec validate --all --strict`,
   `sh -n scripts/*.sh`, every `scripts/*_test.sh`,
   `FORCE_COLOR=1 CI=true make test-integration` with the database up,
-  `make audit`, and `make image`. Verify: all green before the branch is offered
-  for a push.
-- [ ] 5.3 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
+  `make audit`, and `make image`. Verify: 689 unit/api passed, 293 integration
+  passed, validation 17/17, `sh -n` clean, `workflow_verify_test` 23 passed,
+  `gate_run_test` 77 passed, the audit reporting no known vulnerabilities in 91
+  packages, and both images built.
+- [x] 5.3 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
   `scripts/pregate-verify.sh gate2 harden-quality-and-docs` passing. Verify: the
   verifier's output is recorded in the handoff; the gate follows the user's push
   and a green CI run on that exact HEAD.
