@@ -102,6 +102,13 @@ jobs:
           # every run downloads it again.
           enable-cache: true
       - run: uv sync --frozen
+      # Beside `make check` rather than in a job of its own: it needs this
+      # checkout and this uv, and a separate job would pay for both again to run
+      # a command that takes a second. Unlike the image scan (change 15), this
+      # one is in CI because NFR-SEC-6 says so — a Python advisory with a fix
+      # available is something this repository can act on the same day.
+      - name: Audit the locked dependencies
+        run: make audit
       - run: make check
       - name: Integration tests
         env:

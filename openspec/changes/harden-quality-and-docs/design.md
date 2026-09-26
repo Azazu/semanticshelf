@@ -88,6 +88,18 @@ Each row gets a **planted violation**: the import is added, the test is run, the
 failure is recorded, the import is removed. A rule nobody has seen fail is a
 rule nobody knows works — this repository has learned that twice.
 
+*Refined while implementing, by reading the graph before asserting it.* The
+first row as written above would have failed on the code as it stands, and
+rightly: `app/api/assets.py` and `app/api/health.py` import `AsyncSession` and
+`AsyncEngine` to annotate what they are handed, and `app/api/deps.py` imports
+`app.db.engine` because wiring a session to a router is its whole job. Neither
+is SQL in a router. So the rule is two rules: **no module of `app.api` may reach
+`app.db`, except `app.api.deps`, named with its reason**; and **what `app.api`
+may take out of SQLAlchemy is a name allowlist** — `AsyncSession`, `AsyncEngine`
+and the factory the wiring module builds sessions with. A router that cannot
+name `select` or `text` cannot build a query, which is "routers contain no SQL"
+as something a check can answer.
+
 *Alternative considered:* a third-party import-linter with its own contract
 file. Rejected: another dependency and another configuration language for a
 table that fits in one screen, in a project whose anti-overengineering rule asks

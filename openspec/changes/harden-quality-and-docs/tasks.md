@@ -2,25 +2,43 @@
 
 ## 1. The rules that were prose
 
-- [ ] 1.1 Write `tests/unit/test_layering.py`: the import graph of `app/` read
+- [x] 1.1 Write `tests/unit/test_layering.py`: the import graph of `app/` read
   whole (module level **and** inside functions), checked against the table of
   forbidden edges in design decision 3 — routers reach no SQL and no model
   layer, `app.ml` reaches no storage, repositories reach no API schema, services
   reach no router, `app.domain` reaches nothing but the standard library.
   Verify: the suite passes on the repository as it stands, and the test names
   the offending module and the import it found when it fails.
-- [ ] 1.2 A planted violation for **every** row of that table: add the import,
-  run the test, record the failure, remove it. Verify: a table in this file with
-  one row per rule, each from one run; `git status` clean afterwards.
-- [ ] 1.3 `make audit` runs `uv audit --locked` with its preview feature named,
+- [x] 1.2 A planted violation for **every** row of that table: add the import,
+  run the test, record the failure, remove it. Each case appends one import to a
+  real module — an import at the end of a file is as legal as one at the top,
+  and the test reads them wherever they are:
+
+  | Import planted | What failed |
+  |---|---|
+  | `app/api/health.py` reaches `app.db` | 1 failed, 8 passed |
+  | `app/api/assets.py` reaches `app.ml` | 1 failed, 8 passed |
+  | `app/ml/fake.py` reaches `app.repositories` | 1 failed, 8 passed |
+  | `app/repositories/assets.py` reaches `app.schemas` | 1 failed, 8 passed |
+  | `app/services/search.py` reaches `app.api` | 1 failed, 8 passed |
+  | `app/domain.py` reaches `fastapi` | 1 failed, 8 passed |
+  | `app/api/assets.py` takes `select` from SQLAlchemy | 1 failed, 8 passed |
+
+  Verify: every file restored afterwards (`git status` clean of them). Two
+  further guards of the test itself: the walker is checked against a sample with
+  an import inside a function, and every rule is checked to be about modules
+  that exist — a rule over a layer nobody wrote passes without looking at code.
+- [x] 1.3 `make audit` runs `uv audit --locked` with its preview feature named,
   and the existing CI `python` job runs the same command (design decision 4).
   Verify: `make audit` passes locally and its output is recorded (today: no
   known vulnerabilities in 91 packages); `make help` lists it; the workflow
   parses and the user's push shows the step green.
-- [ ] 1.4 The audit fails when there is something to fail on. Verify: run it
-  against a lock file holding a package with a known fixable advisory — a
-  throwaway project in the scratchpad, never this repository's lock — and record
-  that it exits non-zero naming the package.
+- [x] 1.4 The audit fails when there is something to fail on. Verified against a
+  throwaway project in the scratchpad (never this repository's lock) pinned to
+  `requests==2.19.1`: the same command exits **1** and names what it found —
+  `idna 2.7 has 4 known vulnerabilities`, each with its advisory and the release
+  it was fixed in. On this repository's own lock it reports no known
+  vulnerabilities in 91 packages.
 
 ## 2. The examples the API owes
 

@@ -5,7 +5,7 @@ RUN     ?= uv run
 MSG     ?= change
 
 .DEFAULT_GOAL := help
-.PHONY: help init up down ps logs run migrate revision test test-models test-integration ui test-ui screenshots demo lock-check lint fmt fmt-check types check image stack stack-down stack-logs stack-warm sca-image
+.PHONY: help init up down ps logs run migrate revision test test-models test-integration ui test-ui screenshots demo lock-check audit lint fmt fmt-check types check image stack stack-down stack-logs stack-warm sca-image
 
 # Application targets are guarded until the scaffold exists: the change that
 # adds the FastAPI app brings alembic.ini together with app/main.py. A
@@ -78,6 +78,12 @@ endif
 
 lock-check: ## uv.lock matches pyproject.toml (CI syncs with --frozen, which does not check this)
 	uv lock --check
+
+audit: ## Known vulnerabilities in the locked dependencies (NFR-SEC-6)
+	# `--locked`: what is audited is the resolution the image installs, not a
+	# fresh one of the declared ranges. The preview flag is named rather than
+	# silenced: the day it changes, this fails loudly instead of skipping.
+	uv audit --locked --preview-features audit-command
 
 lint: ## ruff check
 	$(RUN) ruff check .
