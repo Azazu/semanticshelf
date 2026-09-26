@@ -12,22 +12,14 @@
 - [x] 1.2 A planted violation for **every** row of that table: add the import,
   run the test, record the failure, remove it. Each case appends one import to a
   real module — an import at the end of a file is as legal as one at the top,
-  and the test reads them wherever they are:
-
-  | Import planted | What failed |
-  |---|---|
-  | `app/api/health.py` reaches `app.db` | 1 failed, 8 passed |
-  | `app/api/assets.py` reaches `app.ml` | 1 failed, 8 passed |
-  | `app/ml/fake.py` reaches `app.repositories` | 1 failed, 8 passed |
-  | `app/repositories/assets.py` reaches `app.schemas` | 1 failed, 8 passed |
-  | `app/services/search.py` reaches `app.api` | 1 failed, 8 passed |
-  | `app/domain.py` reaches `fastapi` | 1 failed, 8 passed |
-  | `app/api/assets.py` takes `select` from SQLAlchemy | 1 failed, 8 passed |
-
-  Verify: every file restored afterwards (`git status` clean of them). Two
-  further guards of the test itself: the walker is checked against a sample with
-  an import inside a function, and every rule is checked to be about modules
-  that exist — a rule over a layer nobody wrote passes without looking at code.
+  and the test reads them wherever they are. The results are one table for the
+  whole change, in §6.5, so that the nine layering plants and the checks added
+  at Gate 2 cannot drift apart from each other. Verify: every file restored
+  afterwards (`git status` clean of them). Two further guards of the test
+  itself: the walker is checked against a sample with an import inside a
+  function — in both import forms — and every rule is checked to be about
+  modules that exist, since a rule over a layer nobody wrote passes without
+  looking at code.
 - [ ] 1.3 `make audit` runs `uv audit --locked` with its preview feature named,
   and the existing CI `python` job runs the same command (design decision 4).
   Verify: `make audit` passes locally and its output is recorded (done: no known
@@ -54,17 +46,9 @@
 - [x] 2.2 Invert `tests/api/test_openapi_examples.py`: it reads every operation
   out of the document and requires an example unless the operation is in a
   table of exemptions with a reason — 204 with no body, and the two that answer
-  with image bytes. Demonstrated by breaking it four ways:
-
-  | What was broken | What failed |
-  |---|---|
-  | an operation loses its example | 2 failed, 19 passed |
-  | an exemption is deleted while the operation still has none | 1 failed, 20 passed |
-  | an exemption outlives its operation | 2 failed, 19 passed |
-  | an example carries a count that is not one | 1 failed, 20 passed |
-  | an example carries a timestamp that is not one | 2 failed, 19 passed |
-
-  Verify: every file restored afterwards. Worth recording: the first attempt at
+  with image bytes. Demonstrated by breaking it seven ways, recorded with every
+  other plant of this change in §6.5. Verify: every file restored afterwards.
+  Worth recording: the first attempt at
   the last two put `"finished-ish"` in a job's `status`, and **nothing failed** —
   that field is a plain `str` in the schema, so the model accepts it. The
   validation catches what the model constrains and no more, which is the honest
@@ -129,15 +113,18 @@
 
 ## 5. Closing the change
 
-- [x] 5.1 `openspec validate harden-quality-and-docs --strict` passes and every
-  task above is checked with its evidence. Verify: the command's output is
-  recorded.
+- [ ] 5.1 `openspec validate harden-quality-and-docs --strict` passes (done,
+  and re-run after every edit since) and every task above is checked with its
+  evidence. **Open** while 1.3 and 5.3 wait for the CI run on the head Gate 2
+  reviews: a task that says every task above it is checked cannot itself be
+  checked before they are. It closes with them.
 - [x] 5.2 Run locally everything CI runs, in CI's own form:
   `FORCE_COLOR=1 CI=true make check`, `openspec validate --all --strict`,
   `sh -n scripts/*.sh`, every `scripts/*_test.sh`,
   `FORCE_COLOR=1 CI=true make test-integration` with the database up,
-  `make audit`, and `make image`. Verify: 689 unit/api passed, 293 integration
-  passed, validation 17/17, `sh -n` clean, `workflow_verify_test` 23 passed,
+  `make audit`, and `make image`. Verify (re-run after the Gate 2 fixes, which
+  touched application code): 690 unit/api passed, 293 integration passed,
+  validation 17/17, `sh -n` clean, `workflow_verify_test` 23 passed,
   `gate_run_test` 77 passed, the audit reporting no known vulnerabilities in 91
   packages, and both images built.
 - [ ] 5.3 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
@@ -231,5 +218,16 @@
   Gate 2 reviews, and the branch has moved under two review rounds since the
   last green one. 3.2 stays checked with its evidence named: the user reported
   the diagram renders on the pushed page (`bc06c2b`) and `README.md` has not
-  changed since. Verify: `rg -n "^- \[ \]"` over `tasks.md` lists exactly those
-  two, and both name what closes them.
+  changed since. Verify: every unchecked task names what closes it, and nothing
+  checked claims evidence that does not exist — see 7.3, which is the same rule
+  applied once more.
+- [x] 7.3 Confirmation 2 found the rule's last hiding place: 5.1 claimed
+  "every task above is checked" while 1.3 and 5.3 were open. It is open too now,
+  and closes with them. The same pass removed two records that had started to
+  drift: §1.2 and §2.2 each carried their own copy of a plant table with the
+  counts of the day they were run, and both now point at §6.5, the one table
+  that covers every check this change adds. §5.2's numbers were re-measured
+  after the Gate 2 fixes touched application code (690 unit/api, 293
+  integration, both images rebuilt). Verify: the user arbitrated this third
+  confirmation, as AGENTS.md requires after two failed ones; `rg -n "passed"`
+  over `tasks.md` finds counts only in §5.2 and §6.5.
