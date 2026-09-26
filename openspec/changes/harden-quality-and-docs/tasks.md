@@ -153,14 +153,14 @@
   tier; Gate 1 runs on these artifacts before Gate 2 is confirmed.
 - [x] 6.2 Finding 2: the published example for `GET /assets/{id}/jobs` was
   missing `lease_expires_at` and `last_error` — FastAPI encodes the finished
-  document with `exclude_none` (`fastapi/openapi/utils.py`, the closing
-  `jsonable_encoder`), which eats nulls **inside** an example while the schema
+  document with `exclude_none` (the closing `jsonable_encoder` of its own
+  `get_openapi`), which eats nulls **inside** an example while the schema
   beside it still requires the field. `app/core/openapi.py` now writes every
   declared example back into the finished document, walking the routers FastAPI
   0.141 keeps as wrappers rather than flattening; the test validates the
   example **the document publishes** through its model, and the null-stripping
-  helper it used to compensate with is gone. Verify: the jobs example in
-  `/api/openapi.json` carries both nulls and `IndexingJobList.model_validate`
+  helper it used to compensate with is gone. Verify: in the served OpenAPI
+  document the jobs example carries both nulls and `IndexingJobList.model_validate`
   accepts it; two planted breakages in §6.5.
 - [x] 6.3 Finding 3: the router SQL guard read only `from sqlalchemy import …`,
   so `import sqlalchemy as sa` and `sa.select(...)` passed it. The form itself
