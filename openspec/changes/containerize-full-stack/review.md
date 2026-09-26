@@ -25,3 +25,16 @@
 | 1 | confirmed — `make stack` creates the ignored configuration from the committed template, generates the password, and preserves required-variable failures. Tasks 8.1–8.2 require an exact fresh-clone run, repeat run, and missing-value failure. |
 | 2 | changes-requested — decision 10b assigns `db:5432` to `migrate`, `api`, and `worker`, but task 8.3 checks only migration and API readiness with `FORWARD_DB_PORT` overridden. The worker indexing run in task 5.2 overrides `APP_PORT` and `UI_PORT`, not `FORWARD_DB_PORT`; no task verifies that the worker connects and completes a job while the host database port is overridden. Add that verification to the plan. |
 | 3 | confirmed — decision 10c separates the UI's internal API address from the browser's published address using `APP_PORT`; tasks 8.4–8.5 cover the default and split settings and assert a rendered thumbnail in a browser, including a failing case with the internal name. The `demo-ui` delta updates the affected requirement. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** 6445c0dd7925339cbcec08e1b7ed3d5fdf360b72
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The clean-checkout configuration path and its verification remain as confirmed in Confirmation 1; the reviewed changes do not affect them. |
+| 2 | confirmed — Tasks 5.2 and 8.3 now require the same run with `FORWARD_DB_PORT` overridden to prove migration, API readiness, and completion of an uploaded picture's jobs by the worker with the API runner disabled. Decision 10b records this shared verification. |
+| 3 | confirmed — The browser-reachable image address and rendered-thumbnail verification remain as confirmed in Confirmation 1; the reviewed changes do not affect them. |
