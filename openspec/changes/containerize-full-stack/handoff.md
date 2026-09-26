@@ -1,7 +1,7 @@
 # Handoff — containerize-full-stack
 
 **Updated:** 2026-09-26 · claude
-**State:** awaiting-gate-2
+**State:** ready-to-merge
 **Branch:** change/containerize-full-stack
 
 ## Done this session
@@ -43,10 +43,29 @@ directory and running the one command there:
 - a second run said "already there — leaving it alone", and `git status` in the
   clone was empty: nothing it generated is anything the repository can see.
 
+## Gate 2 · round 1 — confirmed (confirmation 2)
+Two findings, both real, and the second confirmation was the one that mattered:
+
+1. **major** — the template filled the database's own line and left a literal
+   beside it in the URL, so the documented host setup created a database with
+   one value and connected with another. First fixed with a guard, which the
+   confirmation rightly refused: the URL also had the default user, database
+   and port baked in. It is **composed** now, from what the written file says,
+   and a file that does not say which user and database to use is refused.
+   Verified with four fixture templates and end to end on a clone with a
+   non-default user, database and port.
+2. **minor** — the how-to claimed the offline switch in the environment file
+   reached the containers; Compose hands on only what it names. It is passed
+   through now, asserted by a unit case and checked inside a container.
+
+Verifying the host flow on a clean clone also found two things the development
+machine had hidden: `make init` did not wait for the database (a cold container
+meets the migration mid-initialisation), and a second checkout adopts the first
+one's containers because the project name comes from the environment file. Both
+fixed; the second is in the how-to.
+
 ## Next step
-The user pushes `change/containerize-full-stack` and watches CI — which now has
-an `image` job building both targets. On green:
-`/gate-review containerize-full-stack 2`.
+`/git:merge containerize-full-stack`, then `/opsx:archive containerize-full-stack`.
 
 ## Blockers
 None. `scripts/pregate-verify.sh gate2 containerize-full-stack` — all checks
