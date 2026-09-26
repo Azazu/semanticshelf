@@ -37,3 +37,16 @@
 | 1 | confirmed — `tasks.md` §8.6 now records removal demonstrations for the protected schema names, `--queries` bounds, shipped-index refusal, and empty-input guards; the affected query and shipped-index tests were updated. |
 | 2 | confirmed — the requirement, scenario, design, ADR and benchmark guide explicitly bind 0.95 to mean recall over at least fifty queries and publish the lowest single-query recall separately; the integration check now uses fifty queries. |
 | 3 | changes-requested — `design.md` decision 1 still says that an index is easy where data is clustered and, more directly, that real vectors would show a real distribution is *easier* than the synthetic corpus (`design.md:78-99`). The benchmark guide repeats the former claim (`docs/how-to/benchmarks.md:213-214`). These claims conflict with the revised risks section and ADR-002, which say the direction is not established. Remove or qualify the remaining directional claims. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** 6cc263671d90fa4ef9e661b235ae3b897bc4bfb7
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the removal demonstrations accepted in Confirmation 1 remain in `tasks.md` §8.6; this diff does not change the checks or their tests. |
+| 2 | confirmed — the mean-recall requirement and verification accepted in Confirmation 1 remain aligned across the spec, design, ADR, guide and integration test. |
+| 3 | confirmed — the remaining directional claims identified in Confirmation 1 were removed from `design.md` decision 1, the benchmark guide and the script's corpus comment. These now say the comparison with real embeddings is unmeasured, consistent with the design's risks section and ADR-002. |
