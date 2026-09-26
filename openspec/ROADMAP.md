@@ -30,31 +30,27 @@ with the first change of stage 3.)
 
 ## Stage 3 — image→image, filters, worker, index tuning
 
-Started: `add-dinov2-image-search`, `add-tag-and-meta-filters` and
-`add-indexing-worker` are merged and archived. A picture is a query now — one sent in a request or one the store
-already holds — every search takes the model that answers it, and `semanticshelf
-index missing` gives a model that arrived late the vectors it has none of. Every
-search and the listing narrow by tags and metadata inside the vector query, an
-answer says when the scan stopped at its own bound rather than at the end of the
-ranking, and `scripts/filter_benchmark.py` measures which plan answers at which
-selectivity (`docs/how-to/benchmarks.md`) — the numbers change 14 starts from.
-And the queue finally has the process it was built for: `semanticshelf worker`
-claims with `SKIP LOCKED` alongside any number of its own kind, stops after the
-batch it holds when a signal arrives, and `INDEXING_RUNNER` decides whether the
-API and the import commands do the work themselves or leave all of it to it.
-Change 14 closes the stage: `scripts/index_benchmark.py` measures what the
-vector index gives up — recall@10 against an exact ranking, the `ef_search`
-curve, p95, build time and size, HNSW against IVFFlat, per model — and
-**ADR-002** records what that decided. It decided to change nothing: at the size
-the requirements name, the shipped index returns the whole ranking at the effort
-the service sets, and IVFFlat has no strict iterative order for a narrowed
-search to rest on.
+Done: every change of this stage is merged and archived. A picture is a query
+now — one sent in a request or one the store already holds — every search takes
+the model that answers it, and `semanticshelf index missing` gives a model that
+arrived late the vectors it has none of. Every search and the listing narrow by
+tags and metadata inside the vector query, an answer says when the scan stopped
+at its own bound rather than at the end of the ranking, and the queue finally
+has the process it was built for: `semanticshelf worker` claims with
+`SKIP LOCKED` alongside any number of its own kind, stops after the batch it
+holds when a signal arrives, and `INDEXING_RUNNER` decides whether the API and
+the import commands do the work themselves or leave all of it to it.
 
-| # | Change id | Scope (summary) | Tier |
-|---|---|---|---|
-| 12 | `add-tag-and-meta-filters` | `tags_all`, `tags_any`, `meta.<key>` inside the vector query on every search and the listing; `hnsw.iterative_scan` for narrowed queries; `scan_limited` in the answer; `scripts/filter_benchmark.py` + `docs/how-to/benchmarks.md` | high |
-| 13 | `add-indexing-worker` | `semanticshelf worker` with `SKIP LOCKED` claims and a bounded poll; a stop that finishes the batch it holds and a second signal that does not; `INDEXING_RUNNER` governing the API and both importing commands; two child processes on one queue as the evidence | high |
-| 14 | `tune-vector-indexes` | HNSW vs IVFFlat per model, recall@10 against an exact ranking, p95, `ef_search` curve, extending `docs/how-to/benchmarks.md` (change 12 started it), ADR-002; the schema guard shared by both benchmarks | high |
+The stage closes with the index measured rather than assumed.
+`scripts/filter_benchmark.py` says which plan answers a narrowed search at which
+selectivity; `scripts/index_benchmark.py` says what the index gives up when it
+is the plan — recall@10 against an exact ranking, the `ef_search` curve, p95,
+build time and size, HNSW against IVFFlat, per model — and both live in
+`docs/how-to/benchmarks.md` behind one shared guard that keeps a published
+command out of the service's tables. **ADR-002** records what that decided: at
+the size the requirements name, nothing changes. The shipped HNSW returns the
+whole ranking at the effort the service sets, and IVFFlat has no strict
+iterative order for a narrowed search to rest on.
 
 ## Stage 4 — full stack, quality, docs
 

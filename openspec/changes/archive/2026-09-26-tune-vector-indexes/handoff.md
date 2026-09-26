@@ -1,7 +1,7 @@
 # Handoff — tune-vector-indexes
 
 **Updated:** 2026-09-26 · claude
-**State:** ready-to-merge
+**State:** merged
 **Branch:** change/tune-vector-indexes
 
 ## Done this session
@@ -25,7 +25,11 @@ and 1.2 ms against a bound of 100 — and IVFFlat has no `strict_order` iterativ
 scan for a narrowed search to rest on.
 
 ## Next step
-`/git:merge tune-vector-indexes`, then `/opsx:archive tune-vector-indexes`.
+`/opsx:archive tune-vector-indexes`: sync the `embedding-storage` spec with this
+change's delta, then move the change into the archive.
+
+Merged into `main` as `fd80e93 merge: tune-vector-indexes (gate 2 approved)`,
+eighteen commits, no conflicts.
 
 ## Blockers
 None. Locally green: `make check` (635), `make test-integration` (293),
