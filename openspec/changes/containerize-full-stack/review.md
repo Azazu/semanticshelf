@@ -95,3 +95,15 @@
 |---|------------|
 | 1 | changes-requested — The committed template now puts the generated password in both fields, and the recorded clean-checkout run verifies the default values. But the host `DATABASE_URL` still hardcodes `semanticshelf` as user and database and `5433` as port. `scripts/stack-env.sh` checks only that the URL contains the generated password. For example, setting `FORWARD_DB_PORT=5444` publishes PostgreSQL on 5444 while the host migration still connects to 5433; changing `DB_USER` or `DB_NAME` likewise leaves the URL pointed at the old values. Generate or validate the URL against all configured database fields and the published host port, then verify a nondefault configuration. |
 | 2 | confirmed — `HF_HUB_OFFLINE` is passed through the shared environment mapping used by `api`, `worker`, and the one-shot warm command; the how-to now shows the setting, and tasks.md records verification inside a container. |
+
+## Confirmation 2 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** 39a3e1106799d424d3ac5edc9532f906a69b02df
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — `scripts/stack-env.sh` now composes the host `DATABASE_URL` from the generated password and the written `DB_USER`, `DB_NAME`, and `FORWARD_DB_PORT`, with an environment port override when supplied. Isolated checks matched all four fields for nondefault values, a port override, and a template without a URL line; a missing user was refused without a target file. Task 11.3 records a clean checkout migration and successful `/ready` with a nondefault user, database, and port. |
+| 2 | confirmed — The offline setting remains passed to the relevant containers; the reviewed changes do not alter the resolution confirmed in Confirmation 1. |
