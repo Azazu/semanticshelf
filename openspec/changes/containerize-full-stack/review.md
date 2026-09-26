@@ -60,3 +60,14 @@
 | # | Resolution |
 |---|------------|
 | 1 | changes-requested — Decision 1 and tasks 1.3–1.4 now specify a separate `--only-group ui` build and explicit checks that `app` and `torch` are absent. But the same architecture is still contradicted by `proposal.md`'s Impact section, which calls the UI image "the service plus the demo UI", and `design.md`'s Risks section, which says the UI image is a thin layer on the runtime image. Reconcile those collateral claims with the separate build. |
+
+## Confirmation 2 · Gate 1 · Round 2
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** bac6396da16085329d847d0fa77d9ea9f220fa0c
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The proposal's Impact section and the design's Risks section now describe two separate environments, matching design decision 1, tasks 1.3–1.4, and the Dockerfile's independent `ui-builder` and `ui` stages. The tasks explicitly verify that `app` and `torch` are absent from the UI image. |
