@@ -360,7 +360,7 @@ The stage plan is the source for `openspec/ROADMAP.md`; ids are stable across bo
 | # | Change id | Scope | Tier | Exit criterion |
 |---|---|---|---|---|
 | 15 | `containerize-full-stack` | multi-stage Dockerfile on the uv base (runtime without dev/ui groups, and the interface's own image with only its group), Compose services `api`, `worker`, `ui`, `db` plus a one-shot `migrate`, with healthchecks and volumes for media and the model cache, CI image build, `make sca-image` | high (CI infrastructure) | `make stack` on a clean checkout serves the UI and indexes an upload — it writes the local environment file the template describes, which is what `docker compose up` alone cannot do on a fresh clone; CI builds the image |
-| 16 | `harden-quality-and-docs` | README with screenshots, diagram and benchmarks, layering test (NFR-QA-2), dependency audit in CI, ADR index, remaining how-to pages | low | README complete; the layering test fails on a planted violation |
+| 16 | `harden-quality-and-docs` | README with screenshots, diagram and the measured numbers; `docs/explanation/architecture.md`; the layering test (NFR-QA-2); `uv audit` in CI and in `make` (NFR-SEC-6); the documentation index; OpenAPI examples on every operation that answers with a body (FR-OPS-4) | **medium** (raised at the proposal: four fifths is documentation, but a dependency audit in CI can redden a later change and the layering rule is one the repository is held to) | README complete; the layering test fails on a planted violation |
 
 ### Stretch (section 9)
 

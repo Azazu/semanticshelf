@@ -70,7 +70,7 @@ One change is left in the plan.
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 16 | `harden-quality-and-docs` | README with screenshots, diagram and benchmarks, layering test, dependency audit in CI, ADR index, remaining how-to pages, OpenAPI examples backfilled on the operations of changes 2-7 (FR-OPS-4) | low |
+| 16 | `harden-quality-and-docs` | README with screenshots, a Mermaid architecture diagram and the measured numbers; an architecture page; the dependency-rule test of NFR-QA-2 with a planted violation per rule; `uv audit` in CI and in `make`; the documentation index; OpenAPI examples on every operation that answers with a body, with the three exemptions stated where the rule is enforced | medium |
 
 ## Stretch
 

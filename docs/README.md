@@ -7,12 +7,16 @@ may also describe decided design, citing the ADR that decided it.
 
 ## Explanation (understanding-oriented)
 
+- [`explanation/architecture.md`](explanation/architecture.md) — how it is put
+  together: the four processes and what each is not allowed to do, the request
+  path, the job path, where things are stored, what is deliberately absent, and
+  where the layering is enforced
 - [`explanation/requirements.md`](explanation/requirements.md) — the
   technical specification: requirements (FR/NFR ids), data model, API,
   stack, stages; normative for every change
 
-_(architecture and domain model pages arrive with the first
-implementing change)_
+_(the data model has one home, §3 of the specification; a second description of
+it would be the duplication this layout exists to prevent)_
 
 ## How-to (task recipes)
 
@@ -31,9 +35,17 @@ implementing change)_
   a picture you send, a picture the store holds. What a score means, paging and
   its depth bounds, thresholds, which model answers, and how to narrow a search
   by tags and metadata
-- [`how-to/benchmarks.md`](how-to/benchmarks.md) — measuring a narrowed vector
-  search: the command, which plan answers at which selectivity, what the
-  iterative scan buys, and what stale statistics do to all of it
+- [`how-to/running-the-stack.md`](how-to/running-the-stack.md) — the whole
+  system in containers: one command, the five services and what each waits for,
+  the volumes and what survives, the ports and what they do not mean, the images
+  and the scan
+- [`how-to/demo-ui.md`](how-to/demo-ui.md) — the Streamlit demo: what each page
+  does, how to run it against a service somewhere else, and how the screenshots
+  are made
+- [`how-to/benchmarks.md`](how-to/benchmarks.md) — two measurements: which plan
+  answers a narrowed search at which selectivity, and what the vector index
+  gives up — recall@10 against an exact ranking, the `ef_search` curve, HNSW
+  against IVFFlat, per model
 
 ## Reference (facts)
 
@@ -41,6 +53,9 @@ implementing change)_
   command surface: make targets, scripts, agent slash commands
 - [`reference/settings.md`](reference/settings.md) — every environment
   variable the service reads, with defaults and the template lines
+- [`reference/demo-dataset.md`](reference/demo-dataset.md) — where the demo
+  corpus comes from, which licences are accepted and why, and how attribution is
+  given
 
 ## Tutorials (learning-oriented)
 

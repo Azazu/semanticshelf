@@ -85,12 +85,12 @@
   specification. Verify: re-read whole after the last edit; every command in it
   was run in its exact form; the Mermaid block renders (checked in the GitHub
   preview by the user, who reports back).
-- [ ] 3.3 Write `docs/explanation/architecture.md` — the diagram's long form:
+- [x] 3.3 Write `docs/explanation/architecture.md` — the diagram's long form:
   the request path, the job path, what each process owns, what is deliberately
   absent (no broker, no second store, no authentication) — citing the ADRs
   rather than restating them. Verify: re-read whole; `rg` finds no claim it
   duplicates from the requirements.
-- [ ] 3.4 Refresh `docs/README.md`: the three pages it does not list
+- [x] 3.4 Refresh `docs/README.md`: the three pages it does not list
   (`how-to/demo-ui.md`, `how-to/running-the-stack.md`,
   `reference/demo-dataset.md`), the architecture page, and the benchmarks entry
   which still describes only its first half. Verify: every file under `docs/` is
@@ -99,13 +99,19 @@
 
 ## 4. Reconciling what this change touches
 
-- [ ] 4.1 The ADR index is complete and current. Verify: every file matching
+- [x] 4.1 The ADR index is complete and current. Verify: every file matching
   `docs/adr/ADR-*.md` has a row in `docs/adr/README.md` and every row points at
   a file that exists.
-- [ ] 4.2 Sweep for claims this change makes wrong: `rg -n "scaffolded|Stage:"`
-  across the repository, and the README's own links. Verify: no document still
-  describes the project as a scaffold; every link in the README resolves.
-- [ ] 4.3 `openspec/ROADMAP.md` and `docs/explanation/requirements.md` §7 row 16
+- [x] 4.2 Sweep for claims this change makes wrong: `rg -n "scaffolded|Stage:"`
+  across the repository, and the README's own links. Verified: the only
+  surviving mentions are the Makefile's `[SKIP] no alembic.ini — application not
+  scaffolded yet` guard and its description in `reference/commands.md`, which
+  describe a mechanism rather than the project's stage and are still accurate;
+  no document calls the project a scaffold any more. Every link in `README.md`
+  and in `docs/explanation/architecture.md` resolves (checked by walking them);
+  the documentation index lists every file under `docs/` and lists nothing that
+  is not there.
+- [x] 4.3 `openspec/ROADMAP.md` and `docs/explanation/requirements.md` §7 row 16
   carry the tier this change declares and the scope it actually has. Verify:
   both re-read whole.
 
