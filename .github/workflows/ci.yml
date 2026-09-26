@@ -39,6 +39,40 @@ jobs:
       - id: probe
         run: test -f pyproject.toml && echo "python=true" >> "$GITHUB_OUTPUT" || echo "python=false" >> "$GITHUB_OUTPUT"
 
+  # Builds the images and pushes them nowhere: a build needs no registry login,
+  # no package permission and no decision about who may pull it. What it catches
+  # is what a test cannot — a dependency that does not install, a file that
+  # stopped being copied, a lock file the image build refuses (`--locked`).
+  # The stack itself is not run here: that needs the real model weights, which
+  # is not what a pull request should pay for.
+  image:
+    needs: detect
+    if: needs.detect.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The layer cache is the Actions cache service.
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the service image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          push: false
+          cache-from: type=gha,scope=runtime
+          cache-to: type=gha,mode=max,scope=runtime
+      - name: Build the interface image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ui
+          push: false
+          cache-from: type=gha,scope=ui
+          cache-to: type=gha,mode=max,scope=ui
+
   python:
     needs: detect
     if: needs.detect.outputs.python == 'true'

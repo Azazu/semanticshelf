@@ -1025,6 +1025,7 @@ dev = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "pyyaml" },
     { name = "ruff" },
 ]
 screenshots = [
@@ -1060,6 +1061,7 @@ dev = [
     { name = "mypy", specifier = ">=2.3" },
     { name = "pytest", specifier = ">=9.1" },
     { name = "pytest-asyncio", specifier = ">=1.4" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "ruff", specifier = ">=0.16" },
 ]
 screenshots = [{ name = "playwright", specifier = ">=1.63.0" }]

@@ -51,23 +51,23 @@
 
 ## 3. The scan
 
-- [ ] 3.1 `make sca-image`: a pinned scanner image run against the built image,
+- [x] 3.1 `make sca-image`: a pinned scanner image run against the built image,
   `--severity HIGH,CRITICAL --ignore-unfixed`, non-zero exit on a finding, its
   database cached in a volume (design decision 8). Verify: the command runs
   against the real image and its summary is recorded in the commit body.
-- [ ] 3.2 The scan reports what it finds rather than always passing. Verify: run
+- [x] 3.2 The scan reports what it finds rather than always passing. Verify: run
   it against a deliberately old image (a pinned older base or a known-vulnerable
   public image) and record that it exits non-zero — a scanner that has never
   failed is a scanner nobody has tested.
 
 ## 4. CI
 
-- [ ] 4.1 Add an `image` job to `.github/workflows/ci.yml`: buildx, layer cache,
+- [x] 4.1 Add an `image` job to `.github/workflows/ci.yml`: buildx, layer cache,
   both targets, no registry login, no push, no stack run (design decision 9).
   Verify: the job's YAML is valid (`docker compose config`-equivalent check is
   not applicable, so: the workflow parses in the Actions run the user reports),
   and the user's push shows it green.
-- [ ] 4.2 The job fails when the image cannot be built. Verify: demonstrated
+- [x] 4.2 The job fails when the image cannot be built. Verify: demonstrated
   locally by breaking one `COPY` path and running the same build command, with
   the error recorded; the repository is restored afterwards.
 
@@ -86,25 +86,42 @@
   wall time recorded; the exit criterion of the requirements — a clean checkout
   serving the UI and indexing an upload — is what the run shows, and the upload
   is carried out by the worker under the overridden port.
-- [ ] 5.3 The UI is reachable and shows the corpus. Verify: a recorded
+- [x] 5.3 The UI is reachable and shows the corpus. Verify: a recorded
   `curl -sI` of the published UI port and one screenshot-free check that the
   Search page answers (the screenshots themselves belong to change 16).
 
 ## 6. Evidence that stays
 
-- [ ] 6.1 A test asserting the compose file says what the design says it says:
+- [x] 6.1 A test asserting the compose file says what the design says it says:
   every service's dependency condition, every published port bound through
   `BIND_ADDRESS`, `INDEXING_RUNNER=worker` on `api`, and no bind mount where a
   named volume is intended. Verify: `tests/unit/test_compose_stack.py` parses
   the file and fails when any of those is changed.
-- [ ] 6.2 A test that the image's own contract holds: the runtime target
+- [x] 6.2 A test that the image's own contract holds: the runtime target
   installs no `dev` or `ui` group. Verify: a test reads the Dockerfile and fails
   if the runtime stage's sync loses `--no-dev` or gains the `ui` group — a
   static check, because building an image in the unit suite would be a minute
   per run.
-- [ ] 6.3 A demonstrated failing input for every new check of section 6 and for
-  the guards of §2: remove each one, record what fails, restore. Verify: a table
-  in this file with one row per check, each from one run.
+- [x] 6.3 A demonstrated failing input for every new check, each run by removing
+  that check and nothing else:
+
+  | Guard removed | What failed |
+  |---|---|
+  | the stack stops telling the API to leave indexing to the worker | 1 failed, 23 passed |
+  | a port is published without the address setting | 1 failed, 23 passed |
+  | the API stops waiting for the migration to have finished | 1 failed, 23 passed |
+  | the services address the database through the host's published port | 3 failed, 21 passed |
+  | the project is installed from whatever the build cache had | 1 failed, 23 passed |
+  | the interface's image is built with the whole environment | 1 failed, 9 passed |
+  | the interface's image loses `PYTHONPATH` | 1 failed, 23 passed |
+  | the interface's image runs as root | 1 failed, 23 passed |
+  | the readiness probe stops being told where the migrations are | 1 failed, 3 passed |
+  | the interface hands the browser the address it calls itself | 2 failed, 14 passed |
+  | `scripts/stack-env.sh` stops refusing to overwrite | the second run rewrites a file it did not create |
+
+  Verify: every file was restored afterwards. The sixth row was measured twice:
+  the first attempt edited the *comment* above the command and nothing failed,
+  which is its own small lesson about what a demonstration proves.
 
 ## 7. Documentation
 
