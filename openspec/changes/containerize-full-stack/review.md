@@ -49,3 +49,14 @@
 | # | Severity | Location | Finding | Status |
 |---|----------|----------|---------|--------|
 | 1 | major | `design.md:64-71`; `tasks.md:13-23`; `proposal.md:35-41` | The revised proposal promises a separate UI image built with `--only-group ui`, without the application or model runtime, but design decision 1 still says the UI target extends the runtime stage and task 1.3 still directs adding the UI group to that target. Following the design and task would put the application and model dependencies in the UI image, reversing the stated isolation and size decision. Reconcile the design and task with the separate UI build, and make the UI image's exclusion of `app` and the model runtime an explicit verification task. | fixed |
+
+## Confirmation 1 · Gate 1 · Round 2
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** 477fe3bc2d396f29b3246a1f55e115a523b9888b
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — Decision 1 and tasks 1.3–1.4 now specify a separate `--only-group ui` build and explicit checks that `app` and `torch` are absent. But the same architecture is still contradicted by `proposal.md`'s Impact section, which calls the UI image "the service plus the demo UI", and `design.md`'s Risks section, which says the UI image is a thin layer on the runtime image. Reconcile those collateral claims with the separate build. |
