@@ -140,3 +140,70 @@
   `scripts/pregate-verify.sh gate2 harden-quality-and-docs` passing. Verify: the
   verifier's output is recorded in the handoff; the gate follows the user's push
   and a green CI run on that exact HEAD.
+
+## 6. Gate 2 round 1 — four majors, all accepted
+
+- [x] 6.1 Finding 1: the tier. A mandatory audit step added to CI is the
+  "verifier/CI infrastructure" AGENTS.md assigns to `high`, whatever share of
+  the change is documentation. Raised to `high` in `proposal.md`, in
+  `openspec/ROADMAP.md` row 16 and in `docs/explanation/requirements.md` §7 row
+  16; `design.md` gained the applicability table the tier requires; §6.5 below
+  is the demonstrated failing input per check. Verify: `rg -n "medium"` over the
+  change's artifacts and the two registers finds no surviving claim of the old
+  tier; Gate 1 runs on these artifacts before Gate 2 is confirmed.
+- [x] 6.2 Finding 2: the published example for `GET /assets/{id}/jobs` was
+  missing `lease_expires_at` and `last_error` — FastAPI encodes the finished
+  document with `exclude_none` (`fastapi/openapi/utils.py`, the closing
+  `jsonable_encoder`), which eats nulls **inside** an example while the schema
+  beside it still requires the field. `app/core/openapi.py` now writes every
+  declared example back into the finished document, walking the routers FastAPI
+  0.141 keeps as wrappers rather than flattening; the test validates the
+  example **the document publishes** through its model, and the null-stripping
+  helper it used to compensate with is gone. Verify: the jobs example in
+  `/api/openapi.json` carries both nulls and `IndexingJobList.model_validate`
+  accepts it; two planted breakages in §6.5.
+- [x] 6.3 Finding 3: the router SQL guard read only `from sqlalchemy import …`,
+  so `import sqlalchemy as sa` and `sa.select(...)` passed it. The form itself
+  is now refused — no allowlist can cover a whole-package import — by
+  `packages_imported_whole()` and `test_no_router_takes_sqlalchemy_whole`, with
+  the walker's self-test extended to both forms. Verify: two planted imports in
+  §6.5, one aliased and one of a submodule.
+- [x] 6.4 Finding 4: the audit policy said three different things. `uv audit`
+  has neither a severity filter nor a fix-availability one, so the rule is the
+  command's own — **any** known advisory fails the run — and the escape for an
+  advisory nobody can act on yet is `--ignore-until-fixed <ID>` on the `make
+  audit` line, where a reviewer sees it. Reconciled in
+  `docs/explanation/requirements.md` (NFR-SEC-6, keeping `pip-audit` as the
+  fallback it always named), the `deployment` delta spec and its scenario, the
+  `Makefile` comment, the CI step's comment, `design.md` decision 4 and its
+  risk row, and `proposal.md` in both places. The same sweep found `make audit`
+  documented nowhere: `docs/reference/commands.md` was missing it and the six
+  container targets change 15 added, and now lists all seven. Verify:
+  `rg -n "with a fix|HIGH/CRITICAL"` outside the image scan finds only the new
+  wording; `make help` and the reference table name the same targets.
+- [x] 6.5 A demonstrated failing input for every check this change adds or
+  changes, each run by planting the violation, running the suite and putting the
+  file back:
+
+  | Planted | What fell over |
+  |---|---|
+  | `app.api` imports `app.db.engine` | 1 failed, 9 passed |
+  | `app.api` imports `app.ml.registry` | 1 failed, 9 passed |
+  | `app.ml` imports `app.repositories.assets` | 1 failed, 9 passed |
+  | `app.repositories` imports `app.schemas.assets` | 1 failed, 9 passed |
+  | `app.services` imports `app.api.deps` | 1 failed, 9 passed |
+  | `app.domain` imports `fastapi` | 1 failed, 9 passed |
+  | a router takes `select` out of SQLAlchemy | 1 failed, 9 passed |
+  | a router takes SQLAlchemy whole (`import sqlalchemy as sa`) | 1 failed, 9 passed |
+  | a router takes a submodule whole (`import sqlalchemy.orm`) | 1 failed, 9 passed |
+  | an operation loses its example | 3 failed, 18 passed |
+  | an exemption is deleted while its operation still has no example | 1 failed, 20 passed |
+  | an exemption outlives its operation | 2 failed, 19 passed |
+  | an example carries a count that is not one | 1 failed, 20 passed |
+  | an example carries a timestamp that is not one | 2 failed, 19 passed |
+  | the document correction is removed (`exclude_none` eats the nulls) | 2 failed, 19 passed |
+  | the walker stops descending into included routers | 2 failed, 19 passed |
+  | `uv audit --locked` against a lock holding `requests==2.19.1` | exit 1, four advisories named (`idna 2.7`) |
+
+  Verify: every row is one run with that one edit, and the working tree is
+  identical afterwards (`git status --short` clean).

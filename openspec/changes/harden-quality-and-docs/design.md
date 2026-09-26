@@ -43,6 +43,20 @@ See `proposal.md` — Why. What shapes the approach:
   changes is that the index stops lying and one promised page arrives.
 - No new documentation system, no site generator, no badges that check nothing.
 
+## Applicability (high tier)
+
+Only the questions this change triggers carry an answer; the rest are one line.
+
+| Question | This change |
+|---|---|
+| Empty, zero and null inputs | **The one that bit.** `null` is a value this service really answers with — a job with no lease and no error — and FastAPI encodes the finished document with `exclude_none`, so those keys vanished from the published example while the schema beside it still required them. The correction in `app/core/openapi.py` writes each declared example back after the encoding, and the test validates what the **document** carries rather than the constant in the code. |
+| Idempotency of retries | Every check this change adds is a pure read: the layering test reads the import graph, the example test reads the generated document, the audit reads `uv.lock`. Re-running gives the same verdict. The one thing that can change without the repository changing is the audit's answer, because the advisory database moves — which is what it is for. |
+| Crash before or after an external effect | n/a — nothing here writes outside the process; a check that dies leaves no half-done state behind. |
+| Concurrent writers | n/a — no shared state is written. |
+| Money and rounding | n/a — no money anywhere in this project. |
+| Authorization boundary | n/a — the service has no authentication (NFR-SEC-7) and this change adds none. |
+| Deletion and expiry | n/a — nothing is deleted or expired. |
+
 ## Decisions
 
 ### 1. The diagram is Mermaid in the README, not an image
@@ -129,17 +143,27 @@ It is **experimental** in the pinned uv, which is a fact to state rather than
 hide: the command is invoked with its preview feature named, so the run is
 explicit about what it is using, and the day the flag changes the failure is a
 build error rather than a silently skipped check. If it ever disappears,
-NFR-SEC-6's other half (`pip-audit`) is the fallback and that is a change, not a
-scramble.
+`pip-audit` reading the same lock is the fallback NFR-SEC-6 keeps open, and
+swapping it in is a change rather than a scramble.
 
 *Where it runs:* its own step in the existing `python` job rather than a job of
 its own — it needs the same checkout and the same uv, and a separate job would
 pay for both again to run a command that takes a second.
 
 *Unlike the image scan* (change 15, deliberately outside CI), this one is
-**in** CI because NFR-SEC-6 says so, and because a Python advisory with a fix is
-something this repository can act on the same day: bump the lock. A base-image
-CVE is somebody else's release schedule.
+**in** CI because NFR-SEC-6 says so, and because an advisory against a locked
+Python dependency is something this repository can act on the same day: bump the
+lock. A base-image CVE is somebody else's release schedule.
+
+*What fails the run:* any known advisory. `uv audit` has neither a severity
+filter nor a fix-availability one, so the policy names what the command does
+rather than what a filter written here would do. The escape for an advisory
+nobody can act on yet is `--ignore-until-fixed <ID>` on the `make audit` line,
+which states the exception where a reviewer sees it and re-fails by itself the
+day a fix is released. NFR-SEC-6's original wording (HIGH/CRITICAL with a fix)
+is amended in `docs/explanation/requirements.md` to the stricter rule actually
+implemented, rather than left describing machinery this repository does not
+have.
 
 ### 5. Examples live beside the schema they illustrate, and are validated by it
 
@@ -179,11 +203,13 @@ is why a picture query exists.
   command rather than a project, and the change records the corpus they were
   taken from.
 - **An experimental audit command** → named as experimental in the workflow and
-  in the how-to, with the fallback written down (decision 4).
+  in the commands reference, with the fallback written down (decision 4).
 - **The audit may go red on an advisory this change did not cause** → that is
-  what it is for; the fix is a lock bump, and the how-to says so. It is also why
-  the audit fails only on advisories **with a fix available**: an unfixable one
-  is a decision, not a build error.
+  what it is for; the fix is a lock bump, and the how-to says so. An advisory
+  with no released fix is a decision rather than a build error, and it is taken
+  in the open: `--ignore-until-fixed <ID>` on the `make audit` line, with the
+  reason beside it, rather than a policy that waves every unfixable advisory
+  through silently.
 - **The layering table could be too strict and block legitimate work** → each
   row is a rule the repository already follows, verified before it is asserted;
   a rule that turns out to be wrong is one line to change, with the reason in

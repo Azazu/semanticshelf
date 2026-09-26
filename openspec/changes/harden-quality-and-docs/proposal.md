@@ -1,15 +1,18 @@
 # Proposal — harden-quality-and-docs
 
-**Risk-Tier:** medium
+**Risk-Tier:** high
 
-The roadmap says `low`, and for four fifths of this change that is right: it is
-documentation, screenshots and an index. Two pieces are not documentation. A
-**dependency audit in CI** can turn any later change red the day an advisory
-lands, and a **layering test** is a new rule the repository will be held to.
-Neither touches the service, so `high` — which AGENTS.md reserves for verifier
-and CI infrastructure — feels heavier than this deserves; but the argument for
-it is real and a reviewer who disagrees should say so, as three reviewers have
-already done in this project. Gate 2 reads the diff.
+Raised twice. The roadmap said `low`, and for four fifths of this change that is
+right: it is documentation, screenshots and an index. Two pieces are not
+documentation — a **dependency audit in CI** that can turn any later change red
+the day an advisory lands, and a **layering test** the repository will be held
+to — so the proposal declared `medium` and argued that `high`, which AGENTS.md
+reserves for verifier and CI infrastructure, felt heavier than this deserved.
+Gate 2 round 1 answered that argument: a mandatory step added to CI *is* CI
+infrastructure by the table's own words, and the table is not a matter of how
+heavy it feels. So `high`, with what that costs: Gate 1 on these artifacts, the
+applicability table in `design.md`, and a demonstrated failing input for every
+check this change adds (§6 of `tasks.md`).
 
 ## Why
 
@@ -30,9 +33,10 @@ the parts a reader checks when deciding whether a repository is serious:
 - **NFR-QA-2** — a dependency-rule test over the import graph that **fails on a
   planted violation**: routers hold no SQL and call no model, `app/ml/` does not
   reach `app/db/`, repositories do not return the API's own schemas.
-- **NFR-SEC-6** — CI audits the locked dependencies and fails on known
-  advisories with a fix. `uv audit` exists in the pinned uv, so this needs no
-  new dependency at all.
+- **NFR-SEC-6** — CI audits the locked dependencies and fails on any known
+  advisory. `uv audit` exists in the pinned uv, so this needs no new dependency
+  at all — and it has no severity or fix-availability filter, so the policy is
+  the command's own and NFR-SEC-6's wording is amended to it.
 
 And **FR-OPS-4**: every operation carries a summary, a description and an
 example. Measured today — 16 operations, 5 with an example, 11 without.
@@ -87,8 +91,9 @@ None.
   with the honest carve-out for operations that answer with no body or with
   bytes, and the rule that an example must parse as the thing it illustrates.
 - `deployment`: one added requirement beside the image scan — the dependencies
-  the build resolves are audited against the lock by CI, and a known
-  vulnerability with a fix available fails that run.
+  the build resolves are audited against the lock by CI, and any known advisory
+  fails that run; an advisory nobody can act on yet is named by its identifier
+  in the audit command rather than silently allowed.
 
 ## Impact
 
