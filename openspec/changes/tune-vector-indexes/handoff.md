@@ -1,47 +1,36 @@
 # Handoff — tune-vector-indexes
 
 **Updated:** 2026-09-26 · claude
-**State:** fixing-g1
+**State:** awaiting-gate-2
 **Branch:** change/tune-vector-indexes
 
+(`implementing` is what a Gate 1 confirmation usually implies; here the
+implementation was already done when the tier rose, so the open gate is the
+second one.)
+
 ## Done this session
-Gate 2 round 1 (two findings) and Gate 1 round 1 (three findings) are all
-`fixed` in `review.md`.
-
-Gate 1 round 1:
-- **Finding 1** — the removal table enumerated eight checks; the change has
-  thirteen. The five it missed are demonstrated the same way and added to §8.6:
-  the protected-name branch of `unusable()`, the `--queries` bounds,
-  `shipped_for()`'s refusal, and the empty-input guards of `recall_at()` and
-  `percentile()`. `shipped_for` gained the two unit tests the table needed in
-  order to have something to break.
-- **Finding 2** — "at least nineteen of every twenty" read as a per-query
-  guarantee, which over ten neighbours means all ten every time. The bound is on
-  the **mean over at least fifty queries**, and the worst single query is
-  published rather than bounded. Said the same way now in the spec delta, its
-  scenario, design decision 3, ADR-002 and `benchmarks.md` — and the CI guard
-  averages over fifty queries too, so it measures the statistic the requirement
-  names.
-- **Finding 3** — the design called the measured recall a floor for real
-  embeddings on the grounds that a real corpus is easier. Nothing here compares
-  the two, so the direction is not claimed at all; ADR-002 already said so, and
-  the design now agrees.
-
-## Confirmation 1 · Gate 1
-Findings 1 and 2 confirmed. Finding 3 stayed open: decision 1 and the how-to
-still said an index is easy where data is clustered, and that real vectors would
-show a real distribution to be easier than this corpus. Both are gone now, with
-the same sentence in `scripts/index_benchmark.py`'s constants and the "tidy 64
-blobs" aside — the claim, not the line. What stays is why the corpus has
-neighbours at all, and, in three places, that the comparison with a real
-distribution is not made here (§9.4 of `tasks.md`).
+- **Gate 1 · round 1 — confirmed** at confirmation 2. Three majors:
+  1. the removal table enumerated eight checks of thirteen — the five missing
+     ones are demonstrated the same way (§8.6 of `tasks.md`), and
+     `shipped_for()` gained the tests the table needed in order to break it;
+  2. "nineteen of every twenty" read as a per-query guarantee, which over ten
+     neighbours means all ten every time; the bound is on the **mean over at
+     least fifty queries**, the worst single query is published rather than
+     bounded, and the spec delta, its scenario, design decision 3, ADR-002,
+     `benchmarks.md` and the CI guard now all say that;
+  3. the claim that a real embedding corpus is easier than this one is gone
+     from decision 1, the how-to and `scripts/index_benchmark.py`'s constants —
+     nothing here compares the two, so no direction is claimed.
+- **Gate 2 · round 1** was `changes-requested` before that (tier raised to
+  `high`; the recall bound now covers every model). Both findings `fixed`.
 
 ## Next step
-`/gate-review tune-vector-indexes 1 confirm 1` again. On its confirmation, Gate 2
-confirmation of round 1 (`/gate-review tune-vector-indexes 2 confirm 1`), which
-needs a push and a green CI run on that HEAD first.
+Push `change/tune-vector-indexes`, watch CI, and on green run
+`/gate-review tune-vector-indexes 2 confirm 1` — the Gate 2 confirmation reviews
+the diff since its round 1 (`2c90c91`), which is everything both gates asked
+for.
 
 ## Blockers
 None. Locally green: `make check` (635), `make test-integration` (293),
-`openspec validate tune-vector-indexes --strict`,
-`scripts/pregate-verify.sh gate1 tune-vector-indexes`.
+`openspec validate tune-vector-indexes --strict`, `scripts/pregate-verify.sh
+gate1 tune-vector-indexes`.
