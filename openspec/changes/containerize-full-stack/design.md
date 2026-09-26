@@ -324,10 +324,12 @@ still answered 200, with a Streamlit error where the pictures were.
 
 ## Risks / Trade-offs
 
-- **The image is large** (`torch` alone is hundreds of megabytes) → measured and
-  stated rather than hidden; the CPU index keeps it from being far worse, and
-  the UI image is a thin layer on top of the runtime one rather than a second
-  full environment.
+- **The service's image is large** (`torch` alone is hundreds of megabytes) →
+  measured and stated rather than hidden (1.79 GB); the CPU index keeps it from
+  being far worse. The interface's image does not inherit that weight at all:
+  it is built from its own group and comes to 762 MB, most of which is
+  Streamlit's own dependency tree. Two images, two environments, and the second
+  deliberately not the first plus a layer.
 - **A build that pulls from the network can fail for reasons the change did not
   cause** → the lock file pins every Python dependency, the base image is
   pinned, and the scanner image is pinned. What remains unpinned is the registry

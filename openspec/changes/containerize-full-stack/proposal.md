@@ -142,8 +142,10 @@ behave exactly as they do today.
   address where there are two.
 - **Dependencies:** none added to `pyproject.toml`. The scanner runs as a
   pinned container image, not as a Python package.
-- **Runtime:** two images from one Dockerfile (the service, and the service plus
-  the demo UI). Measured sizes go into the how-to, because an image whose size
+- **Runtime:** two images from one Dockerfile, and they share no environment —
+  the service (its locked dependencies and its migrations) and the interface
+  (its own group only: Streamlit and httpx, with neither `app` nor the model
+  runtime in it). Measured sizes go into the how-to, because an image whose size
   nobody states is an image nobody optimises.
 
 ## Non-goals
