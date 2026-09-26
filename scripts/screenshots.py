@@ -10,6 +10,10 @@ stale pictures and a machine that grows orphaned servers:
 - what is captured is the real thing — no fixtures, no mock, no hand-cropping;
 - whatever happens, both children are stopped before this exits, and that is
   checked rather than assumed.
+
+What is *in* the store is chosen, though, and deliberately:
+`scripts/screenshot_corpus.py` copies the part of the demo corpus a front page
+should show. The pictures are still the dataset's own.
 """
 
 import os
@@ -28,7 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent
 IMAGES = ROOT / "docs" / "images"
 VIEWPORT = {"width": 1440, "height": 900}
 START_TIMEOUT_SECONDS = 90
-QUERY = "a red stop sign at a junction"
+QUERY = "people playing tennis on a sunny court"
 
 
 def free_port() -> int:
@@ -172,11 +176,16 @@ def capture(ui: str) -> None:
             page.get_by_role("link", name="Upload").click()
             page.wait_for_timeout(1_000)
             page.set_input_files("input[type=file]", str(a_picture_to_upload()))
-            page.get_by_label("Tags").fill("demo, sunset")
-            # Enter, so the field is a value rather than an edit in progress:
-            # Streamlit marks an unapplied input in red, which a screenshot
-            # would present as an error.
+            page.get_by_label("Tags").fill("demo, outdoors")
+            # Enter, so the field is a value rather than an edit in progress;
+            # then the heading, so nothing is focused. Streamlit draws both an
+            # unapplied input and a focused one in the theme's primary colour,
+            # which is red here — in a still picture that reads as an error.
             page.get_by_label("Tags").press("Enter")
+            page.get_by_role("heading", name="Upload").click()
+            # And the pointer off the heading again: Streamlit hangs an anchor
+            # link beside whatever the mouse is over, and the picture would keep it.
+            page.mouse.move(VIEWPORT["width"] - 10, VIEWPORT["height"] - 10)
             page.wait_for_timeout(1_500)
             page.screenshot(path=IMAGES / "upload.png")
 

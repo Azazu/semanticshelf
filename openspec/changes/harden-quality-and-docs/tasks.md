@@ -77,6 +77,14 @@
   pages it does not visit (Find similar, Upload), filling the Upload form before
   it shoots (design decision 2). Verify: `make screenshots` produces five files
   under `docs/images/`, and each is of the page it is named after.
+- [x] 3.1a Choose what the front page shows: `scripts/screenshot_corpus.py`
+  copies the slice of the demo corpus worth showing into `.data/demo-shopfront`,
+  which is imported with `index-folder` and searched for `people playing tennis
+  on a sunny court` (design decision 2). Record the recipe in
+  `docs/how-to/demo-ui.md`, whose screenshot section still described three pages
+  and named Find similar and Upload as deliberately absent. Verify: the five
+  files were re-captured from that corpus and each was looked at; the how-to's
+  commands were run in the exact form it prints.
 - [x] 3.2 Rewrite `README.md` (NFR-DOC-1): what it is, the five screenshots, the
   Mermaid architecture diagram (request path, job path, storage), both quick
   starts (`make stack` and the host), the `make` surface, "what this shows", the

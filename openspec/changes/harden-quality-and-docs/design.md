@@ -67,7 +67,20 @@ recorded in the change's commit body.
 
 *The Upload page needs care*: it is a form, and a screenshot of a form is only
 useful once it says what it accepts. The capture fills the fields before
-shooting rather than showing an empty page.
+shooting rather than showing an empty page — and then takes the focus off the
+field, because Streamlit draws a focused input in the theme's primary colour,
+which is red here and reads as a refusal in a still picture.
+
+*What is in the store is chosen*: `make demo` takes whatever the licence filter
+allows, which is a fair sample of COCO — bathrooms and all. A front page is the
+one place where "whatever came back" is not good enough, so
+`scripts/screenshot_corpus.py` copies the slice worth showing (an animal, a
+vehicle, a road sign, somebody playing something — and nothing else in the
+frame that a front page would rather not open with) into
+`.data/demo-shopfront`, and that folder is imported with `index-folder`. The
+pictures are still the dataset's own and the recipe is two commands in
+`docs/how-to/demo-ui.md`, so the capture stays reproducible; only the selection
+is ours.
 
 ### 3. The layering test is one table of forbidden edges
 
