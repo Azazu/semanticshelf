@@ -56,6 +56,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+      # `ignore-error` on every cache export: the cache is an optimisation, and
+      # an optimisation may not decide whether the build passed. The first run
+      # of this job failed with `error writing layer blob: not_found` from the
+      # Actions cache service after the image had already been built — the
+      # build was fine and the run was red.
       - name: Build the service image
         uses: docker/build-push-action@v6
         with:
@@ -63,7 +68,7 @@ jobs:
           target: runtime
           push: false
           cache-from: type=gha,scope=runtime
-          cache-to: type=gha,mode=max,scope=runtime
+          cache-to: type=gha,mode=max,scope=runtime,ignore-error=true
       - name: Build the interface image
         uses: docker/build-push-action@v6
         with:
@@ -71,7 +76,7 @@ jobs:
           target: ui
           push: false
           cache-from: type=gha,scope=ui
-          cache-to: type=gha,mode=max,scope=ui
+          cache-to: type=gha,mode=max,scope=ui,ignore-error=true
 
   python:
     needs: detect

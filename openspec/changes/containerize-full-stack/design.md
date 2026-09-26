@@ -178,7 +178,12 @@ the operator scans. Said plainly in the how-to so the command is not forgotten.
 ### 9. CI builds the image, and that is all it does with it
 
 A job that builds both targets with buildx and a layer cache, without logging
-into any registry and without loading the image into the runner's daemon. It
+into any registry and without loading the image into the runner's daemon. The
+cache is **best-effort**: its export carries `ignore-error=true`, because the
+first run of this job went red on `error writing layer blob: not_found` from
+the Actions cache service *after* both images had built. What this job exists to
+catch is a build that does not build; a cache that cannot be written is not
+that. It
 does not run the stack: that needs the real weights (2.8 GB) and the model
 downloads NFR-SEC-4 documents, which is not what a pull request should pay for.
 

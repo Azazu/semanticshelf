@@ -73,9 +73,12 @@
 
 - [x] 4.1 Add an `image` job to `.github/workflows/ci.yml`: buildx, layer cache,
   both targets, no registry login, no push, no stack run (design decision 9).
-  Verify: the job's YAML is valid (`docker compose config`-equivalent check is
-  not applicable, so: the workflow parses in the Actions run the user reports),
-  and the user's push shows it green.
+  Verify: the workflow parses; the user's push shows the job green. **Its first
+  run was red and the build was not the reason** — both images built and the
+  Actions cache service then answered `error writing layer blob: not_found`
+  while exporting. Every cache export now carries `ignore-error=true`: a cache
+  is an optimisation, and an optimisation may not decide whether a build
+  passed.
 - [x] 4.2 The job fails when the image cannot be built. Verify: demonstrated
   locally by breaking one `COPY` path and running the same build command, with
   the error recorded; the repository is restored afterwards.
