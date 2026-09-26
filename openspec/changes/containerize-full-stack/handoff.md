@@ -1,7 +1,7 @@
 # Handoff — containerize-full-stack
 
 **Updated:** 2026-09-26 · claude
-**State:** fixing-g1
+**State:** implementing
 **Branch:** change/containerize-full-stack
 
 ## Done this session
@@ -51,8 +51,17 @@
    is a headless browser asserting a thumbnail's `naturalWidth`, because a page
    full of broken images answers 200 to `curl`.
 
+Confirmation 1 kept finding 2 open, and fairly: the overridden database port
+was proven for the migration and the readiness check, while the worker ran in a
+separate run that left that port at its default — a worker quietly using the
+host's port would have passed. One run now carries all three pieces of evidence.
+**Gate 1 is confirmed** at confirmation 2 (`6445c0d`).
+
 ## Next step
-`/gate-review containerize-full-stack 1 confirm 1`.
+`/opsx:apply containerize-full-stack` — implement in task order: the image
+(`.dockerignore` first, then the Dockerfile and `make image`), the stack, the
+scan, the CI job, the smoke script and its real run, the tests that stay, and
+the documentation.
 
 ## Blockers
 None. Nothing in `app/` or `ui/` is expected to change; if the stack turns out
