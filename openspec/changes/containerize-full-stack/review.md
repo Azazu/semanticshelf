@@ -71,3 +71,15 @@
 | # | Resolution |
 |---|------------|
 | 1 | confirmed — The proposal's Impact section and the design's Risks section now describe two separate environments, matching design decision 1, tasks 1.3–1.4, and the Dockerfile's independent `ui-builder` and `ui` stages. The tasks explicitly verify that `app` and `torch` are absent from the UI image. |
+
+## Round 1 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** 7d41566556e569af56933361f5d34763582d3140
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `.env.example:10-12`; `scripts/stack-env.sh:44-50`; `docs/how-to/local-development.md:13-17` | The new setup generates a 32-character `DB_PASSWORD` but replaces only the `__GENERATED__` marker. `DATABASE_URL` in the same template still contains `localdev-only-password`, so the documented `sh scripts/stack-env.sh` followed by `make init` starts PostgreSQL with one password and runs Alembic with another. A fresh local-development checkout fails to migrate, and a host API started from that file cannot connect. Generate a matching host `DATABASE_URL` (including the configured user, database and port), and verify the documented host setup from a clean checkout. | open |
+| 2 | minor | `docs/how-to/running-the-stack.md:61-64`; `docker-compose.yml:63-103` | The how-to says setting `HF_HUB_OFFLINE=1` in the environment file stops the containers from contacting the Hub, but Compose does not pass that variable to `api`, `worker`, or the one-shot warm command. The environment file only supplies values referenced by the Compose file; this setting is not referenced, and the image does not contain the file. Wire it into the relevant container environments or correct the instruction, then verify the offline setting inside a container. | open |
