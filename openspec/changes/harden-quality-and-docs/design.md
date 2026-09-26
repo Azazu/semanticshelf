@@ -183,6 +183,21 @@ added with no example; the new one fails until the table says why.
 image bytes. What those two promise instead is their headers, which the how-to
 documents and the API tests assert.
 
+*How an example reaches the document* — the mechanism Gate 2 round 1 forced
+into the open, and the one piece of application code this change adds. FastAPI
+encodes the finished document with `exclude_none`, which eats the nulls
+**inside** an example as well, so an example declared at a route arrives in the
+document missing every field the service answers with as `null` while the
+schema beside it still requires them. The existing post-processing hook
+(`app/core/openapi.py`, which already relabels error bodies as problem details)
+therefore gained a second correction: each example a route declares is written
+back into the finished document after the encoding. Nothing a *request* gets
+changes — no endpoint, no query, no setting — but the **published document**
+does, and it now carries what the code wrote. The test reads the document
+rather than the constants, so the correction is what is verified, and two
+planted breakages (the correction removed; the route walk blind to included
+routers, which FastAPI 0.141 keeps as wrapper objects) fail it.
+
 ### 6. The README states the boundaries as boundaries
 
 Three of them, because a reader who finds them later feels misled: there is **no
@@ -217,8 +232,11 @@ is why a picture query exists.
 
 ## Migration Plan
 
-Nothing to migrate: no schema, no setting, no endpoint. The only thing a reader
-of the repository will notice is that the README now describes the project.
+Nothing to migrate: no schema, no setting, no endpoint, and no change to what
+any request is answered with. Two things a reader will notice: the README now
+describes the project, and the OpenAPI document carries an example on every
+operation that answers with a body — with the nulls the service really sends,
+which is the correction in `app/core/openapi.py`.
 
 ## Open Questions
 

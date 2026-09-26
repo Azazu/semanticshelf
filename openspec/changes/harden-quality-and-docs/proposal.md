@@ -101,13 +101,22 @@ None.
   two screenshots under `docs/images/`, examples in the schema modules of the
   operations that lack them, a `make audit` target and an audit job in CI.
 - **Changed:** `README.md` (rewritten), `docs/README.md` (the index),
+  `docs/reference/commands.md` (the targets it was missing),
+  `docs/how-to/demo-ui.md` (the corpus the screenshots are taken from),
   `scripts/screenshots.py` (five pages), `tests/api/test_openapi_examples.py`
   (every operation, with the exemptions named), `.github/workflows/ci.yml`,
   `Makefile`, and `openspec/ROADMAP.md` / `docs/explanation/requirements.md`
-  where this change's row or tier moves.
-- **Unchanged:** every behaviour of the service. The only Python that changes is
-  the addition of example constants to schema modules and the test files; no
-  endpoint, no query, no setting.
+  where this change's row, tier or the audit policy moves.
+- **Changed in the application:** `app/core/openapi.py` and its installation in
+  `app/main.py`. The examples are declared at the routes, and FastAPI encodes
+  the finished document with `exclude_none` — which eats the nulls inside an
+  example, so the published example did not parse as the answer it illustrates
+  (Gate 2 round 1, finding 2). The existing post-processing hook now writes each
+  declared example back after that encoding. This is the mechanism behind the
+  `http-api-conventions` delta, and it changes the **published document**.
+- **Unchanged:** every behaviour a request meets — no endpoint, no query, no
+  setting, no response body. Outside the OpenAPI document, the only Python that
+  changes is the addition of example constants to schema modules and the tests.
 - **Dependencies:** none added. `uv audit` ships with the uv this repository
   already pins in CI; the screenshots use the `screenshots` group that exists.
 

@@ -28,11 +28,14 @@
   further guards of the test itself: the walker is checked against a sample with
   an import inside a function, and every rule is checked to be about modules
   that exist — a rule over a layer nobody wrote passes without looking at code.
-- [x] 1.3 `make audit` runs `uv audit --locked` with its preview feature named,
+- [ ] 1.3 `make audit` runs `uv audit --locked` with its preview feature named,
   and the existing CI `python` job runs the same command (design decision 4).
-  Verify: `make audit` passes locally and its output is recorded (today: no
-  known vulnerabilities in 91 packages); `make help` lists it; the workflow
-  parses and the user's push shows the step green.
+  Verify: `make audit` passes locally and its output is recorded (done: no known
+  vulnerabilities in 91 packages); `make help` and `docs/reference/commands.md`
+  list it (done); the workflow parses and the step is green on the commit Gate 2
+  reviews — **open**: green on `bc06c2b`, whose step is identical but for its
+  comment, and this branch has moved since. Closes when the user pushes this
+  head and reports the run.
 - [x] 1.4 The audit fails when there is something to fail on. Verified against a
   throwaway project in the scratchpad (never this repository's lock) pinned to
   `requests==2.19.1`: the same command exits **1** and names what it found —
@@ -91,8 +94,9 @@
   three boundaries of design decision 6 (no authentication, CPU latencies, the
   English-query limit), and links to the ADRs, the benchmarks and the
   specification. Verify: re-read whole after the last edit; every command in it
-  was run in its exact form; the Mermaid block renders (GitHub's own renderer —
-  the user reports what the pushed page looks like).
+  was run in its exact form; the Mermaid block renders — the user reported it
+  does on the pushed page (`bc06c2b`), and `README.md` has not changed since, so
+  that evidence still stands.
 - [x] 3.3 Write `docs/explanation/architecture.md` — the diagram's long form:
   the request path, the job path, what each process owns, what is deliberately
   absent (no broker, no second store, no authentication) — citing the ADRs
@@ -136,10 +140,12 @@
   passed, validation 17/17, `sh -n` clean, `workflow_verify_test` 23 passed,
   `gate_run_test` 77 passed, the audit reporting no known vulnerabilities in 91
   packages, and both images built.
-- [x] 5.3 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
+- [ ] 5.3 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
   `scripts/pregate-verify.sh gate2 harden-quality-and-docs` passing. Verify: the
   verifier's output is recorded in the handoff; the gate follows the user's push
-  and a green CI run on that exact HEAD.
+  and a green CI run on that exact head. **Open** until that run exists: the
+  branch moved under both review rounds, so the evidence from the earlier push
+  is not evidence about this head.
 
 ## 6. Gate 2 round 1 — four majors, all accepted
 
@@ -207,3 +213,23 @@
 
   Verify: every row is one run with that one edit, and the working tree is
   identical afterwards (`git status --short` clean).
+
+## 7. Gate 1 round 1 — two majors, both accepted
+
+- [x] 7.1 Finding 1: the proposal said the service's behaviour was unchanged and
+  that the only Python touched was example constants and tests, while the change
+  also rewrites the **published** OpenAPI document (`app/core/openapi.py`, its
+  installation in `app/main.py`). Scope and mechanism are now stated where a
+  reviewer meets them: `proposal.md` gained a "Changed in the application" entry
+  and a narrower "Unchanged" claim (no endpoint, no query, no setting, no
+  response body), `design.md` decision 5 gained the paragraph on how an example
+  reaches the document and why the correction exists, and the Migration Plan
+  says what a reader will notice. Verify: both documents re-read whole; the
+  delta spec's guarantee and the mechanism now name each other.
+- [x] 7.2 Finding 2: three tasks were checked on evidence that does not exist
+  yet. 1.3 and 5.3 are open again — they close on a green CI run for the head
+  Gate 2 reviews, and the branch has moved under two review rounds since the
+  last green one. 3.2 stays checked with its evidence named: the user reported
+  the diagram renders on the pushed page (`bc06c2b`) and `README.md` has not
+  changed since. Verify: `rg -n "^- \[ \]"` over `tasks.md` lists exactly those
+  two, and both name what closes them.
