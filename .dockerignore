@@ -1,0 +1,22 @@
+# What the build may see. An allowlist, not a list of exclusions: the image's
+# contents are a promise this project makes (`openspec/specs/deployment`), and a
+# denylist keeps that promise only until somebody adds a directory.
+#
+# The two that matter most if this is ever loosened: `.data/` holds the model
+# weights (2.8 GB) and the demo corpus, and `.git/` holds every version of
+# everything. Neither belongs in a build context, let alone in an image.
+*
+
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!alembic.ini
+!alembic/
+!app/
+!ui/
+
+# Re-excluded inside the directories above: nothing a build produces.
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/

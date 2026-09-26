@@ -1025,12 +1025,14 @@ dev = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "pyyaml" },
     { name = "ruff" },
 ]
 screenshots = [
     { name = "playwright" },
 ]
 ui = [
+    { name = "httpx" },
     { name = "streamlit" },
 ]
 
@@ -1059,10 +1061,14 @@ dev = [
     { name = "mypy", specifier = ">=2.3" },
     { name = "pytest", specifier = ">=9.1" },
     { name = "pytest-asyncio", specifier = ">=1.4" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "ruff", specifier = ">=0.16" },
 ]
 screenshots = [{ name = "playwright", specifier = ">=1.63.0" }]
-ui = [{ name = "streamlit", specifier = ">=1.64.0" }]
+ui = [
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "streamlit", specifier = ">=1.64.0" },
+]
 
 [[package]]
 name = "setuptools"

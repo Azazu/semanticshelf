@@ -51,14 +51,26 @@ def base_url() -> str:
     return os.environ.get("API_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
 
 
+def public_url() -> str:
+    """The address a **browser** must use for what the API linked to.
+
+    Usually the same one this process calls, and it defaults to exactly that.
+    It is separate because the two are not always the same network: in the
+    container stack the service answers at `http://api:8000` for this process
+    and at the published port for the person looking at the page, and a browser
+    handed the first renders every picture as a broken image.
+    """
+    return os.environ.get("API_PUBLIC_URL", base_url()).rstrip("/")
+
+
 def address_of(link: str) -> str:
     """The absolute address of something the API linked to.
 
     The API answers with paths (`/api/v1/assets/<id>/thumbnail`); a browser
     needs the host in front of them. Nothing here invents a link the API did
-    not give.
+    not give — it only decides which host the browser is told to ask.
     """
-    return urljoin(base_url() + "/", link.lstrip("/"))
+    return urljoin(public_url() + "/", link.lstrip("/"))
 
 
 @dataclass(frozen=True, slots=True)

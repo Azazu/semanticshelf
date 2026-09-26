@@ -73,6 +73,7 @@ async def ready(request: Request) -> Response:
             settings.readiness_timeout_seconds,
             settings.enabled_models,
             settings.media_root,
+            settings.alembic_dir,
         )
     )
     if is_ready:

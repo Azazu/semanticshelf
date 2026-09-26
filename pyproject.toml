@@ -31,6 +31,10 @@ semanticshelf = "app.cli:app"
 [dependency-groups]
 dev = [
     "mypy>=2.3",
+    # The stack's definition is parsed by its tests rather than grepped: a
+    # regular expression over a compose file answers questions about text, and
+    # what these tests ask about is structure.
+    "pyyaml>=6.0.2",
     "pytest>=9.1",
     "pytest-asyncio>=1.4",
     "ruff>=0.16",
@@ -39,6 +43,12 @@ screenshots = [
     "playwright>=1.63.0",
 ]
 ui = [
+    # `httpx` is a runtime dependency of the service as well, and it is listed
+    # here too on purpose: this group is everything the demo interface needs by
+    # itself, which is what lets its image be built with `--only-group ui` —
+    # a couple of hundred megabytes instead of the service's whole environment,
+    # and no model runtime in an image that must never load a model.
+    "httpx>=0.28.1",
     "streamlit>=1.64.0",
 ]
 

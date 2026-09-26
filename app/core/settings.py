@@ -23,6 +23,15 @@ DEFAULT_DINOV2_CHECKPOINT = "facebook/dinov2-large"
 DEFAULT_MEDIA_ROOT = Path(".data/media")
 MIB = 1024 * 1024
 
+#: Where the migration scripts are, computed from this file's own place: from
+#: `app/core/` two levels up is the repository root, and the migrations sit
+#: beside `app/` there. That is right for a checkout and wrong for an installed
+#: package — in an image the package lives inside the virtual environment, where
+#: one level up is `site-packages` and `alembic` there is the *library*, which
+#: has no revisions in it. So it is a default rather than a fact, and a
+#: deployment that puts the migrations elsewhere says where (change 15).
+DEFAULT_ALEMBIC_DIR = Path(__file__).resolve().parent.parent.parent / "alembic"
+
 
 class Settings(BaseSettings):
     """Everything the service reads from the environment. Documented in docs/reference/settings.md."""
@@ -57,6 +66,11 @@ class Settings(BaseSettings):
     embed_batch_size: int = Field(default=8, gt=0)
     #: Threads that load models and run inference, away from the event loop.
     inference_workers: int = Field(default=2, gt=0)
+
+    #: Where the migration scripts are. Only the readiness probe reads it: it
+    #: compares the database's revision with the head of these scripts, and a
+    #: probe that cannot find them reports "code head none" rather than ready.
+    alembic_dir: Path = DEFAULT_ALEMBIC_DIR
 
     # --- media ---------------------------------------------------------------
     #: Where an asset's bytes live. Outside any directory served by path, and
