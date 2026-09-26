@@ -2,15 +2,15 @@
 
 ## 1. The image
 
-- [ ] 1.1 Read uv's own documentation for its Docker images and pin what it
+- [x] 1.1 Read uv's own documentation for its Docker images and pin what it
   names: the base tag (uv version **and** Python version, no floating tag) and
   the flags an image build uses. Verify: the tag and the flags used are quoted
   in the commit body with where they were read; `docker pull <tag>` succeeds.
-- [ ] 1.2 Write `.dockerignore` first, before any build: `.data/` (weights and
+- [x] 1.2 Write `.dockerignore` first, before any build: `.data/` (weights and
   the demo corpus, gigabytes), `.venv`, `.git`, `tests/`, `docs/`, `openspec/`,
   `.pytest_cache`, `__pycache__`. Verify: `docker build` prints a context size
   in megabytes, not gigabytes, and the number is recorded.
-- [ ] 1.3 Write `Dockerfile` — builder stage (dependencies layer with
+- [x] 1.3 Write `Dockerfile` — builder stage (dependencies layer with
   `--no-install-project`, then the project, both `--locked --no-dev
   --no-editable`), runtime stage (the virtual environment and the application,
   `PATH` set to it, an unprivileged user, the media root and model cache created
@@ -18,34 +18,34 @@
   (design decision 1). Verify: both targets build; `docker run --rm <image>
   python -c "import app"` works and `import pytest` fails; `id -u` inside is not
   0; `docker images` sizes recorded.
-- [ ] 1.4 The image carries no weights and no interface. Verify: a test or a
+- [x] 1.4 The image carries no weights and no interface. Verify: a test or a
   recorded command shows `MODEL_CACHE` empty in a fresh container, `streamlit`
   absent from the runtime image and present in the `ui` one.
-- [ ] 1.5 `make image` builds both targets by the same command the CI job runs.
+- [x] 1.5 `make image` builds both targets by the same command the CI job runs.
   Verify: `make image` from a clean checkout succeeds and its output is
   recorded.
 
 ## 2. The stack
 
-- [ ] 2.1 Extend `docker-compose.yml` with `migrate` (one-shot `alembic upgrade
+- [x] 2.1 Extend `docker-compose.yml` with `migrate` (one-shot `alembic upgrade
   head`, `restart: "no"`), `api` (uvicorn, `/ready` healthcheck, depends on `db`
   healthy and `migrate` completed successfully), `worker` (`semanticshelf
   worker`, depends on `api` healthy) and `ui` (streamlit, depends on `api`
   healthy), keeping `db` as it is (design decisions 3, 4). Verify:
   `docker compose config` renders without a warning and the dependency
   conditions read back as intended.
-- [ ] 2.2 Volumes: the database's own, a media volume shared by `api` and
+- [x] 2.2 Volumes: the database's own, a media volume shared by `api` and
   `worker`, a model-cache volume shared by both. Named, not bind mounts, and
   created in the image owned by the unprivileged user (design decision 5).
   Verify: after an upload, `docker compose down` and `up`, the asset, its file
   and its vectors are still there — recorded from a real run.
-- [ ] 2.3 Settings: `INDEXING_RUNNER=worker` for `api`, `API_BASE_URL=http://api:8000`
+- [x] 2.3 Settings: `INDEXING_RUNNER=worker` for `api`, `API_BASE_URL=http://api:8000`
   for `ui`, the in-container `MEDIA_ROOT` and `MODEL_CACHE`, and published ports
   through `${BIND_ADDRESS:-127.0.0.1}` with `APP_PORT` / `UI_PORT` (design
   decisions 6, 7). Verify: `docker compose ps` shows the published addresses
   bound to loopback; an upload with the worker stopped stays `pending` and is
   carried out when it starts.
-- [ ] 2.4 `make stack`, `make stack-down`, `make stack-logs` and `make
+- [x] 2.4 `make stack`, `make stack-down`, `make stack-logs` and `make
   stack-warm` (the one-shot `models warm` into the cache volume). Verify: each
   runs, and `make help` lists them with one-line descriptions.
 
@@ -73,12 +73,12 @@
 
 ## 5. The stack, actually run
 
-- [ ] 5.1 Write `scripts/stack_smoke.sh`: bring the stack up, wait for `/ready`,
+- [x] 5.1 Write `scripts/stack_smoke.sh`: bring the stack up, wait for `/ready`,
   upload one picture, poll the asset until both models report `done`, search for
   it, assert it is found, take the stack down **without** removing volumes
   (design decision 10). Verify: `sh -n` clean; it exits non-zero when the search
   finds nothing (demonstrated by pointing it at an empty query).
-- [ ] 5.2 Run it for real on a warmed cache, with `APP_PORT`, `UI_PORT` **and
+- [x] 5.2 Run it for real on a warmed cache, with `APP_PORT`, `UI_PORT` **and
   `FORWARD_DB_PORT`** overridden — the first two because 8000 and 8501 are taken
   on this machine, the third because a stack that quietly used the host's
   published database port would pass every check that leaves it at its default
@@ -138,7 +138,7 @@
   a value stops the stack before any service starts, naming the variable.
   Verify: remove one line from the generated file, run the command, record the
   message; restore.
-- [ ] 8.3 Finding 2: `migrate`, `api` and `worker` are given a `DATABASE_URL`
+- [x] 8.3 Finding 2: `migrate`, `api` and `worker` are given a `DATABASE_URL`
   built in the compose file from the same three variables and the service name
   `db:5432`, not from the host's published port (design decision 10b). Verify,
   **all three of them, in one run with `FORWARD_DB_PORT` set to something else
@@ -149,19 +149,19 @@
   to open its own connection). If any of the three were using the host's port,
   that run would fail. Recorded from the real run of task 5.2, which uses the
   same override.
-- [ ] 8.4 Finding 3: `ui/client.py` takes `API_PUBLIC_URL` for the addresses it
+- [x] 8.4 Finding 3: `ui/client.py` takes `API_PUBLIC_URL` for the addresses it
   hands to the browser, defaulting to `API_BASE_URL`; the stack sets the two to
   the service name and the published address (design decision 10c). Verify:
   `tests/ui` covers both — the default (one address, unchanged behaviour) and
   the split (calls go to one, pictures are addressed by the other) — and fails
   if the default is removed.
-- [ ] 8.5 Finding 3, proven in a browser rather than in a header: the smoke
+- [x] 8.5 Finding 3, proven in a browser rather than in a header: the smoke
   script opens the published interface with the headless browser of the
   `screenshots` group, waits for the corpus and asserts a thumbnail's
   `naturalWidth` is non-zero (design decision 10). Verify: it passes against
   the real stack, and fails when `API_PUBLIC_URL` is pointed at the in-network
   name — which is the defect the reviewer found, reproduced on purpose.
-- [ ] 8.6 The `demo-ui` spec moves with the code: the requirement that said the
+- [x] 8.6 The `demo-ui` spec moves with the code: the requirement that said the
   interface is configured by the address of the service *alone* now covers two
   addresses with the second defaulting to the first. Verify: the delta carries
   the full updated requirement with every scenario it had, plus the two new
@@ -188,3 +188,41 @@
   `scripts/pregate-verify.sh gate2 containerize-full-stack` passing. Verify: the
   verifier's output is recorded in the handoff; the gate follows the user's push
   and a green CI run on that exact HEAD.
+
+## 10. What the stack found in the service (apply, after Gate 1)
+
+Two of these are application changes, which the proposal said there would be
+none of. They are surfaced rather than absorbed, and Gate 1 is asked again.
+
+- [x] 10.1 `/ready` answered 503 in the stack — `"migrations": "database at
+  0003_constraint_names, code head none"` — against a database the stack had
+  just migrated. `app/services/readiness.py` computed the migrations' directory
+  from the package's own location, which is right for a checkout (`app/` beside
+  `alembic/`) and wrong for an installed package, where one level up is
+  `site-packages` and the `alembic` there is the library. **The path is now a
+  setting**, `ALEMBIC_DIR`, whose default is that same computation, so a host
+  run is unchanged; the stack sets `/app/alembic`. Verify:
+  `tests/api/test_readiness_migrations.py` covers the default, the environment
+  override, a probe pointed at revisions that are not there ("code head none"),
+  and that the repository's own default finds a head.
+- [x] 10.2 The image shipped stale code, silently. The builder's cache mount
+  keeps the wheel uv built for this project, the project's version does not
+  change when its source does, and a rebuild after an edit reinstalled the
+  previous wheel: a setting added minutes earlier was missing from an image
+  built after it. `--reinstall-package semanticshelf` on the project sync fixes
+  it. Verify: recorded — before, the image's `app/core/settings.py` had 0
+  occurrences of the new constant; after, 2.
+- [x] 10.3 The interface's pages import each other as `ui.client`, and
+  `streamlit run ui/app.py` puts the *script's* directory on the path, not the
+  working directory: every page rendered `ModuleNotFoundError: No module named
+  'ui'` where the corpus should be. `PYTHONPATH=/app` in the interface's image.
+  Verify: the browser check went from "no picture at all" to two thumbnails
+  fetched; on the host `uv run` already added the root, which is why nothing had
+  ever noticed.
+- [ ] 10.4 The artifacts carry all three: `design.md` gets them as decisions
+  with what they cost, and `proposal.md` stops saying `app/` is unchanged.
+  Verify: `openspec validate --strict` passes and the diff of the proposal says
+  what moved.
+- [ ] 10.5 Gate 1 again, because the scope moved (AGENTS.md: a change of scope
+  reopens it). Verify: `scripts/gate-run.sh containerize-full-stack 1 full`
+  records a round bound to the commit that carries these.

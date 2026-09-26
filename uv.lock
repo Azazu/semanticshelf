@@ -1031,6 +1031,7 @@ screenshots = [
     { name = "playwright" },
 ]
 ui = [
+    { name = "httpx" },
     { name = "streamlit" },
 ]
 
@@ -1062,7 +1063,10 @@ dev = [
     { name = "ruff", specifier = ">=0.16" },
 ]
 screenshots = [{ name = "playwright", specifier = ">=1.63.0" }]
-ui = [{ name = "streamlit", specifier = ">=1.64.0" }]
+ui = [
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "streamlit", specifier = ">=1.64.0" },
+]
 
 [[package]]
 name = "setuptools"

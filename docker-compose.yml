@@ -1,5 +1,35 @@
-# Local development dependencies. Every published port binds to loopback
-# and comes from .env (see .env.example).
+# The whole system in containers: the database, the schema at head, the API, the
+# worker that carries out indexing, and the demo interface.
+#
+# `make stack` is the one command — it writes the local environment file from
+# the template on first run (`scripts/stack-env.sh`) and brings this up. Every
+# published port binds to ${BIND_ADDRESS}, which defaults to loopback; what
+# exposing them further would mean is in docs/how-to/running-the-stack.md.
+#
+# The required variables stay `:?required` on purpose: a missing value stops
+# interpolation with the variable's name, which is a better failure than a
+# default nobody chose.
+
+x-service-image: &service-image
+  image: ${STACK_IMAGE:-semanticshelf}:runtime
+  build:
+    context: .
+    target: runtime
+
+x-database-url: &database-url
+  # Inside the stack the database is `db:5432`. The template's URL addresses the
+  # port the host publishes, which from in here is this container's own
+  # loopback — so the two are deliberately not the same setting.
+  DATABASE_URL: postgresql+asyncpg://${DB_USER:?required}:${DB_PASSWORD:?required}@db:5432/${DB_NAME:?required}
+
+x-storage: &storage
+  MEDIA_ROOT: /data/media
+  MODEL_CACHE: /data/models
+  # The migrations travel in the image beside the virtual environment, not one
+  # level above the package: an installed package's neighbour is site-packages,
+  # where `alembic` is the library. The readiness probe is told where they are.
+  ALEMBIC_DIR: /app/alembic
+
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -17,5 +47,90 @@ services:
       timeout: 3s
       retries: 20
 
+  # Runs once and exits. The API waits for it to have exited successfully, so a
+  # half-migrated schema is never served; and migrating here rather than in the
+  # API's entrypoint means two API containers cannot race the same migration.
+  migrate:
+    <<: *service-image
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      <<: [*database-url, *storage]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *service-image
+    environment:
+      <<: [*database-url, *storage]
+      # The stack's whole point: the process serving requests queues the work
+      # and the worker carries it out (change 13's switch, in the arrangement it
+      # was built for).
+      INDEXING_RUNNER: worker
+      ENABLED_MODELS: ${ENABLED_MODELS:-clip-vit-l14,dinov2-large}
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8000}:8000"
+    volumes:
+      - media:/data/media
+      - models:/data/models
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # `/ready` is what FR-OPS-2 says a Docker healthcheck uses: it covers the
+      # database, the migration head, the media root and the model declarations
+      # in one answer. Python rather than curl, because the image carries a
+      # Python and not a curl.
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/ready").read()
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+
+  worker:
+    <<: *service-image
+    command: ["semanticshelf", "worker"]
+    environment:
+      <<: [*database-url, *storage]
+      ENABLED_MODELS: ${ENABLED_MODELS:-clip-vit-l14,dinov2-large}
+    volumes:
+      - media:/data/media
+      - models:/data/models
+    depends_on:
+      api:
+        condition: service_healthy
+    # No healthcheck: a command that greps a process list would call a runner
+    # stuck on a lease healthy. What a stuck worker actually shows in is the
+    # queue — `/jobs` and `/api/v1/stats`.
+    restart: unless-stopped
+
+  ui:
+    image: ${STACK_IMAGE:-semanticshelf}:ui
+    build:
+      context: .
+      target: ui
+    environment:
+      # Two addresses, because the interface's own calls and the pictures its
+      # browser fetches travel over different networks: the first is resolved
+      # inside the stack, the second by a browser on the host.
+      API_BASE_URL: http://api:8000
+      API_PUBLIC_URL: http://${BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8000}
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${UI_PORT:-8501}:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pg_data:
+  media:
+  models:

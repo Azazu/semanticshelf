@@ -24,10 +24,12 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-import app
+from app.core.settings import DEFAULT_ALEMBIC_DIR
 from app.domain import EMBEDDING_MODELS
 
-ALEMBIC_DIR = Path(app.__file__).resolve().parent.parent / "alembic"
+#: The default only: the probe is given `Settings.alembic_dir`, because where
+#: the migrations are depends on how the service was installed (change 15).
+ALEMBIC_DIR = DEFAULT_ALEMBIC_DIR
 SKIPPED_AFTER_DATABASE_FAILURE = "skipped: database check failed"
 
 #: Every CHECK constraint on `embeddings`. Read by table rather than by name:

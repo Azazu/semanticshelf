@@ -196,3 +196,38 @@ def test_a_picture_is_addressed_from_the_link_the_api_gave(
         == "http://service.example/api/v1/assets/7/thumbnail"
     )
     assert address_of("api/v1/assets/7/file") == "http://service.example/api/v1/assets/7/file"
+
+
+def test_a_picture_is_addressed_by_the_browser_s_address_when_it_differs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The container stack: this process calls the service by its name inside
+    the stack, and the browser cannot resolve that name at all. Nothing else
+    about the interface changes — its own requests still go to the first."""
+    monkeypatch.setenv("API_BASE_URL", "http://api:8000")
+    monkeypatch.setenv("API_PUBLIC_URL", "http://127.0.0.1:8010")
+
+    assert (
+        address_of("/api/v1/assets/7/thumbnail")
+        == "http://127.0.0.1:8010/api/v1/assets/7/thumbnail"
+    )
+    assert client_module.base_url() == "http://api:8000"
+
+
+def test_one_address_is_enough_when_one_address_is_true(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host run is configured exactly as it was before this setting existed."""
+    monkeypatch.delenv("API_PUBLIC_URL", raising=False)
+    monkeypatch.setenv("API_BASE_URL", "http://service.example")
+
+    assert address_of("/api/v1/assets/7/file") == "http://service.example/api/v1/assets/7/file"
+    assert client_module.public_url() == client_module.base_url()
+
+
+def test_the_browser_s_address_is_trimmed_like_the_other(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("API_PUBLIC_URL", "http://127.0.0.1:8010/")
+
+    assert address_of("/api/v1/assets/7/file") == "http://127.0.0.1:8010/api/v1/assets/7/file"

@@ -5,7 +5,7 @@ RUN     ?= uv run
 MSG     ?= change
 
 .DEFAULT_GOAL := help
-.PHONY: help init up down ps logs run migrate revision test test-models test-integration ui test-ui screenshots demo lock-check lint fmt fmt-check types check
+.PHONY: help init up down ps logs run migrate revision test test-models test-integration ui test-ui screenshots demo lock-check lint fmt fmt-check types check image stack stack-down stack-logs stack-warm sca-image
 
 # Application targets are guarded until the scaffold exists: the change that
 # adds the FastAPI app brings alembic.ini together with app/main.py. A
@@ -120,3 +120,37 @@ endif
 
 check: lock-check lint fmt-check types test ## The gate floor: lock + lint + format + types + tests
 	@echo "check: all green"
+
+# --- the container stack --------------------------------------------------------
+
+STACK_IMAGE ?= semanticshelf
+# Pinned: a scanner that moves under you reports different things about the same
+# image, and "it passed last week" stops meaning anything. Bump deliberately.
+TRIVY_IMAGE ?= ghcr.io/aquasecurity/trivy:0.69.0
+
+image: ## Build both images: the service and the demo interface
+	docker build --target runtime -t $(STACK_IMAGE):runtime .
+	docker build --target ui -t $(STACK_IMAGE):ui .
+
+stack: ## Start the whole system in containers (writes the local env file on first run)
+	sh scripts/stack-env.sh
+	$(COMPOSE) up -d --wait
+	@echo "api:  http://$${BIND_ADDRESS:-127.0.0.1}:$${APP_PORT:-8000}/api/docs"
+	@echo "ui:   http://$${BIND_ADDRESS:-127.0.0.1}:$${UI_PORT:-8501}"
+
+stack-down: ## Stop the stack; its volumes (media, weights, database) are kept
+	$(COMPOSE) down
+
+stack-logs: ## Follow the stack's logs
+	$(COMPOSE) logs -f
+
+stack-warm: ## Fill the model cache volume through the service image (one-shot)
+	$(COMPOSE) run --rm --no-deps worker semanticshelf models warm
+
+sca-image: ## Scan the service image: HIGH/CRITICAL findings that have a fix
+	docker run --rm \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v semanticshelf_trivy:/root/.cache/trivy \
+		$(TRIVY_IMAGE) image --scanners vuln \
+		--severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+		$(STACK_IMAGE):runtime
