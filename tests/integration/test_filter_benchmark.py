@@ -10,9 +10,7 @@ schema is gone and every row that was there before still is.
 """
 
 import asyncio
-import importlib.util
 from collections.abc import AsyncIterator
-from pathlib import Path
 from types import ModuleType
 from uuid import UUID, uuid4
 
@@ -22,20 +20,16 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.db.engine import create_session_factory
 from app.domain import CLIP_VIT_L14, dimension_of
+from tests.scripts import script_module
 
 pytestmark = pytest.mark.integration
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "filter_benchmark.py"
 TABLES = "assets, embeddings, indexing_jobs"
 
 
 def benchmark() -> ModuleType:
     """The script, imported as a module — it is not a package."""
-    spec = importlib.util.spec_from_file_location("filter_benchmark", SCRIPT)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return script_module("filter_benchmark")
 
 
 @pytest.fixture(autouse=True)

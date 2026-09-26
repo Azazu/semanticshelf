@@ -42,13 +42,19 @@ And the queue finally has the process it was built for: `semanticshelf worker`
 claims with `SKIP LOCKED` alongside any number of its own kind, stops after the
 batch it holds when a signal arrives, and `INDEXING_RUNNER` decides whether the
 API and the import commands do the work themselves or leave all of it to it.
-Only change 14 is left in this stage.
+Change 14 closes the stage: `scripts/index_benchmark.py` measures what the
+vector index gives up — recall@10 against an exact ranking, the `ef_search`
+curve, p95, build time and size, HNSW against IVFFlat, per model — and
+**ADR-002** records what that decided. It decided to change nothing: at the size
+the requirements name, the shipped index returns the whole ranking at the effort
+the service sets, and IVFFlat has no strict iterative order for a narrowed
+search to rest on.
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
 | 12 | `add-tag-and-meta-filters` | `tags_all`, `tags_any`, `meta.<key>` inside the vector query on every search and the listing; `hnsw.iterative_scan` for narrowed queries; `scan_limited` in the answer; `scripts/filter_benchmark.py` + `docs/how-to/benchmarks.md` | high |
 | 13 | `add-indexing-worker` | `semanticshelf worker` with `SKIP LOCKED` claims and a bounded poll; a stop that finishes the batch it holds and a second signal that does not; `INDEXING_RUNNER` governing the API and both importing commands; two child processes on one queue as the evidence | high |
-| 14 | `tune-vector-indexes` | HNSW vs IVFFlat per model, recall@10, p95, `ef_search` curve, extending `docs/how-to/benchmarks.md` (change 12 started it), ADR-002 | low |
+| 14 | `tune-vector-indexes` | HNSW vs IVFFlat per model, recall@10 against an exact ranking, p95, `ef_search` curve, extending `docs/how-to/benchmarks.md` (change 12 started it), ADR-002; the schema guard shared by both benchmarks | high |
 
 ## Stage 4 — full stack, quality, docs
 

@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-20
 **Status:** accepted
-**Related:** ADR-002 (index family and build parameters, still to be written by `tune-vector-indexes`); authored by the OpenSpec change `add-assets-and-embeddings-schema`
+**Related:** [ADR-002](ADR-002-vector-index-family-and-parameters.md) (index family and build parameters, written by `tune-vector-indexes`: HNSW stays, at these parameters, measured); authored by the OpenSpec change `add-assets-and-embeddings-schema`
 
 ## Context
 

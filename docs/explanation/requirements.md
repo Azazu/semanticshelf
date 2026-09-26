@@ -184,7 +184,7 @@ Constraints and indexes:
 - `UNIQUE (asset_id, model)` — the identity of an embedding includes the model; the upsert target of FR-IDX-3.
 - Dimension check at the database: the migration that introduces a model key fixes its dimension in a CHECK (`model = 'clip-vit-l14' AND vector_dims(vector) = 768` …). The application checks the same before the write (a mismatch is a programming error → 500, logged, job `failed`). Adding a model is a migration that extends the CHECK and adds an index; nothing else changes.
 - One HNSW cosine index per model. The mechanism — a partial expression index per key (`USING hnsw ((vector::vector(768)) vector_cosine_ops) WHERE model = 'clip-vit-l14'`) on the single table, or one physical table per model behind the same repository — is decided in `add-assets-and-embeddings-schema` and recorded in **ADR-001** with the query plans that prove the index is used. Build parameters (`m`, `ef_construction`) are settings of the migration and recorded there.
-- The HNSW vs IVFFlat question (build time, recall@10 against an exact scan, p95 latency on the demo corpus, filtered-query behaviour) is measured in `tune-vector-indexes` and recorded in **ADR-002**, per model.
+- The HNSW vs IVFFlat question (build time, recall@10 against an exact scan, p95 latency, behaviour under a narrowing) is measured in `tune-vector-indexes` and recorded in **ADR-002**, per model. The corpus that decides it is the synthetic one the measurement builds at the size NFR-PERF-1 names, not the demo corpus: at a few hundred pictures an approximate index returns the exact ranking every time and decides nothing (corrected in change 14, where it was measured).
 
 ### 3.3 `indexing_jobs`
 
@@ -266,7 +266,7 @@ Explicitly not used: Redis, Celery/arq/Dramatiq, RabbitMQ, Elasticsearch/OpenSea
 - **NFR-PERF-1** Vector query: p95 ≤ 100 ms for `limit = 20` on 10 000 embeddings per model with the HNSW index (query embedding excluded); the index scan is shown by `EXPLAIN` in ADR-001, the latency is measured in ADR-002.
 - **NFR-PERF-2** Query embedding on CPU: text ≤ 300 ms p95 after warm-up; a query image ≤ 3 s p95 (DINOv2-large at 224 px). The README states both so nobody expects GPU latencies.
 - **NFR-PERF-3** Indexing throughput is documented (images per minute per worker on the reference machine), not targeted; the reference number and machine go into the benchmarks page.
-- **NFR-PERF-4** Recall: HNSW recall@10 ≥ 0.95 against an exact scan on the demo corpus at the default `ef_search` (ADR-002); the trade-off curve (`ef_search` 20 → 200) is recorded.
+- **NFR-PERF-4** Recall: HNSW recall@10 ≥ 0.95 against an exact scan at the default `ef_search`, on a corpus of at least 10 000 vectors per model — the size NFR-PERF-1 already names — and reproducible by a published command (ADR-002); the trade-off curve (`ef_search` 20 → 200) is recorded. Corrected in change 14 from "on the demo corpus": that corpus is at most a few hundred pictures, at which the index returns the exact ten every time, so it could not carry the measurement (measured: 1.000 at every effort from 40 upwards, 0.996 at 20).
 
 ### 6.2 Security
 
@@ -353,7 +353,7 @@ The stage plan is the source for `openspec/ROADMAP.md`; ids are stable across bo
 | 11 | `add-dinov2-image-search` | DINOv2 adapter, `POST /search/image`, `/similar`, `model` parameter, UI "Find similar" page | high (model download) | isolation and self-exclusion tests; `make test-models` asserts 1024 |
 | 12 | `add-tag-and-meta-filters` | `tags_all`, `tags_any`, `meta.<key>` on every search and the listing, applied inside the vector query; `hnsw.iterative_scan` for narrowed queries; `scan_limited` in the answer; `scripts/filter_benchmark.py` and `docs/how-to/benchmarks.md` | **high** (raised at Gate 1: this change handles client input) | filter tests combined with ranking; the empty page reproduced and prevented; the scan's bound reached on purpose and reported; the published benchmark cannot touch the service's tables |
 | 13 | `add-indexing-worker` | `worker` command with `SKIP LOCKED` claims, a stop that finishes the batch it holds, `INDEXING_RUNNER` governing every runner that is not the worker, and process-level evidence | high (concurrency) | two child workers on one queue with one attempt per unit; a real SIGTERM finishing the held batch and a second one leaving it to the lease |
-| 14 | `tune-vector-indexes` | HNSW vs IVFFlat per model: build time, recall@10, p95, filtered queries; `ef_search` curve; `docs/how-to/benchmarks.md`; **ADR-002** | low | numbers and commands published; the chosen parameters applied by migration if they changed |
+| 14 | `tune-vector-indexes` | HNSW vs IVFFlat per model: build time, recall@10, p95, filtered queries; `ef_search` curve; `docs/how-to/benchmarks.md`; **ADR-002** | **high** (raised at the proposal to medium, then to high at Gate 2 round 1: the benchmark's `--schema` is checked and then interpolated into `CREATE SCHEMA`, table DDL and `DROP SCHEMA ... CASCADE`) | numbers and commands published; the chosen parameters applied by migration if they changed — measured: they did not change |
 
 ### Stage 4 — full stack, quality, docs
 
