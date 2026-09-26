@@ -111,6 +111,20 @@ def imports_of(path: Path) -> set[str]:
     return names
 
 
+def packages_imported_whole(path: Path, package: str) -> set[str]:
+    """What a module imports as a whole package — `import sqlalchemy as sa`.
+
+    No name allowlist can cover this form: the module receives everything the
+    package has, and `sa.select(...)` is one attribute away. So the check that
+    follows the allowlist has to see this form too, which was Gate 2's finding.
+    """
+    taken: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            taken |= {alias.name for alias in node.names if reaches(alias.name, package)}
+    return taken
+
+
 def names_imported_from(path: Path, package: str) -> set[str]:
     """What a module takes *by name* out of a package."""
     taken: set[str] = set()
@@ -139,6 +153,8 @@ def test_the_walker_sees_what_it_claims_to_see(tmp_path: Path) -> None:
     )
     assert imports_of(sample) == {"app.db", "app.ml", "app.repositories"}
     assert names_imported_from(sample, "app.ml") == {"registry"}
+    assert packages_imported_whole(sample, "app.db") == {"app.db"}
+    assert packages_imported_whole(sample, "app.ml") == set()  # imported by name, not whole
 
 
 def test_every_rule_is_about_modules_that_exist() -> None:
@@ -179,3 +195,22 @@ def test_a_router_may_hold_the_type_of_a_session_and_not_the_means_to_query() ->
     for module, names in taken.items():
         beyond = names - DATABASE_NAMES_ROUTERS_MAY_TAKE
         assert beyond == set(), f"{module} takes {sorted(beyond)} from SQLAlchemy"
+
+
+def test_no_router_takes_sqlalchemy_whole() -> None:
+    """The other half of the same rule, and the one an allowlist cannot state.
+
+    `from sqlalchemy import select` is refused by the allowlist above; `import
+    sqlalchemy as sa` hands the module every name there is, so the form itself
+    is what is refused.
+    """
+    offenders = {
+        module: sorted(whole)
+        for module, path in modules().items()
+        if within(module, "app.api") and (whole := packages_imported_whole(path, "sqlalchemy"))
+    }
+
+    assert offenders == {}, (
+        "a router that imports SQLAlchemy whole can build a statement out of it: "
+        f"take the one type it needs by name instead — {offenders}"
+    )
