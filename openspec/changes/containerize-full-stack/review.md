@@ -38,3 +38,14 @@
 | 1 | confirmed — The clean-checkout configuration path and its verification remain as confirmed in Confirmation 1; the reviewed changes do not affect them. |
 | 2 | confirmed — Tasks 5.2 and 8.3 now require the same run with `FORWARD_DB_PORT` overridden to prove migration, API readiness, and completion of an uploaded picture's jobs by the worker with the API runner disabled. Decision 10b records this shared verification. |
 | 3 | confirmed — The browser-reachable image address and rendered-thumbnail verification remain as confirmed in Confirmation 1; the reviewed changes do not affect them. |
+
+## Round 2 · Gate 1
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** cb49897b3d8a8497d9097563381fe9507e5b3cc8
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `design.md:64-71`; `tasks.md:13-23`; `proposal.md:35-41` | The revised proposal promises a separate UI image built with `--only-group ui`, without the application or model runtime, but design decision 1 still says the UI target extends the runtime stage and task 1.3 still directs adding the UI group to that target. Following the design and task would put the application and model dependencies in the UI image, reversing the stated isolation and size decision. Reconcile the design and task with the separate UI build, and make the UI image's exclusion of `app` and the model runtime an explicit verification task. | open |
