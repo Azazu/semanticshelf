@@ -30,6 +30,9 @@ file next to `pyproject.toml` (the environment wins). Source of truth:
 | `JOB_MAX_ATTEMPTS` | no | `3` | API, worker | How many attempts a job gets before it is `failed` for good. Between attempts it waits `2^attempts × 10 s`. A `failed` job runs again only through `POST /assets/{id}/reindex`. |
 | `WORKER_BATCH_SIZE` | no | `4` | API, worker | How many jobs one run of a runner claims. The runner inside the API process takes at most this many after a response and stops; a runner that drained while work remained would never end. The worker keeps the same bound per batch, which is what lets several workers share a queue and what keeps a stop from waiting for an unbounded amount of work. |
 | `WORKER_POLL_SECONDS` | no | `2` | worker | How long the worker waits before looking again when the queue held nothing for it. A floor on how late a vector can be, against a claim query in a loop; a stop does not wait it out, because the wait *is* the wait for the stop. |
+| `ALEMBIC_DIR` | no | the `alembic/` beside the installed package | API | Where the migration scripts are. Only `GET /ready` reads it, to compare the database's revision with the code's head. The default is computed from the package's own location, which is right in a checkout and wrong once the package is installed into a virtual environment — there, one level up is `site-packages`, where `alembic` is the library and has no revisions. The container stack sets `/app/alembic`; a probe that cannot find them answers `code head none` rather than ready (change 15). |
+| `API_BASE_URL` | no | `http://127.0.0.1:8000` | demo UI | The address the interface calls. |
+| `API_PUBLIC_URL` | no | whatever `API_BASE_URL` is | demo UI | The address the interface gives a **browser** for the pictures the API links to. Separate because the two are not always the same network: in the container stack the interface calls `http://api:8000` and the browser on the host cannot resolve that name, so every thumbnail would be a broken image (change 15). A single-host run leaves it unset. |
 | `INDEXING_RUNNER` | no | `inline` | API, worker, CLI | Which runner carries out queued work. `inline` is the runner inside whatever process created it — the API after a response, `index-folder` and `index missing` after their import — so a deployment nobody configured still indexes what it accepts. `worker` leaves all of it to `semanticshelf worker`: the API and the commands then queue the work and execute none of it, and a command that did so says which decided it. Set it to `worker` **and start one**, or nothing is ever indexed. |
 
 The template itself is the environment example at the repository root — copy it
@@ -53,5 +56,11 @@ settings mean once it is stored is in
 when a query arrives is in [`../how-to/searching.md`](../how-to/searching.md).
 
 `<DB_USER>`, `<DB_PASSWORD>` and `<DB_NAME>` are the values of the
-Compose variables in the same file. `APP_PORT` is read by `make run` only
-(default `8000`).
+Compose variables in the same file.
+
+`APP_PORT`, `UI_PORT`, `FORWARD_DB_PORT` and `BIND_ADDRESS` are read by `make`
+and by Compose, not by the application: they decide where a run is published on
+the host. `APP_PORT` is what `make run` serves on and what the container stack
+publishes the API at (`UI_PORT` likewise for the interface); `BIND_ADDRESS`
+defaults to `127.0.0.1` everywhere, and changing it publishes a service with no
+authentication — see [`../how-to/running-the-stack.md`](../how-to/running-the-stack.md).

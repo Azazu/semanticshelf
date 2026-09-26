@@ -125,18 +125,18 @@
 
 ## 7. Documentation
 
-- [ ] 7.1 Write `docs/how-to/running-the-stack.md`: the one command, what the
+- [x] 7.1 Write `docs/how-to/running-the-stack.md`: the one command, what the
   five services are, what each volume holds and the one command that removes
   them, warming the weights, reading `docker compose ps` when something is not
   ready, the published ports and what they do **not** mean (NFR-SEC-7), the
   measured image sizes and build time, and the smoke transcript. Verify:
   re-read whole after the last edit; every command in it was run in the exact
   form printed.
-- [ ] 7.2 `docs/how-to/local-development.md` points at it, and
+- [x] 7.2 `docs/how-to/local-development.md` points at it, and
   `docs/reference/settings.md` carries the variables the stack reads that the
   table does not have yet. Verify: both re-read whole; `rg` finds no stale claim
   that the only way to run the service is on the host.
-- [ ] 7.3 Reconcile the claims this change touches: `rg -n "docker|compose|image"`
+- [x] 7.3 Reconcile the claims this change touches: `rg -n "docker|compose|image"`
   across `docs/`, `openspec/`, `AGENTS.md` and `README.md`, and fix every hit
   that the stack makes wrong. Verify: the terms swept and the files touched are
   named in the commit body.
@@ -183,7 +183,7 @@
   addresses with the second defaulting to the first. Verify: the delta carries
   the full updated requirement with every scenario it had, plus the two new
   ones; `openspec validate --strict` passes.
-- [ ] 8.7 Reconcile the exit criterion: `docs/explanation/requirements.md` §7
+- [x] 8.7 Reconcile the exit criterion: `docs/explanation/requirements.md` §7
   row 15 says `docker compose up` on a clean checkout, which cannot hold before
   the configuration exists. It names `make stack` (and what that command does)
   instead. Verify: the row is re-read whole; `rg -n "docker compose up"` across
@@ -236,7 +236,7 @@ none of. They are surfaced rather than absorbed, and Gate 1 is asked again.
   Verify: the browser check went from "no picture at all" to two thumbnails
   fetched; on the host `uv run` already added the root, which is why nothing had
   ever noticed.
-- [ ] 10.4 The artifacts carry all three: `design.md` gets them as decisions
+- [x] 10.4 The artifacts carry all three: `design.md` gets them as decisions
   with what they cost, and `proposal.md` stops saying `app/` is unchanged.
   Verify: `openspec validate --strict` passes and the diff of the proposal says
   what moved.

@@ -316,7 +316,7 @@ Layers as in `AGENTS.md`: `tests/unit` (fake embedder, no database, no network),
 ### 6.7 Documentation and delivery
 
 - **NFR-DOC-1** README: screenshots of the UI pages on the demo dataset, an architecture diagram (request path, job path, storage), `docker compose up` quick start, `make` targets, the security notes of NFR-SEC-7, the CPU latency expectations, the English-query limit, "what this shows" list, links to ADRs and to `docs/how-to/benchmarks.md`. Diátaxis layout under `docs/` per `AGENTS.md`.
-- **NFR-DOC-2** `docker compose up` on a clean machine yields a working stack (db, api, worker, ui) whose first request triggers the model downloads; `make demo` (download the dataset sample, index it, wait for jobs) produces the corpus the screenshots were taken from.
+- **NFR-DOC-2** One command on a clean machine yields a working stack (db, the schema at head, api, worker, ui) whose first request triggers the model downloads; `make demo` (download the dataset sample, index it, wait for jobs) produces the corpus the screenshots were taken from. That command is `make stack` rather than `docker compose up` itself: a clean checkout carries no local environment file — it is gitignored and only its template is committed — so Compose would stop at interpolation before starting anything. `make stack` writes that file from the template with a generated database password and then brings the stack up; afterwards plain `docker compose up` works (corrected in change 15, where it was measured).
 - **NFR-DOC-3** GitHub Actions: strict OpenSpec validation and the script suites (`workflow` job), `make check` plus the integration suite against a pgvector service (`python` job) — the migration round trip of NFR-REL-3 is one of those tests, not a job of its own — and the dependency audit; from stage 4 a Docker image build. Status badge in the README. The executor never polls Actions; the user reports the run (D16).
 - **NFR-DOC-4** `LICENSE` — MIT, added in the first change so every later file is covered.
 
@@ -359,7 +359,7 @@ The stage plan is the source for `openspec/ROADMAP.md`; ids are stable across bo
 
 | # | Change id | Scope | Tier | Exit criterion |
 |---|---|---|---|---|
-| 15 | `containerize-full-stack` | multi-stage Dockerfile on the uv base (runtime without dev/ui groups), Compose services `api`, `worker`, `ui`, `db` with healthchecks and volumes for media and the model cache, CI image build, `make sca-image` | high (CI infrastructure) | `docker compose up` on a clean checkout serves the UI and indexes an upload; CI builds the image |
+| 15 | `containerize-full-stack` | multi-stage Dockerfile on the uv base (runtime without dev/ui groups, and the interface's own image with only its group), Compose services `api`, `worker`, `ui`, `db` plus a one-shot `migrate`, with healthchecks and volumes for media and the model cache, CI image build, `make sca-image` | high (CI infrastructure) | `make stack` on a clean checkout serves the UI and indexes an upload — it writes the local environment file the template describes, which is what `docker compose up` alone cannot do on a fresh clone; CI builds the image |
 | 16 | `harden-quality-and-docs` | README with screenshots, diagram and benchmarks, layering test (NFR-QA-2), dependency audit in CI, ADR index, remaining how-to pages | low | README complete; the layering test fails on a planted violation |
 
 ### Stretch (section 9)

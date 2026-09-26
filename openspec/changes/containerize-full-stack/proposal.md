@@ -16,8 +16,11 @@ The service is complete and it cannot be shown to anybody without a Python
 toolchain. Today's route is `make init`, `make run`, `make ui` — uv, a virtual
 environment, a database container and three terminals. The brief promised the
 other route from its first page (§1: "a one-command Compose stack"), §7 row 15
-names it, and its exit criterion is exact: **`docker compose up` on a clean
-checkout serves the UI and indexes an upload; CI builds the image.**
+names it, and its exit criterion is exact: **one command on a clean checkout
+serves the UI and indexes an upload; CI builds the image.** (The requirement
+said `docker compose up`; a clean checkout has no local environment file for
+Compose to interpolate, so the command is `make stack` and §7 row 15 now says
+so — Gate 1 round 1, finding 1.)
 
 There is a second reason, and it is why this comes after stage 3 rather than
 before it. The stack is where the worker earns its existence: `INDEXING_RUNNER`
@@ -29,13 +32,16 @@ rather than the way a laptop runs it.
 
 ## What Changes
 
-- **A multi-stage `Dockerfile` on the uv base image.** A build stage resolves
-  the locked environment (`uv sync --frozen --no-dev --no-editable`, so the
-  virtual environment is self-contained and the UI group stays out), a runtime
-  stage copies that environment and the application, and a small `ui` target
-  adds the UI group and `ui/` for the demo interface. No model weights are baked
-  in: they are 2.8 GB, they belong to a cache volume, and an image that carried
-  them would be rebuilt every time a checkpoint moved.
+- **A multi-stage `Dockerfile`, two images.** A build stage resolves the locked
+  environment (`uv sync --locked --no-dev --no-editable`, so the virtual
+  environment is self-contained, the build fails on a stale lock and the
+  development and interface groups stay out), a runtime stage copies that
+  environment and the migrations, and the interface gets an image of its own
+  built with `--only-group ui` — Streamlit and httpx, no model runtime and no
+  `app`, which makes "the interface never loads a model" true of the image and
+  not only of the code. No model weights are baked in either: they are 2.8 GB,
+  they belong to a cache volume, and an image that carried them would be rebuilt
+  every time a checkpoint moved.
 - **A `.dockerignore`**, because the build context otherwise carries `.data/`
   (weights and the demo corpus), `.venv`, `.git` and the test tree.
 - **A Compose stack of five services**, four of which run: `db` (unchanged,
@@ -125,7 +131,11 @@ behave exactly as they do today.
   the stack page), `openspec/ROADMAP.md` and `docs/explanation/requirements.md`
   §7 row 15 (its exit criterion names `docker compose up`; on a clean checkout
   the command that works is `make stack`, and the row will say so).
-- **Unchanged:** every line of `app/`. The interface changes by one setting,
+- **Unchanged:** the HTTP contract, the queue, the searches and the CLI. What
+  did change in the service is one setting — `ALEMBIC_DIR`, because the
+  readiness probe was computing the migrations' path from the package's own
+  location and an installed package's neighbour is `site-packages` (design,
+  "What the containers found"). The interface changes by one setting too,
   and that is the finding the design said would be surfaced rather than
   absorbed if the stack needed it (Gate 1 round 1, finding 3): a program that
   hands a browser an address only its own server can resolve was reading one

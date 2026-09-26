@@ -56,7 +56,7 @@ iterative order for a narrowed search to rest on.
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 15 | `containerize-full-stack` | multi-stage Dockerfile, Compose `api`/`worker`/`ui`/`db` with healthchecks and volumes, CI image build, `make sca-image` | high |
+| 15 | `containerize-full-stack` | multi-stage Dockerfile (service and interface), Compose `db`/`migrate`/`api`/`worker`/`ui` with healthchecks and volumes, `make stack` writing the local environment file on a clean checkout, CI image build, `make sca-image` | high |
 | 16 | `harden-quality-and-docs` | README with screenshots, diagram and benchmarks, layering test, dependency audit in CI, ADR index, remaining how-to pages, OpenAPI examples backfilled on the operations of changes 2-7 (FR-OPS-4) | low |
 
 ## Stretch

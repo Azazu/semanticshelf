@@ -5,10 +5,15 @@ Prerequisites: [uv](https://docs.astral.sh/uv/) (it downloads Python
 with Compose v2, `make`, Node 22 (for the OpenSpec CLI:
 `npm install -g @fission-ai/openspec`).
 
+Everything below runs the service **on the host**, with uv and a database in
+Docker — which is what you want while writing code. To run the whole thing in
+containers instead (four processes, a database, one command, nothing on the host
+but Docker), see [`running-the-stack.md`](running-the-stack.md).
+
 ## First run
 
 ```bash
-cp .env.example .env          # adjust FORWARD_DB_PORT if 5433 is taken
+sh scripts/stack-env.sh       # the local environment file, with a generated database password
 make init                     # uv sync, start pgvector, alembic upgrade head
 make run                      # http://127.0.0.1:8000/api/docs
 ```

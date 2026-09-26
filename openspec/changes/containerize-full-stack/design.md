@@ -260,6 +260,53 @@ the corpus, and assert that a thumbnail's `naturalWidth` is not zero — which i
 the browser saying it fetched the bytes, and the only check that could have
 caught decision 10c's defect.
 
+## What the containers found (during apply)
+
+Three things the host had been hiding. Two of them change the service or the
+interface, which the proposal said would not happen — so they are here, and
+Gate 1 was asked again rather than worked around.
+
+### 11. Where the migrations are is a setting
+
+`/ready` answered 503 in the stack against a database the stack had just
+migrated: `"migrations": "database at 0003_constraint_names, code head none"`.
+The probe computed the scripts' directory from the package's own location —
+right in a checkout, where `app/` and `alembic/` are siblings, and wrong for an
+installed package, where the sibling is `site-packages` and the `alembic` there
+is the library, with no revisions in it.
+
+`ALEMBIC_DIR` is now a setting whose default is that same computation, so a host
+run is unchanged and the stack says `/app/alembic`. It also removes a hard-coded
+path from the service, which the repository's own rule asks for ("Settings only
+via `pydantic-settings` from environment — no hard-coded paths").
+
+*Alternative considered:* copy the source tree into the image so the sibling
+layout holds. Rejected — the image would carry the code twice, once installed
+and once as a tree, and which one runs would depend on path order.
+
+### 12. A build that silently shipped last week's code
+
+`uv sync --no-editable` builds a wheel for this project and the cache mount
+keeps it. The project's version does not change when its source does, so a
+rebuild after an edit reinstalled the *previous* wheel: a setting added minutes
+earlier was missing from an image built after it — measured, not feared (the
+image had zero occurrences of a constant the repository had two of).
+
+`--reinstall-package semanticshelf` on the project sync. The dependency layer
+above it is untouched, so the cache still does its job where the time actually
+goes.
+
+### 13. `streamlit run ui/app.py` does not put the working directory on the path
+
+Every page of the interface rendered `ModuleNotFoundError: No module named 'ui'`
+where the corpus should be: the pages import each other as `ui.client`, and
+Streamlit puts the *script's* directory on `sys.path`, not the working
+directory. On the host `uv run` adds the project root, which is why nothing had
+ever noticed. `PYTHONPATH=/app` in the interface's image.
+
+This one is worth a note for what it says about the browser check: the page
+still answered 200, with a Streamlit error where the pictures were.
+
 ## Risks / Trade-offs
 
 - **The image is large** (`torch` alone is hundreds of megabytes) → measured and
