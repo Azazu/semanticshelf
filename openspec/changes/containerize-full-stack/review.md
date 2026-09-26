@@ -83,3 +83,15 @@
 |---|----------|----------|---------|--------|
 | 1 | major | `.env.example:10-12`; `scripts/stack-env.sh:44-50`; `docs/how-to/local-development.md:13-17` | The new setup generates a 32-character `DB_PASSWORD` but replaces only the `__GENERATED__` marker. `DATABASE_URL` in the same template still contains `localdev-only-password`, so the documented `sh scripts/stack-env.sh` followed by `make init` starts PostgreSQL with one password and runs Alembic with another. A fresh local-development checkout fails to migrate, and a host API started from that file cannot connect. Generate a matching host `DATABASE_URL` (including the configured user, database and port), and verify the documented host setup from a clean checkout. | fixed |
 | 2 | minor | `docs/how-to/running-the-stack.md:61-64`; `docker-compose.yml:63-103` | The how-to says setting `HF_HUB_OFFLINE=1` in the environment file stops the containers from contacting the Hub, but Compose does not pass that variable to `api`, `worker`, or the one-shot warm command. The environment file only supplies values referenced by the Compose file; this setting is not referenced, and the image does not contain the file. Wire it into the relevant container environments or correct the instruction, then verify the offline setting inside a container. | fixed |
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** 779c5e8f3a0f4575255a46d0c4c32b46ff21d575
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — The committed template now puts the generated password in both fields, and the recorded clean-checkout run verifies the default values. But the host `DATABASE_URL` still hardcodes `semanticshelf` as user and database and `5433` as port. `scripts/stack-env.sh` checks only that the URL contains the generated password. For example, setting `FORWARD_DB_PORT=5444` publishes PostgreSQL on 5444 while the host migration still connects to 5433; changing `DB_USER` or `DB_NAME` likewise leaves the URL pointed at the old values. Generate or validate the URL against all configured database fields and the published host port, then verify a nondefault configuration. |
+| 2 | confirmed — `HF_HUB_OFFLINE` is passed through the shared environment mapping used by `api`, `worker`, and the one-shot warm command; the how-to now shows the setting, and tasks.md records verification inside a container. |
