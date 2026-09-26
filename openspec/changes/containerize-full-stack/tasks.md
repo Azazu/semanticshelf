@@ -218,7 +218,7 @@ none of. They are surfaced rather than absorbed, and Gate 1 is asked again.
   `alembic/`) and wrong for an installed package, where one level up is
   `site-packages` and the `alembic` there is the library. **The path is now a
   setting**, `ALEMBIC_DIR`, whose default is that same computation, so a host
-  run is unchanged; the stack sets `/app/alembic`. Verify:
+  run is unchanged; the stack sets the path the image puts them at. Verify:
   `tests/api/test_readiness_migrations.py` covers the default, the environment
   override, a probe pointed at revisions that are not there ("code head none"),
   and that the repository's own default finds a head.
