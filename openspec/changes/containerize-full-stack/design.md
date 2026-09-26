@@ -206,6 +206,13 @@ round 1, finding 2). `migrate`, `api` and `worker` are therefore given a
 the service name, which also means the host's `FORWARD_DB_PORT` can move
 without touching the stack.
 
+All three are proven in one run, not two: the smoke of decision 10 is executed
+with `FORWARD_DB_PORT` overridden, so the migration exiting 0, `/ready`
+reporting the revision check, and a picture reaching `done` through the worker
+are each evidence that the process behind them opened its own connection to
+`db:5432` (Gate 1 confirmation 1, finding 2 — the first plan verified the
+migration and the API and left the worker to a run that used the default port).
+
 ### 10c. The interface needs two addresses, and that is an application change
 
 `ui/client.py` builds absolute URLs from the API's links and hands them to the

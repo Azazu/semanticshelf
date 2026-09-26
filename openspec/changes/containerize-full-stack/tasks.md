@@ -78,11 +78,14 @@
   it, assert it is found, take the stack down **without** removing volumes
   (design decision 10). Verify: `sh -n` clean; it exits non-zero when the search
   finds nothing (demonstrated by pointing it at an empty query).
-- [ ] 5.2 Run it for real on a warmed cache, with `APP_PORT` and `UI_PORT`
-  overridden (8000 and 8501 are taken on this machine). Verify: the transcript
-  is kept and the wall time recorded; the exit criterion of the requirements —
-  a clean checkout serving the UI and indexing an upload — is what the run
-  shows.
+- [ ] 5.2 Run it for real on a warmed cache, with `APP_PORT`, `UI_PORT` **and
+  `FORWARD_DB_PORT`** overridden — the first two because 8000 and 8501 are taken
+  on this machine, the third because a stack that quietly used the host's
+  published database port would pass every check that leaves it at its default
+  (Gate 1 confirmation 1, finding 2). Verify: the transcript is kept and the
+  wall time recorded; the exit criterion of the requirements — a clean checkout
+  serving the UI and indexing an upload — is what the run shows, and the upload
+  is carried out by the worker under the overridden port.
 - [ ] 5.3 The UI is reachable and shows the corpus. Verify: a recorded
   `curl -sI` of the published UI port and one screenshot-free check that the
   Search page answers (the screenshots themselves belong to change 16).
@@ -137,10 +140,15 @@
   message; restore.
 - [ ] 8.3 Finding 2: `migrate`, `api` and `worker` are given a `DATABASE_URL`
   built in the compose file from the same three variables and the service name
-  `db:5432`, not from the host's published port (design decision 10b). Verify:
-  the migration completes and `/ready` reports the database and the revision
-  check passing **with `FORWARD_DB_PORT` set to something else entirely** — if
-  the host's port were what the stack used, that run would fail.
+  `db:5432`, not from the host's published port (design decision 10b). Verify,
+  **all three of them, in one run with `FORWARD_DB_PORT` set to something else
+  entirely**: the migration completes (`migrate` exited 0), `/ready` reports the
+  database and the revision check passing (`api`), and an uploaded picture
+  reaches `done` for every enabled model with the API's own runner switched off
+  (`worker` — so the job can only have been carried out by the process that had
+  to open its own connection). If any of the three were using the host's port,
+  that run would fail. Recorded from the real run of task 5.2, which uses the
+  same override.
 - [ ] 8.4 Finding 3: `ui/client.py` takes `API_PUBLIC_URL` for the addresses it
   hands to the browser, defaulting to `API_BASE_URL`; the stack sets the two to
   the service name and the published address (design decision 10c). Verify:
