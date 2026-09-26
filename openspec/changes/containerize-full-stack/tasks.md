@@ -204,12 +204,14 @@
 - [ ] 9.1 `openspec validate containerize-full-stack --strict` passes and every
   task above is checked with its evidence. Verify: the command's output is
   recorded.
-- [ ] 9.2 Run locally everything CI runs, in CI's own form:
+- [x] 9.2 Run locally everything CI runs, in CI's own form:
   `FORCE_COLOR=1 CI=true make check`, `openspec validate --all --strict`,
   `sh -n scripts/*.sh`, every `scripts/*_test.sh`, and
   `FORCE_COLOR=1 CI=true make test-integration` with the database up — plus the
-  image build the new job runs. Verify: all green before the branch is offered
-  for a push.
+  image build the new job runs. Verify: 663 unit/api passed, 293 integration
+  passed, validation 16/16, `sh -n` clean over every shell script,
+  `workflow_verify_test` 23 passed, `gate_run_test` 77 passed, `make image`
+  built both targets.
 - [ ] 9.3 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
   `scripts/pregate-verify.sh gate2 containerize-full-stack` passing. Verify: the
   verifier's output is recorded in the handoff; the gate follows the user's push
@@ -249,6 +251,6 @@ none of. They are surfaced rather than absorbed, and Gate 1 is asked again.
   with what they cost, and `proposal.md` stops saying `app/` is unchanged.
   Verify: `openspec validate --strict` passes and the diff of the proposal says
   what moved.
-- [ ] 10.5 Gate 1 again, because the scope moved (AGENTS.md: a change of scope
+- [x] 10.5 Gate 1 again, because the scope moved (AGENTS.md: a change of scope
   reopens it). Verify: `scripts/gate-run.sh containerize-full-stack 1 full`
   records a round bound to the commit that carries these.

@@ -5,64 +5,42 @@
 **Branch:** change/containerize-full-stack
 
 ## Done this session
-- Branch and scaffold (`chore(containerize-full-stack): start change`).
-- All four planning artifacts written; `openspec validate
-  containerize-full-stack --strict` passes and `scripts/pregate-verify.sh gate1`
-  is green.
-  - `proposal.md` — **Risk-Tier: high** (the tier the requirements declare for
-    it: CI infrastructure; it also publishes ports and runs a build that pulls
-    the whole dependency tree). Multi-stage Dockerfile on the uv base, a Compose
-    stack of `db`, a one-shot `migrate`, `api`, `worker` and `ui`, volumes for
-    media and the model cache, `INDEXING_RUNNER=worker` in the stack, loopback
-    publication, `make sca-image`, and a CI job that builds the image and
-    pushes it nowhere.
-  - `specs/deployment/spec.md` — a **new capability**: one command brings the
-    system up and health decides the order; the image carries the service and
-    neither the tooling, the interface nor the weights, resolved from the same
-    lock file, running as an unprivileged user; state outlives the containers;
-    in the stack the runner is the worker; nothing is published beyond loopback
-    by default; CI builds the image and a published command scans it.
-  - `design.md` — ten decisions and the high-tier applicability table. The ones
-    worth reading first: migrating is a service that runs once rather than
-    something the API does; the worker gets no healthcheck rather than a
-    pretend one; named volumes (not bind mounts) are what makes a non-root
-    container able to write; the scan is a pinned scanner image and is **not**
-    in CI, because a new advisory in a base image should not redden an unrelated
-    change.
-  - `tasks.md` — 8 groups, 25 tasks, each with its verification.
+- **Gate 1 · round 1 — confirmed** (three majors: the clean checkout had no
+  configuration path, the database was addressed by the host's published port,
+  and the interface handed the browser an address only its own server can
+  resolve).
+- **Implementation**: `Dockerfile` (two images, pinned bases), `.dockerignore`
+  (allowlist, 350 kB context), the Compose stack (`db`, one-shot `migrate`,
+  `api`, `worker`, `ui`), `scripts/stack-env.sh`, `make image|stack|stack-down|
+  stack-logs|stack-warm|sca-image`, the CI `image` job, `scripts/stack_smoke.sh`
+  and `scripts/stack_browser_check.py`, and two suites that read the delivery
+  definition as structure (`test_compose_stack.py`, `test_image_definition.py`).
+- **The real run**: 42.6 s for up → ready → an upload answered `pending` →
+  the worker extracting → a search that found it → a browser fetching the
+  thumbnail → down with three volumes still there. `make sca-image`: zero
+  findings, and it fails on an old base (32 HIGH/CRITICAL, exit 1).
+- **Three things the containers found** that the host had hidden, all recorded
+  in design.md and §10 of tasks.md: the migrations' path (now `ALEMBIC_DIR`,
+  defaulting to the old computation), an image that silently shipped stale code
+  (`--reinstall-package`), and an interface that could not import its own pages
+  (`PYTHONPATH`). Two of those changed the service and the interface, so —
+- **Gate 1 · round 2 — confirmed** after the scope moved. Its finding was mine:
+  the proposal promised a separate `--only-group ui` image while the design and
+  a task still described the old "runtime plus the ui group" shape, and two
+  further sentences repeated it.
 
-## Gate 1 · round 1 — three majors, all accepted
-1. **A clean checkout has no configuration.** The compose file demands three
-   variables with `:?required` and the file that answers them is gitignored, so
-   `docker compose up` on a fresh clone stops at interpolation. The one command
-   is now `make stack`: it writes that file from the committed template on first
-   run, generating the database password rather than defaulting it, and the
-   `:?required` markers stay so a hole in a hand-edited file is still loud.
-2. **Inside a container, `127.0.0.1:5433` is that container's own loopback.**
-   `migrate`, `api` and `worker` are given a `DATABASE_URL` composed in the
-   compose file from the same variables and `db:5432`; the verification runs the
-   stack with the host's published port set to something else, which would fail
-   if the stack were using it.
-3. **The interface hands the browser addresses only its own server can
-   resolve.** `ui/client.py` takes `API_PUBLIC_URL` for what the browser
-   fetches, defaulting to `API_BASE_URL`; the `demo-ui` spec's "configured by
-   the address of the service alone" moves with it. This is the application
-   change the design said would be surfaced rather than absorbed — and the proof
-   is a headless browser asserting a thumbnail's `naturalWidth`, because a page
-   full of broken images answers 200 to `curl`.
-
-Confirmation 1 kept finding 2 open, and fairly: the overridden database port
-was proven for the migration and the readiness check, while the worker ran in a
-separate run that left that port at its default — a worker quietly using the
-host's port would have passed. One run now carries all three pieces of evidence.
-**Gate 1 is confirmed** at confirmation 2 (`6445c0d`).
+## Blocked on one manual edit
+`.env.example` must carry `__GENERATED__` as its database password value —
+`scripts/stack-env.sh` replaces that marker when it writes the local file, and
+refuses with a message when it is absent. The policy plugin does not let me
+read or write that file. Until it is done, tasks 8.1 and 8.2 (the clean-clone
+run and the missing-value refusal) cannot be verified.
 
 ## Next step
-`/opsx:apply containerize-full-stack` — implement in task order: the image
-(`.dockerignore` first, then the Dockerfile and `make image`), the stack, the
-scan, the CI job, the smoke script and its real run, the tests that stay, and
-the documentation.
+The user makes that one-line edit; then the clean-clone verification, the
+handoff to `awaiting-gate-2`, the push, and `/gate-review containerize-full-stack 2`.
 
 ## Blockers
-None. Nothing in `app/` or `ui/` is expected to change; if the stack turns out
-to need an application change, that is a finding to surface rather than absorb.
+Only the edit above. Locally green: `make check` (663), `make test-integration`
+(293), `openspec validate --all --strict` (16/16), both script suites,
+`make image`.
