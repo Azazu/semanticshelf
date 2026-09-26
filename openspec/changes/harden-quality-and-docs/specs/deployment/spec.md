@@ -4,8 +4,14 @@
 
 What the image installs is what the lock file resolves, so the lock file is
 where a known vulnerability arrives. Continuous integration SHALL audit the
-locked dependencies on every change and SHALL fail the run when one of them has
-a known vulnerability for which a fix is available.
+locked dependencies on every change and SHALL fail the run when any of them has
+a known advisory.
+
+Any, not "the severe ones with a fix": the audit has no severity filter and no
+fix-availability filter, so a policy that named either would be a description of
+machinery this repository does not have. An advisory nobody can act on yet SHALL
+be silenced by its own identifier in the audit command, where it is visible in
+the diff and reviewable, rather than by relaxing the rule for everything else.
 
 The audit SHALL read the lock file the build reads, not a fresh resolution of
 the declared ranges: a run that audits something the image will not install
@@ -16,9 +22,9 @@ This requirement is about what the dependencies are known to contain. It does
 not promise that they contain nothing else, and it SHALL NOT be read as one: an
 advisory that does not exist yet is not a vulnerability the run can find.
 
-#### Scenario: A dependency with a known fixable vulnerability
+#### Scenario: A dependency with a known vulnerability
 - **WHEN** the audit runs against a lock file holding a package with a known
-  vulnerability that has a fix
+  advisory
 - **THEN** the run fails and names the package
 
 #### Scenario: The audit reads the lock rather than the ranges

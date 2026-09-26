@@ -83,6 +83,11 @@ audit: ## Known vulnerabilities in the locked dependencies (NFR-SEC-6)
 	# `--locked`: what is audited is the resolution the image installs, not a
 	# fresh one of the declared ranges. The preview flag is named rather than
 	# silenced: the day it changes, this fails loudly instead of skipping.
+	# Any advisory fails this, not only a severe one with a fix — the command has
+	# neither filter, and one written here would be a filter nobody reviews. An
+	# advisory with no released fix belongs on this line as
+	# `--ignore-until-fixed <ID>` with its reason: visible in the diff, and
+	# failing again by itself the day a fix exists.
 	uv audit --locked --preview-features audit-command
 
 lint: ## ruff check
