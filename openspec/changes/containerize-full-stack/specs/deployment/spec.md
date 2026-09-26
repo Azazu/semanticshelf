@@ -12,18 +12,45 @@ the database, the schema at its current head, the API, the process that carries
 out indexing work, and the demo interface — from a clean checkout with one
 command and no manual step between them.
 
+That command SHALL also be what makes the checkout configurable: the local
+configuration a checkout does not carry SHALL be created from the committed
+template on first use, with any value that must not be committed generated
+rather than defaulted. A value the stack needs and does not have SHALL stop it
+before any service starts, naming what is missing; the stack SHALL NOT start
+half-configured and SHALL NOT substitute a silent default for something a
+deployment is meant to decide.
+
 A service SHALL NOT start before what it needs is ready: the schema SHALL be
 brought to head before the API serves, and the worker and the interface SHALL
 start against an API that has reported itself ready. Readiness SHALL be decided
 by asking the service, never by waiting a fixed time.
 
+Inside the stack, every service SHALL address the database by its place in the
+stack rather than by the address the host publishes it on: a published port is
+for the person at the keyboard, and from inside a container that address is that
+container's own.
+
 The stack SHALL NOT require the person running it to have the language runtime,
 its package manager or a virtual environment on the host.
 
 #### Scenario: A clean checkout
-- **WHEN** the stack is started in a checkout that has never been run
-- **THEN** the database is created and migrated, the API answers ready, the
-  interface is reachable, and nothing else had to be done first
+- **WHEN** the stack is started in a checkout that has never been run and holds
+  no local configuration
+- **THEN** that configuration is written from the template with a generated
+  value where one must not be committed, the database is created and migrated,
+  the API answers ready, the interface is reachable, and nothing else had to be
+  done first
+
+#### Scenario: A value the stack cannot invent
+- **WHEN** the local configuration exists but is missing something the stack
+  needs
+- **THEN** the stack stops before any service starts and names the missing
+  variable, rather than starting with a default nobody chose
+
+#### Scenario: The database is where the stack says, not where the host says
+- **WHEN** the services of a running stack connect to the database
+- **THEN** they reach it by its name inside the stack, and changing the port the
+  host publishes it on changes nothing for them
 
 #### Scenario: Readiness decides the order
 - **WHEN** the database is slow to accept connections, or the schema is not yet
@@ -113,6 +140,13 @@ what publishing it further would require.
 - **WHEN** the stack is started without changing any setting
 - **THEN** its ports are reachable from the host that runs it and from nowhere
   else
+
+#### Scenario: What the browser is given is reachable by the browser
+- **WHEN** a page of the interface in the running stack shows a picture to a
+  browser on the host
+- **THEN** the address that browser is given is one it can resolve and fetch —
+  the published address of the API, not the name the interface's own server uses
+  inside the stack — and the picture is actually rendered
 
 ### Requirement: The image is built by CI and scannable by a published command
 

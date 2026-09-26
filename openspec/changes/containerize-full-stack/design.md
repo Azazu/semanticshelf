@@ -54,7 +54,7 @@ See `proposal.md` — Why. What shapes the approach is what is already true:
 | **Authorization boundary** | n/a — no authentication exists by design (D12, NFR-SEC-7), and the stack does not invent one. What it does is refuse to publish beyond loopback by default, and say so. |
 | **Idempotency of retries** | `docker compose up` twice is once: the migration is idempotent (Alembic at head is a no-op), volumes are reused, and the services are recreated only when their definition changed. The smoke script is safe to re-run; it names its own asset and cleans up after itself. |
 | **Money rounding** | n/a. |
-| **Empty / zero / null inputs** | The stack's inputs are settings. Every one it reads has a default except the database credentials, which the compose file already marks `:?required` so a missing value fails at parse time with the variable's name rather than at runtime with a connection error. |
+| **Empty / zero / null inputs** | The stack's inputs are settings. Every one it reads has a default except the three the database is named and opened by, which the compose file marks `:?required` so a missing value fails at parse time with the variable's name rather than at runtime with a connection error. A clean checkout has none of them — the file that holds them is gitignored — so the command writes that file from the committed template first, generating the one value that must not be committed (decision 10a). |
 
 Every check named above has a test or a demonstrated failure; §6 of `tasks.md`
 records each one.
@@ -167,6 +167,75 @@ into any registry and without loading the image into the runner's daemon. It
 does not run the stack: that needs the real weights (2.8 GB) and the model
 downloads NFR-SEC-4 documents, which is not what a pull request should pay for.
 
+### 10a. A clean checkout has no configuration, so the command writes it
+
+The compose file demands `DB_NAME`, `DB_USER` and `DB_PASSWORD` with
+`:?required`, and the file that answers them is gitignored — only its template
+is committed. So `docker compose up` in a fresh clone fails during
+interpolation, before a service starts (Gate 1 round 1, finding 1).
+
+`make stack` is therefore the one command: when the local environment file is
+absent it writes one from the committed template, replacing the database
+password placeholder with a value generated on the spot
+(`tr -dc` over `/dev/urandom`, so the host needs nothing but a shell), and then
+brings the stack up. On every later run it finds the file and changes nothing.
+
+*The `:?required` markers stay.* They are what makes a missing value a failure
+that names the variable instead of a default nobody chose, and a generated file
+does not make them redundant — someone who edits it by hand can still leave a
+hole.
+
+*Alternative considered:* defaults in the compose file
+(`${DB_PASSWORD:-semanticshelf}`). Rejected: a password in a committed file is a
+password in the repository, whatever its value is, and the first deployment to
+publish beyond loopback inherits it.
+
+*Alternative considered:* `POSTGRES_HOST_AUTH_METHOD=trust`, which removes the
+password question entirely. Rejected for the stack that is meant to look like a
+deployment: trust authentication on a service other containers can reach is not
+what this project wants to show, even bound to loopback. It stays what it is
+today — the integration database's own arrangement, on a throwaway container.
+
+### 10b. Inside the stack the database is `db:5432`
+
+The committed template points `DATABASE_URL` at the host's published port
+(`127.0.0.1:5433`), which is correct for `make run` on the host and wrong inside
+every container, where that address is the container's own loopback (Gate 1
+round 1, finding 2). `migrate`, `api` and `worker` are therefore given a
+`DATABASE_URL` composed in the compose file from the same three variables and
+the service name, which also means the host's `FORWARD_DB_PORT` can move
+without touching the stack.
+
+### 10c. The interface needs two addresses, and that is an application change
+
+`ui/client.py` builds absolute URLs from the API's links and hands them to the
+browser (`address_of` → `st.image`). With `API_BASE_URL=http://api:8000` the
+browser is given `http://api:8000/...`, which only the interface's own server
+can resolve: every thumbnail in the stack would be a broken image, and a
+`curl -sI` of the UI's port would not notice (Gate 1 round 1, finding 3).
+
+So the interface takes two settings: `API_BASE_URL`, the address it calls, and
+`API_PUBLIC_URL`, the address pictures are given to the browser under —
+defaulting to `API_BASE_URL`, so a host run is configured exactly as it is
+today. In the stack they are `http://api:8000` and
+`http://127.0.0.1:${APP_PORT}`.
+
+This is a change to `ui/`, which the proposal said would not change. That is the
+right outcome of the rule rather than an exception to it: the design said a
+stack that needs an application change is a finding to surface, the reviewer
+found it, and the scope moved through the gate rather than around it. The
+`demo-ui` spec's "configured by the address of the service alone" moves with it.
+
+*Alternative considered:* the interface fetches the bytes itself and renders
+them from memory. Rejected — it doubles the traffic through a demo process, it
+makes a picture's size a Streamlit memory question, and FR-UI-2's shape (every
+picture comes from a URL the API gave) is what keeps the interface honest.
+
+*Alternative considered:* `extra_hosts: host.docker.internal:host-gateway` and
+one address for both. Rejected: platform-dependent, and it points the
+interface's server at the host's published port to reach a service one network
+hop away.
+
 ### 10. The end-to-end evidence is a scripted local run
 
 `scripts/stack_smoke.sh` brings the stack up, waits for `/ready`, uploads one
@@ -175,6 +244,14 @@ it is found, and takes the stack down without touching the volumes. It is the
 exit criterion, executable. The how-to's transcript is its output; the tasks
 require it to have been run for real, with the model cache warmed first so the
 run does not measure the Hub.
+
+**It also opens the interface in a browser.** A page that renders every
+thumbnail as a broken image answers 200 to `curl`, so the last step drives the
+headless browser this repository already has (the `screenshots` group's
+Playwright, used by `scripts/screenshots.py`): open the published UI, wait for
+the corpus, and assert that a thumbnail's `naturalWidth` is not zero — which is
+the browser saying it fetched the bytes, and the only check that could have
+caught decision 10c's defect.
 
 ## Risks / Trade-offs
 

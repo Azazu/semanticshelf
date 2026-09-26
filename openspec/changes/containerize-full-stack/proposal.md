@@ -44,6 +44,28 @@ rather than the way a laptop runs it.
   sleeping: `api` starts when the database is healthy and the migration has
   completed, and `worker` and `ui` start when `api` reports ready (NFR-REL-4).
   The API's healthcheck is `/ready` (FR-OPS-2).
+- **The stack configures itself on a clean checkout.** The local environment
+  file is gitignored and only its template is committed, so `docker compose up`
+  on a fresh clone stops at interpolation before a single service starts
+  (Gate 1 round 1, finding 1). The one command is therefore `make stack`: it
+  writes that file from the template on first run, with a generated database
+  password, and then brings the stack up. Compose keeps its `:?required`
+  markers — a missing value stays a loud failure naming the variable, never a
+  silent default — and nothing secret is committed to the repository.
+- **Inside the stack, the database is `db:5432`.** The committed template
+  addresses the database at the host's published port, which inside a container
+  is that container's own loopback (Gate 1 round 1, finding 2). `migrate`, `api`
+  and `worker` are given a `DATABASE_URL` built from the same values but
+  pointing at the service name, so the host's port override and the stack's
+  wiring stop being the same setting.
+- **The interface learns a second address, because its browser is not on the
+  Docker network.** `ui/client.py` turns the API's links into absolute URLs and
+  hands them to the browser; with the in-network address that browser gets
+  `http://api:8000/...`, which it cannot resolve, and the corpus renders as
+  broken images (Gate 1 round 1, finding 3). The interface therefore takes the
+  address it calls (`API_BASE_URL`) and the address a browser must use for
+  pictures (`API_PUBLIC_URL`), the second defaulting to the first so a host run
+  stays a one-setting configuration.
 - **The stack indexes through the worker.** `INDEXING_RUNNER=worker` is set for
   the API in the stack, so an upload queues and the worker extracts —
   the arrangement change 13 built the switch for. The HTTP contract is
@@ -78,9 +100,15 @@ rather than the way a laptop runs it.
 
 ### Modified Capabilities
 
-None. No requirement of any existing capability changes: the HTTP contract, the
-queue, the searches and the CLI behave exactly as they do today, which is what
-makes this change a delivery change rather than a behaviour change.
+- `demo-ui`: one requirement. It says today that the interface "SHALL be
+  configured by the address of the service alone", and the stack is the case
+  where that cannot hold — the interface's own calls and the pictures its
+  browser fetches travel over different networks. The requirement is widened to
+  two addresses, the second defaulting to the first, so nothing changes for a
+  run where they are the same.
+
+Nothing else moves: the HTTP contract, the queue, the searches and the CLI
+behave exactly as they do today.
 
 ## Impact
 
@@ -89,16 +117,19 @@ makes this change a delivery change rather than a behaviour change.
   a CI job that builds the image, `make` targets for the stack and the scan,
   and a scripted smoke check the how-to's transcript comes from.
 - **Changed:** `Makefile` (new targets), `docker-compose.yml` (four services
-  join `db`), `.github/workflows/ci.yml` (the image job),
+  join `db`), `.github/workflows/ci.yml` (the image job), `ui/client.py` (the
+  second address, defaulting to the first) with its tests,
   `docs/reference/settings.md` and the environment template (the variables the
-  stack reads: the published ports, `API_BASE_URL`, the in-container media root
-  and model cache), `docs/how-to/local-development.md` (a pointer to the stack
-  page), `openspec/ROADMAP.md` and `docs/explanation/requirements.md` §7 row 15
-  if the scope moves.
-- **Unchanged:** every line of `app/` and `ui/`. If the stack turns out to need
-  an application change, that is a finding to surface rather than to absorb —
-  a container that needs the program changed to run in it usually means the
-  program was reading something it should have been given.
+  stack reads: the published ports, both interface addresses, the in-container
+  media root and model cache), `docs/how-to/local-development.md` (a pointer to
+  the stack page), `openspec/ROADMAP.md` and `docs/explanation/requirements.md`
+  §7 row 15 (its exit criterion names `docker compose up`; on a clean checkout
+  the command that works is `make stack`, and the row will say so).
+- **Unchanged:** every line of `app/`. The interface changes by one setting,
+  and that is the finding the design said would be surfaced rather than
+  absorbed if the stack needed it (Gate 1 round 1, finding 3): a program that
+  hands a browser an address only its own server can resolve was reading one
+  address where there are two.
 - **Dependencies:** none added to `pyproject.toml`. The scanner runs as a
   pinned container image, not as a Python package.
 - **Runtime:** two images from one Dockerfile (the service, and the service plus

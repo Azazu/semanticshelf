@@ -121,18 +121,62 @@
   that the stack makes wrong. Verify: the terms swept and the files touched are
   named in the commit body.
 
-## 8. Closing the change
+## 8. Gate 1 round 1 — configuration, the database's address, and the browser's
 
-- [ ] 8.1 `openspec validate containerize-full-stack --strict` passes and every
+- [ ] 8.1 Finding 1: `make stack` writes the local environment file from the
+  committed template when it is absent, generating the database password rather
+  than defaulting it, and then brings the stack up; the compose file keeps its
+  `:?required` markers (design decision 10a). Verify: in a clone made into a
+  temporary directory (`git clone . <tmp>`), with no local configuration of any
+  kind, the one command brings the stack to ready — recorded — and a second run
+  changes nothing; nothing secret is added to the repository (`git status` in
+  that clone is clean afterwards).
+- [ ] 8.2 Finding 1, the other half: a configuration that exists but is missing
+  a value stops the stack before any service starts, naming the variable.
+  Verify: remove one line from the generated file, run the command, record the
+  message; restore.
+- [ ] 8.3 Finding 2: `migrate`, `api` and `worker` are given a `DATABASE_URL`
+  built in the compose file from the same three variables and the service name
+  `db:5432`, not from the host's published port (design decision 10b). Verify:
+  the migration completes and `/ready` reports the database and the revision
+  check passing **with `FORWARD_DB_PORT` set to something else entirely** — if
+  the host's port were what the stack used, that run would fail.
+- [ ] 8.4 Finding 3: `ui/client.py` takes `API_PUBLIC_URL` for the addresses it
+  hands to the browser, defaulting to `API_BASE_URL`; the stack sets the two to
+  the service name and the published address (design decision 10c). Verify:
+  `tests/ui` covers both — the default (one address, unchanged behaviour) and
+  the split (calls go to one, pictures are addressed by the other) — and fails
+  if the default is removed.
+- [ ] 8.5 Finding 3, proven in a browser rather than in a header: the smoke
+  script opens the published interface with the headless browser of the
+  `screenshots` group, waits for the corpus and asserts a thumbnail's
+  `naturalWidth` is non-zero (design decision 10). Verify: it passes against
+  the real stack, and fails when `API_PUBLIC_URL` is pointed at the in-network
+  name — which is the defect the reviewer found, reproduced on purpose.
+- [ ] 8.6 The `demo-ui` spec moves with the code: the requirement that said the
+  interface is configured by the address of the service *alone* now covers two
+  addresses with the second defaulting to the first. Verify: the delta carries
+  the full updated requirement with every scenario it had, plus the two new
+  ones; `openspec validate --strict` passes.
+- [ ] 8.7 Reconcile the exit criterion: `docs/explanation/requirements.md` §7
+  row 15 says `docker compose up` on a clean checkout, which cannot hold before
+  the configuration exists. It names `make stack` (and what that command does)
+  instead. Verify: the row is re-read whole; `rg -n "docker compose up"` across
+  `docs/` and `openspec/` leaves no claim that it works on a fresh clone with no
+  configuration.
+
+## 9. Closing the change
+
+- [ ] 9.1 `openspec validate containerize-full-stack --strict` passes and every
   task above is checked with its evidence. Verify: the command's output is
   recorded.
-- [ ] 8.2 Run locally everything CI runs, in CI's own form:
+- [ ] 9.2 Run locally everything CI runs, in CI's own form:
   `FORCE_COLOR=1 CI=true make check`, `openspec validate --all --strict`,
   `sh -n scripts/*.sh`, every `scripts/*_test.sh`, and
   `FORCE_COLOR=1 CI=true make test-integration` with the database up — plus the
   image build the new job runs. Verify: all green before the branch is offered
   for a push.
-- [ ] 8.3 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
+- [ ] 9.3 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
   `scripts/pregate-verify.sh gate2 containerize-full-stack` passing. Verify: the
   verifier's output is recorded in the handoff; the gate follows the user's push
   and a green CI run on that exact HEAD.

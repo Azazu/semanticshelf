@@ -1,7 +1,7 @@
 # Handoff — containerize-full-stack
 
 **Updated:** 2026-09-26 · claude
-**State:** awaiting-gate-1
+**State:** fixing-g1
 **Branch:** change/containerize-full-stack
 
 ## Done this session
@@ -31,9 +31,28 @@
     change.
   - `tasks.md` — 8 groups, 25 tasks, each with its verification.
 
+## Gate 1 · round 1 — three majors, all accepted
+1. **A clean checkout has no configuration.** The compose file demands three
+   variables with `:?required` and the file that answers them is gitignored, so
+   `docker compose up` on a fresh clone stops at interpolation. The one command
+   is now `make stack`: it writes that file from the committed template on first
+   run, generating the database password rather than defaulting it, and the
+   `:?required` markers stay so a hole in a hand-edited file is still loud.
+2. **Inside a container, `127.0.0.1:5433` is that container's own loopback.**
+   `migrate`, `api` and `worker` are given a `DATABASE_URL` composed in the
+   compose file from the same variables and `db:5432`; the verification runs the
+   stack with the host's published port set to something else, which would fail
+   if the stack were using it.
+3. **The interface hands the browser addresses only its own server can
+   resolve.** `ui/client.py` takes `API_PUBLIC_URL` for what the browser
+   fetches, defaulting to `API_BASE_URL`; the `demo-ui` spec's "configured by
+   the address of the service alone" moves with it. This is the application
+   change the design said would be surfaced rather than absorbed — and the proof
+   is a headless browser asserting a thumbnail's `naturalWidth`, because a page
+   full of broken images answers 200 to `curl`.
+
 ## Next step
-Gate 1, which `high` requires before implementation:
-`/gate-review containerize-full-stack 1`.
+`/gate-review containerize-full-stack 1 confirm 1`.
 
 ## Blockers
 None. Nothing in `app/` or `ui/` is expected to change; if the stack turns out
