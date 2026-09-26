@@ -45,8 +45,35 @@ if [ ${#generated} -ne 32 ]; then
     exit 1
 fi
 
-umask 077
-awk -v marker="$MARKER" -v value="$generated" \
-    '{ gsub(marker, value); print }' "$TEMPLATE" > "$TARGET"
+value_of() {  # value_of <key> <file>
+    awk -F= -v key="$1" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$2"
+}
 
+umask 077
+partial="$TARGET.partial"
+awk -v marker="$MARKER" -v value="$generated" \
+    '{ gsub(marker, value); print }' "$TEMPLATE" > "$partial"
+
+# The marker usually appears more than once — the database is opened by a URL as
+# well as by its parts — and a template that fills one and not the other creates
+# a database with one secret and connects to it with another. That was found at
+# Gate 2 of change 15, in a template where the URL carried a literal. Nothing
+# half-written is left behind: the file only moves into place if this holds.
+generated_value=$(value_of DB_PASSWORD "$partial")
+url=$(value_of DATABASE_URL "$partial")
+if [ -n "$generated_value" ] && [ -n "$url" ]; then
+    case "$url" in
+        *"$generated_value"*) ;;
+        *)
+            rm -f "$partial"
+            echo "stack-env: $TEMPLATE fills the database's own line but not its URL." >&2
+            echo "stack-env: put $MARKER where the URL's password is too, so one run" >&2
+            echo "stack-env: fills both — otherwise the database is created with one" >&2
+            echo "stack-env: value and every host tool connects with another." >&2
+            exit 1
+            ;;
+    esac
+fi
+
+mv "$partial" "$TARGET"
 echo "stack-env: wrote $TARGET from $TEMPLATE, with the marker replaced by a generated value"

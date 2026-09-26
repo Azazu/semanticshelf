@@ -108,6 +108,16 @@ def test_the_interface_is_told_both_addresses(stack: dict[str, Any]) -> None:
     assert "api:8000" not in environment["API_PUBLIC_URL"]
 
 
+@pytest.mark.parametrize("name", ("api", "worker"))
+def test_the_offline_switch_reaches_the_containers_that_load_models(
+    stack: dict[str, Any], name: str
+) -> None:
+    """The how-to says setting it stops them asking the Hub. Nothing of the
+    environment file reaches a container unless the compose file names it, so
+    that sentence is true only while this passes."""
+    assert service(stack, name)["environment"]["HF_HUB_OFFLINE"] == "${HF_HUB_OFFLINE:-}"
+
+
 def test_the_probe_is_told_where_the_migrations_are(stack: dict[str, Any]) -> None:
     """In an image the package's neighbour is site-packages, where `alembic` is
     the library and not this project's revisions."""

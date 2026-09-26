@@ -264,3 +264,24 @@ none of. They are surfaced rather than absorbed, and Gate 1 is asked again.
 - [x] 10.5 Gate 1 again, because the scope moved (AGENTS.md: a change of scope
   reopens it). Verify: `scripts/gate-run.sh containerize-full-stack 1 full`
   records a round bound to the commit that carries these.
+
+## 11. Gate 2 round 1
+
+- [x] 11.1 Finding 2 (minor): the how-to said the offline switch in the
+  environment file stops the containers asking the Hub, and nothing passed it to
+  them — Compose reads that file on the host and hands on only what the compose
+  file names. `HF_HUB_OFFLINE` is now passed through to `migrate`, `api` and
+  `worker`, the how-to says how, and `tests/unit/test_compose_stack.py` asserts
+  it for the two that load models. Verified in a container:
+  `HF_HUB_OFFLINE in the container: 1` and `huggingface_hub` reading it as
+  `True`.
+- [ ] 11.2 Finding 1 (major): the template fills the database's own line and
+  leaves a literal in the URL beside it, so the documented host setup created a
+  database with one value and connected with another. The template carries the
+  marker in both places (a user's edit — the policy plugin does not let me touch
+  that file), and `scripts/stack-env.sh` now **refuses** a template that fills
+  one and not the other, writing nothing. Verify: the refusal and the success
+  were both exercised (nothing written on refusal, no partial left, both lines
+  carrying the same generated value on success), and the documented host setup
+  runs from a clean clone: `sh scripts/stack-env.sh`, `make init`, `make run`,
+  `/ready` answering.

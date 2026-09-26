@@ -29,6 +29,10 @@ x-storage: &storage
   # level above the package: an installed package's neighbour is site-packages,
   # where `alembic` is the library. The readiness probe is told where they are.
   ALEMBIC_DIR: /app/alembic
+  # Passed through rather than assumed: the environment file is read by Compose
+  # on the host, and nothing of it reaches a container that is not named here.
+  # Empty means unset, which is what a warm-but-online run wants.
+  HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-}
 
 services:
   db:

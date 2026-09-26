@@ -58,10 +58,18 @@ $ make stack-warm
 ```
 
 That runs `semanticshelf models warm` through the service image into the same
-volume. Once the cache is warm, `HF_HUB_OFFLINE=1` in the environment file stops
-the containers from asking the Hub anything at all (they still check a few
-metadata endpoints otherwise, which is what the worker's log shows on a first
-run).
+volume. Once the cache is warm, `HF_HUB_OFFLINE=1` stops the containers asking
+the Hub anything at all — they still check a few metadata endpoints otherwise,
+which is what the worker's log shows on a first run:
+
+```console
+$ HF_HUB_OFFLINE=1 make stack
+```
+
+It works from the environment file too, because the stack passes that variable
+through to `api` and `worker` explicitly. Nothing else of that file reaches a
+container: Compose reads it on the host, and only the variables the compose
+file names are handed on.
 
 ## What survives
 
