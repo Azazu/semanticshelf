@@ -257,3 +257,12 @@
   claiming one; `design.md` Risks and ADR-002's "what it does not guarantee"
   now say the same thing, and what establishing the direction would take is
   named as its own change.
+- [x] 9.4 Confirmation 1 kept finding 3 open: decision 1 and the how-to still
+  said an index is easy where data is clustered, and that real vectors would
+  show a real distribution to be easier. Both are gone, along with the "tidy 64
+  blobs" aside, and the same sentence was in `scripts/index_benchmark.py`'s
+  constants — the claim, not the line (AGENTS.md). Verify:
+  `rg -n "easier|easy|kinder|harsher" scripts/ docs/ openspec/changes/tune-vector-indexes/`
+  finds no directional claim outside `review.md`'s own quotations; what stays is
+  why the corpus has neighbours at all and, in three places, that the comparison
+  with a real distribution is not made here.

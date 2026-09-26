@@ -1,6 +1,6 @@
 # Handoff — tune-vector-indexes
 
-**Updated:** 2026-09-25 · claude
+**Updated:** 2026-09-26 · claude
 **State:** fixing-g1
 **Branch:** change/tune-vector-indexes
 
@@ -27,8 +27,17 @@ Gate 1 round 1:
   the two, so the direction is not claimed at all; ADR-002 already said so, and
   the design now agrees.
 
+## Confirmation 1 · Gate 1
+Findings 1 and 2 confirmed. Finding 3 stayed open: decision 1 and the how-to
+still said an index is easy where data is clustered, and that real vectors would
+show a real distribution to be easier than this corpus. Both are gone now, with
+the same sentence in `scripts/index_benchmark.py`'s constants and the "tidy 64
+blobs" aside — the claim, not the line. What stays is why the corpus has
+neighbours at all, and, in three places, that the comparison with a real
+distribution is not made here (§9.4 of `tasks.md`).
+
 ## Next step
-`/gate-review tune-vector-indexes 1 confirm 1`. On its confirmation, Gate 2
+`/gate-review tune-vector-indexes 1 confirm 1` again. On its confirmation, Gate 2
 confirmation of round 1 (`/gate-review tune-vector-indexes 2 confirm 1`), which
 needs a push and a green CI run on that HEAD first.
 

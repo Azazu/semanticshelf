@@ -61,9 +61,10 @@ TOP = 10
 #: The corpus is clustered, not uniform. In 768 dimensions a uniform sample of
 #: the sphere has no neighbours to find — every pair is nearly orthogonal and the
 #: tenth nearest is barely nearer than the ten-thousandth — so recall over it
-#: would measure how an index broke a near-tie. Embeddings are clustered, and an
-#: index is easy exactly where the data is clustered; these two constants say how
-#: clustered this corpus is, and they are printed with the results.
+#: would measure how an index broke a near-tie rather than whether it found
+#: anything. These two constants say how clustered this corpus is, and they are
+#: printed with the results; how that compares with a real embedding
+#: distribution, in either direction, is not something this command measures.
 CENTROIDS = 64
 #: How far a vector sits from its centroid, as a share of a unit vector, before
 #: normalisation. 0.5 puts a vector at cosine ≈ 0.89 of its own centroid and

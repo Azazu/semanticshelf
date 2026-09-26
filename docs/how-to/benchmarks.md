@@ -210,8 +210,11 @@ families over one distribution, and a real model's vectors would add a variable
 nobody can hold still between runs. Uniform vectors would not do either: in 768
 dimensions a uniform sample of the sphere has no neighbours to find — every pair
 is nearly orthogonal — so recall over it would measure how an index broke a
-near-tie. Embeddings are clustered, and an index is easy exactly where the data
-is clustered, so the corpus is clustered and says how much.
+near-tie. A corpus with no neighbours cannot be asked a nearest-neighbour
+question at all, so this one is built with them — around seeded centroids, with
+the two constants that say how tightly printed beside the results. How that
+compares with a real embedding distribution, in either direction, is not
+something this measurement can say.
 
 **Why not the demo corpus.** `demo-dataset download` takes at most a few hundred
 pictures. At that size a scan with `ef_search` 40 visits a sizeable fraction of
@@ -348,8 +351,10 @@ between rows, not as a prediction for a deployment.
 small for an approximate index: this is the size the requirements name and the
 size this project targets, and at it the approximation barely bites. The part of
 the curve where `ef_search` decides recall is at millions of vectors, on a
-machine with the memory for that index, and the corpus here is a tidy 64 blobs
-while a real embedding space is not. What the numbers support is a decision for
-this project at this size — which is what
+machine with the memory for that index. This corpus is also not a model's: it
+is 64 seeded centroids with a stated spread, and whether a real embedding space
+is kinder or harsher to either index family is not measured anywhere here.
+What the numbers support is a decision for this project at this size — which is
+what
 [ADR-002](../adr/ADR-002-vector-index-family-and-parameters.md) records, limits
 included.

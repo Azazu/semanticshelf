@@ -74,9 +74,9 @@ Every check named above has a test that fails when the check is removed; §8 of
 A uniform sample on the unit sphere in 768 dimensions has no neighbour
 structure: every pair is nearly orthogonal, the ten nearest are separated from
 the ten-thousandth by almost nothing, and recall@10 measured over it reports how
-the index broke a near-tie rather than whether it found the neighbours. Real
-embeddings are the opposite — clustered, anisotropic, with genuine near
-neighbours — and an index is easy exactly where the data is clustered.
+the index broke a near-tie rather than whether it found the neighbours. A corpus
+with no neighbours cannot be asked a nearest-neighbour question, whatever the
+answer would mean for any other corpus. So this one has them.
 
 So the corpus is built as **K seeded centroids drawn on the sphere, each vector
 a centroid plus Gaussian noise, normalised**; K and the noise scale are
@@ -95,8 +95,10 @@ measurement uses, at the size NFR-PERF-1 already fixes (10 000 per model).
 *Alternative considered:* real CLIP and DINOv2 vectors over a larger fetched
 corpus. Rejected for this change: it needs weights, a network fetch and hours of
 CPU, and it would make the comparison depend on a distribution nobody can hold
-still between runs. What it would add — that a real distribution is *easier*
-than this one — is stated as the direction of the bias instead.
+still between runs. What it would add is the one thing this measurement cannot
+say — how a real embedding distribution compares with this one, in either
+direction. That is left unsaid rather than guessed, here, in the how-to and in
+ADR-002 alike.
 
 ### 2. The ground truth is an exact scan, proven by its plan
 
