@@ -49,3 +49,15 @@
 |---|------------|
 | 1 | confirmed — The proposal and design still state that `app/core/openapi.py` changes the published OpenAPI document and explain the mechanism. |
 | 2 | changes-requested — `handoff.md` now agrees with task 3.2 that the unchanged README's Mermaid rendering was already reported by the user, and tasks 1.3 and 5.3 remain open pending CI on the current head. However, task 5.1 is still checked and says "every task above is checked with its evidence" while 1.3 above it is open. Leave 5.1 open or revise its completion condition so checked tasks state only completed evidence. |
+
+## Confirmation 3 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** 7a0aee1c8b4596eb59710c8c46d2ccc937937b95
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — `proposal.md` and `design.md` accurately describe the published OpenAPI document change and the mechanism in `app/core/openapi.py` and `app/main.py`. |
+| 2 | changes-requested — Task 5.1 is now open alongside 1.3 and 5.3, so its completion claim no longer precedes its evidence. But `handoff.md` lines 55–58 still call 1.3 and 5.3 "the only two still open". Reconcile the handoff with the three open tasks before confirming the evidence record. |
