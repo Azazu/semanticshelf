@@ -63,12 +63,22 @@ records each one.
 
 ### 1. One Dockerfile, two targets, the environment built once
 
-Stages: a **builder** on uv's own Python 3.12 image that installs the locked
-environment in two layers — dependencies first (`--no-install-project`), then
-the project — and a **runtime** stage that copies `/app/.venv` and the
-application, sets `PATH` to the virtual environment and runs as an unprivileged
-user. A third target, **ui**, is the runtime stage plus the `ui` dependency
-group and `ui/`.
+Stages: a **builder** that installs the locked environment in two layers —
+dependencies first (`--no-install-project`), then the project — and a
+**runtime** stage that copies `/app/.venv` and the migrations, sets `PATH` to
+the virtual environment and runs as an unprivileged user.
+
+The interface is **not** that image plus a group. It has a builder of its own
+that installs `--only-group ui --no-install-project`, and a final stage on the
+same Python base that carries that environment and `ui/`. The reason is what it
+leaves out: a dependency group is *added* to the project's own dependencies, so
+"runtime plus the ui group" would put `torch` and the whole service in the image
+of a thing that must never load a model. Measured: 762 MB against 1.79 GB, and
+`import torch`, `import app` and `import pytest` all fail inside it.
+
+For that to work the interface's own dependencies have to be in its group —
+`httpx` is a dependency of the service as well, and is now listed in the group
+too, which is true rather than convenient: the interface needs it by itself.
 
 The flags are uv's own recommendations for an image, and each earns its place:
 `--locked` (the build fails if `uv.lock` is stale, which is the image's half of
@@ -78,10 +88,15 @@ stage needs no source tree), `UV_COMPILE_BYTECODE=1` (startup, paid once at
 build) and `UV_LINK_MODE=copy` (cache mounts and the final copy live on
 different filesystems).
 
-*Alternative considered:* two Dockerfiles, one per image. Rejected — the two
-differ by one dependency group and one directory, and two files that must stay
+*Alternative considered:* two Dockerfiles, one per image. Rejected — they share
+the base, the user, the layout and the reasoning, and two files that must stay
 in step is the defect this project has already paid for twice (a copied
 benchmark harness in change 13, a copied guard in change 14).
+
+*Alternative considered:* the interface's image layered on the runtime one, as
+this design first said. Rejected once measured: it is 1 GB of model runtime that
+the interface never imports, and it makes an image that could load a model out
+of a program that must not.
 
 *The base image tag is read from uv's documentation at implementation time and
 pinned* — both the uv version and the Python version — rather than tracked by a

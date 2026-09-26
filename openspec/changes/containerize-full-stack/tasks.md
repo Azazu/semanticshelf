@@ -12,15 +12,24 @@
   in megabytes, not gigabytes, and the number is recorded.
 - [x] 1.3 Write `Dockerfile` — builder stage (dependencies layer with
   `--no-install-project`, then the project, both `--locked --no-dev
-  --no-editable`), runtime stage (the virtual environment and the application,
+  --no-editable`), runtime stage (the virtual environment and the migrations,
   `PATH` set to it, an unprivileged user, the media root and model cache created
-  and owned by that user), and a `ui` target adding the `ui` group and `ui/`
-  (design decision 1). Verify: both targets build; `docker run --rm <image>
-  python -c "import app"` works and `import pytest` fails; `id -u` inside is not
-  0; `docker images` sizes recorded.
-- [x] 1.4 The image carries no weights and no interface. Verify: a test or a
-  recorded command shows `MODEL_CACHE` empty in a fresh container, `streamlit`
-  absent from the runtime image and present in the `ui` one.
+  and owned by that user), and the interface's **own** builder and image,
+  installed with `--only-group ui --no-install-project` rather than layered on
+  the runtime stage — a group is added to the project's dependencies, so
+  "runtime plus the ui group" would ship the model runtime in the image of a
+  thing that must never load a model (design decision 1). Verify: both images
+  build; in the service's, `import app` and `import torch` work and
+  `import pytest` fails; `id -u` is not 0 in either; sizes recorded (1.79 GB and
+  762 MB).
+- [x] 1.4 The service's image carries no weights and no interface, and the
+  interface's image carries neither the service nor the model runtime — the
+  isolation the separate build exists for. Verify, recorded from real runs:
+  `MODEL_CACHE` is empty in a fresh service container and `import streamlit`
+  fails in it; in the interface's image `import streamlit` and `import httpx`
+  work while `import torch`, `import app` and `import pytest` each raise
+  `ModuleNotFoundError`; `tests/unit/test_image_definition.py` fails if the
+  interface's build stops using `--only-group ui`.
 - [x] 1.5 `make image` builds both targets by the same command the CI job runs.
   Verify: `make image` from a clean checkout succeeds and its output is
   recorded.
