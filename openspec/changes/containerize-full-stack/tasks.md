@@ -296,3 +296,17 @@ none of. They are surfaced rather than absorbed, and Gate 1 is asked again.
   adopts the first one's containers unless it is given its own project name,
   because the project name comes from the environment file rather than from the
   directory.
+
+- [x] 11.3 Gate 2 confirmation 1 kept finding 1 open, and fairly: the template's
+  URL had the *defaults* baked into it — user, database and port — so the
+  checked-that-the-password-matches guard passed while `DB_USER`, `DB_NAME` or
+  `FORWARD_DB_PORT` left it pointing at the old values. The URL is not copied
+  from the template any more: `scripts/stack-env.sh` **composes** it from what
+  the file it just wrote says, every time, and refuses when the file does not
+  say which user and database to use. Verified four ways with fixture
+  templates — a different user, name and port; a port overridden in the
+  environment; a template with no URL line at all; and a template missing the
+  user, which is refused with nothing written — and then end to end on a clone:
+  a non-default configuration (`shelf_other_user`, `shelf_other`, port 5466)
+  migrated from base and answered
+  `{"database":"ok","migrations":"ok","models":"ok","media":"ok"}`.

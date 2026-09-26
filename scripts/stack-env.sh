@@ -54,26 +54,39 @@ partial="$TARGET.partial"
 awk -v marker="$MARKER" -v value="$generated" \
     '{ gsub(marker, value); print }' "$TEMPLATE" > "$partial"
 
-# The marker usually appears more than once — the database is opened by a URL as
-# well as by its parts — and a template that fills one and not the other creates
-# a database with one secret and connects to it with another. That was found at
-# Gate 2 of change 15, in a template where the URL carried a literal. Nothing
-# half-written is left behind: the file only moves into place if this holds.
-generated_value=$(value_of DB_PASSWORD "$partial")
-url=$(value_of DATABASE_URL "$partial")
-if [ -n "$generated_value" ] && [ -n "$url" ]; then
-    case "$url" in
-        *"$generated_value"*) ;;
-        *)
-            rm -f "$partial"
-            echo "stack-env: $TEMPLATE fills the database's own line but not its URL." >&2
-            echo "stack-env: put $MARKER where the URL's password is too, so one run" >&2
-            echo "stack-env: fills both — otherwise the database is created with one" >&2
-            echo "stack-env: value and every host tool connects with another." >&2
-            exit 1
-            ;;
-    esac
+# The database is opened twice over: by its parts, which the container is
+# created from, and by a URL, which every host tool connects with. Two places
+# that must agree is one place too many — a template where they drift creates a
+# database with one set of values and connects to it with another, and the
+# failure arrives as an authentication error or, worse, as a connection to some
+# *other* database that happens to be on that port.
+#
+# So the URL is not copied from the template: it is composed here from what this
+# file itself says, every time. The user, the name, the published port and the
+# generated value are read back out of the file that was just written, which is
+# also what makes a template with non-default values come out right (Gate 2 of
+# change 15: the URL had the defaults baked in, and changing `DB_USER`,
+# `DB_NAME` or `FORWARD_DB_PORT` left it pointing at the old ones).
+user=$(value_of DB_USER "$partial")
+name=$(value_of DB_NAME "$partial")
+port=${FORWARD_DB_PORT:-$(value_of FORWARD_DB_PORT "$partial")}
+port=${port:-5433}
+host=${DB_HOST_IN_URL:-127.0.0.1}
+
+if [ -z "$user" ] || [ -z "$name" ]; then
+    rm -f "$partial"
+    echo "stack-env: $TEMPLATE does not say which user and database to use," >&2
+    echo "stack-env: so the URL every host tool connects with cannot be built." >&2
+    exit 1
 fi
 
+composed="postgresql+asyncpg://${user}:${generated}@${host}:${port}/${name}"
+awk -v line="DATABASE_URL=$composed" \
+    'BEGIN { done = 0 }
+     /^DATABASE_URL=/ { print line; done = 1; next }
+     { print }
+     END { if (!done) print line }' "$partial" > "$partial.url" && mv "$partial.url" "$partial"
+
 mv "$partial" "$TARGET"
-echo "stack-env: wrote $TARGET from $TEMPLATE, with the marker replaced by a generated value"
+echo "stack-env: wrote $TARGET from $TEMPLATE — a generated value where the marker was,"
+echo "stack-env: and a database URL composed from ${user}@${host}:${port}/${name}"
