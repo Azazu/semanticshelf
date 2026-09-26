@@ -52,13 +52,17 @@ seventeen planted failures of §6.5.
 
 ## Next step
 
-1. The Gate 1 confirmation on this head.
-2. Then the user pushes `change/harden-quality-and-docs` and watches CI. That
-   run is what closes tasks 1.3 and 5.3 — the only two still open — because the
-   branch has moved under both review rounds since the last green one. The
-   README's Mermaid diagram needs no second look: the user reported it renders
-   on the pushed page (`bc06c2b`) and `README.md` has not changed since.
-3. `/gate-review harden-quality-and-docs 2 confirm 1`.
+1. The user pushes `change/harden-quality-and-docs` and watches CI. That run is
+   what the open tasks of `tasks.md` wait for — which ones they are is recorded
+   there and not repeated here, because a second copy of that list is what
+   Gate 1 kept finding out of date. The branch has moved under both review
+   rounds since the last green run. The README's Mermaid diagram needs no second
+   look: the user reported it renders on the pushed page (`bc06c2b`) and
+   `README.md` has not changed since.
+2. On green: close those tasks against that run, and push again — the commit
+   that closes them touches `tasks.md` and this file only.
+3. The Gate 1 confirmation on that head, then
+   `/gate-review harden-quality-and-docs 2 confirm 1`.
 
 ## Blockers
 
