@@ -275,7 +275,7 @@ none of. They are surfaced rather than absorbed, and Gate 1 is asked again.
   it for the two that load models. Verified in a container:
   `HF_HUB_OFFLINE in the container: 1` and `huggingface_hub` reading it as
   `True`.
-- [ ] 11.2 Finding 1 (major): the template fills the database's own line and
+- [x] 11.2 Finding 1 (major): the template fills the database's own line and
   leaves a literal in the URL beside it, so the documented host setup created a
   database with one value and connected with another. The template carries the
   marker in both places (a user's edit — the policy plugin does not let me touch
@@ -284,4 +284,15 @@ none of. They are surfaced rather than absorbed, and Gate 1 is asked again.
   were both exercised (nothing written on refusal, no partial left, both lines
   carrying the same generated value on success), and the documented host setup
   runs from a clean clone: `sh scripts/stack-env.sh`, `make init`, `make run`,
-  `/ready` answering.
+  `/ready` answering. **Verified on a real clone**, with the development
+  database stopped so the clone's own could take the port: the migrations ran
+  from base to `0003_constraint_names`, `/ready` answered
+  `{"database":"ok","migrations":"ok","models":"ok","media":"ok"}` and `/health`
+  `{"status":"ok","version":"0.1.0"}`. Two things that verification found, both
+  fixed here rather than left for the next person:
+  `make init` now waits for the database to be healthy (on a machine where it
+  has never run, the migration met a container still initialising —
+  "connection reset by peer"), and the how-to says that a second checkout
+  adopts the first one's containers unless it is given its own project name,
+  because the project name comes from the environment file rather than from the
+  directory.

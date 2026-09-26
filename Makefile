@@ -23,7 +23,11 @@ help: ## List available commands
 init: ## First run: sync the environment, create the media root, start the database, migrate
 	uv sync
 	mkdir -p $${MEDIA_ROOT:-.data/media}
-	$(COMPOSE) up -d db
+	# `--wait`: on a machine where this database has never run, the container is
+	# still initialising when the migration would connect — "connection reset by
+	# peer" on a clean checkout, and nothing at all on a machine where it was
+	# already up. Health is what decides here too.
+	$(COMPOSE) up -d --wait db
 	$(MAKE) migrate
 
 up: ## Start the database (idempotent)

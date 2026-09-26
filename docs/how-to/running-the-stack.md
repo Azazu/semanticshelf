@@ -226,3 +226,12 @@ $ COMPOSE_PROJECT_NAME=semanticshelf-stack FORWARD_DB_PORT=5444 \
 
 Its volumes are then named after that project, and nothing it does touches the
 development corpus.
+
+The same applies to a **second checkout** of this repository on a machine that
+already ran the first one: the project name comes from the environment file, not
+from the directory, so the new checkout adopts the containers and volumes of the
+old one — including a database whose password was generated for the *other*
+checkout, which then fails to authenticate. Give the second one its own
+`COMPOSE_PROJECT_NAME` (and its own `FORWARD_DB_PORT`, since the first is
+already publishing on that one). Measured while verifying this change: a fresh
+clone's `make init` connected to the development database and was refused.
