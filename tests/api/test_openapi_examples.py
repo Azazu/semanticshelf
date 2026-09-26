@@ -7,8 +7,9 @@ requires an example of **every** operation, unless that operation is in the
 table of exemptions below with a reason attached.
 
 An example that does not parse as the answer it illustrates is worse than none,
-because a reader trusts it — so each one is validated by the model the service
-answers with, not merely looked up.
+because a reader trusts it — so what the **published document** carries is
+validated by the model the service answers with, not the constant in the code
+that FastAPI may have encoded on the way out (`app/core/openapi.py`).
 """
 
 from typing import Any
@@ -61,22 +62,6 @@ WHERE: dict[str, tuple[str, str]] = {
     "tags": ("get", "/api/v1/tags"),
     "stats": ("get", "/api/v1/stats"),
 }
-
-
-def without_nulls(value: Any) -> Any:
-    """The example as the document will carry it.
-
-    FastAPI encodes what `responses=` holds with `exclude_none`, so a field the
-    service really answers with as `null` — a job that has no lease and no error
-    — is absent from the document's copy. The constant in the code keeps it,
-    because that is what the answer looks like; the comparison drops it, because
-    that is what the document can show. The schema still declares the field.
-    """
-    if isinstance(value, dict):
-        return {key: without_nulls(item) for key, item in value.items() if item is not None}
-    if isinstance(value, list):
-        return [without_nulls(item) for item in value]
-    return value
 
 
 def examples_in(operation: dict[str, Any]) -> list[Any]:
@@ -136,18 +121,33 @@ async def test_no_exemption_outlives_its_operation(client: httpx.AsyncClient) ->
 async def test_the_document_carries_the_example_the_code_declares(
     client: httpx.AsyncClient, name: str
 ) -> None:
+    """Verbatim: a null the service really answers with is in the document too.
+
+    FastAPI encodes the finished document with `exclude_none`, which eats the
+    nulls inside an example; `app/core/openapi.py` writes each one back. Without
+    that, `lease_expires_at` and `last_error` would be missing from the jobs
+    example while the schema beside it still required them.
+    """
     method, path = WHERE[name]
     example, _ = EXAMPLES[name]
 
     operation = (await document(client))["paths"][path][method]
 
-    assert without_nulls(example) in examples_in(operation)
+    assert example in examples_in(operation)
 
 
 @pytest.mark.parametrize("name", EXAMPLES)
-def test_the_example_parses_as_the_answer_it_illustrates(name: str) -> None:
-    example, model = EXAMPLES[name]
+async def test_the_published_example_parses_as_the_answer_it_illustrates(
+    client: httpx.AsyncClient, name: str
+) -> None:
+    """What a reader copies out of the document is what is validated here."""
+    method, path = WHERE[name]
+    _, model = EXAMPLES[name]
 
-    parsed = model.model_validate(example)
+    operation = (await document(client))["paths"][path][method]
+    published = examples_in(operation)
 
-    assert parsed.model_dump(mode="json", exclude_none=True)
+    assert published, f"{method.upper()} {path} publishes no example"
+    for example in published:
+        parsed = model.model_validate(example)
+        assert parsed.model_dump(mode="json", exclude_none=True)
