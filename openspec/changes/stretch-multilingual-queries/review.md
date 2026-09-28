@@ -38,3 +38,16 @@
 | 1 | confirmed — `proposal.md`, design decision 4 and tasks 3.1–3.2 now consistently specify recall@10 over at least 20 eligible concepts, an English baseline floor, an absolute language floor, a relative language bound and per-concept relevant-asset counts. |
 | 2 | changes-requested — Design decision 2 and tasks 1.3 and 3.1–3.2 pin and report both repositories' revisions, but task 4.2 still requires `docs/how-to/models.md` to say the encoder is pinned to **one** revision. That would publish an incomplete description of the measured and deployed encoder, contrary to decision 2's explicit requirement that the models how-to name both revisions. Update task 4.2 to require both repository revisions; make task 3.3 explicitly require both revisions in ADR-005 as decision 2 promises. |
 | 3 | confirmed — The truncation requirement and its real-checkpoint and API verification tasks remain in place; this diff does not weaken them. |
+
+## Confirmation 3 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** 0d4115db6b5e23d7f16add729df655064c51813b
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The proposal, design and tasks consistently require recall@10 over at least 20 eligible concepts, an English baseline floor, absolute and relative language floors, and per-concept relevant-asset counts. The reviewed diff does not weaken these requirements. |
+| 2 | confirmed — Tasks 3.3 and 4.2 now explicitly require both repository revisions in ADR-005 and the models how-to. Design decision 4 also names both revisions. This completes the pinning and reporting requirements of the original finding. |
+| 3 | confirmed — The adapter and test tasks still require per-input truncation flags and propagation to `query_truncated`; the reviewed diff does not weaken them. |
