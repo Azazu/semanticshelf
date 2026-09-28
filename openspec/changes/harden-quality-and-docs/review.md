@@ -97,3 +97,20 @@
 |---|------------|
 | 1 | confirmed — `proposal.md` and `design.md` identify the published OpenAPI document change and explain the `app/core/openapi.py` / `app/main.py` mechanism. |
 | 2 | changes-requested — Sections 7.2 and 7.3 now describe the earlier open tasks in the past tense, and the recorded green runs for `b17653e` and `60dbb53` support those commits. But 5.3 and the dependent 5.1 remain checked while `handoff.md` explicitly asks the user to push the current head and report its CI result. No green CI result is recorded for the reviewed head `d39fdeb`. AGENTS.md requires CI green on the exact HEAD before Gate 2; the `PROTOCOL_FILES` freshness exception in `scripts/workflow-verify.sh` applies at merge after Gate 2 review and does not replace that prerequisite. Leave 5.3 and 5.1 open until the required evidence exists, then reconcile `tasks.md` and `handoff.md`. |
+
+## Waiver · Gate 1
+**Granted-by:** user
+**Date:** 2026-09-28
+**Commit:** cfb8caeb82a931cab34cd89b673b345231878ff9
+**Verdict:** waived
+
+**Reason:** Finding 1 was confirmed in every confirmation from the first. What
+remained of finding 2 is a condition no record can satisfy: the evidence that
+CI is green on a commit can only be written in a later commit, and every gate
+run writes one of its own by committing `review.md`. The substance behind the
+finding was fixed and re-fixed — 1.3, 5.1 and 5.3 reopened and closed against
+named runs (`b17653e`, `60dbb53`, `d39fdeb`, each pushed and reported green by
+the user on 2026-09-28), §7.2 and §7.3 rewritten in the past tense, and the
+duplicated task lists removed from `handoff.md` and §1.2/§2.2 so that one
+authority states each fact. The user, as final arbiter after six
+confirmations, waives the verdict rather than the work.
