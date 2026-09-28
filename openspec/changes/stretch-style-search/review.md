@@ -38,3 +38,14 @@
 | 1 | confirmed — the diff retains the comparison against both stored image keys and the task to derive them from `app.domain`; the ADR task still requires every incumbent's result. |
 | 2 | confirmed — task 2.4 replaces the impossible below-0.5 case with feasible tests below, on, and above the strict headroom bound, including an incumbent of 0 and selection of the highest incumbent. The design uses the same single bound; task 2.3 still covers zero and negative diagnostic denominators. |
 | 3 | confirmed — the corpus rule remains consistent: the design and task 1.1 both refuse a constant picture for that photograph. |
+
+## Round 2 · Gate 1
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** f12e7fb6b035d0ecc8747117edef5a28524982ba
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `design.md:227-240`; `tasks.md:67-79` | The proposed cache fingerprint does not identify the actual CLIP and DINOv2 checkpoints or their processors. Both incumbent adapters load configurable model names without a pinned revision (`app/ml/clip.py` and `app/ml/dinov2.py`), so changing a configured name or receiving new weights at the same name can leave the fingerprint unchanged and reuse vectors from a different model. The claimed equivalence between a cached run and a fresh run therefore does not hold. Bind each cache entry to the effective checkpoint and preprocessing identity for every model, or narrow the cache guarantee and ensure the published run recomputes vectors; add a test that changes an incumbent's model identity. | open |
