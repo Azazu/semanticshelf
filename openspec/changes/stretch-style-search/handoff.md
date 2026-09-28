@@ -1,7 +1,7 @@
 # Handoff — stretch-style-search
 
 **Updated:** 2026-09-28 · claude
-**State:** awaiting-gate-1
+**State:** implementing
 **Branch:** change/stretch-style-search
 
 ## Done this session
@@ -48,10 +48,13 @@ subsumes the indifference floor, and task 2.4's cases are the ones that exist:
 short of the bound, exactly on it (refused), above it, the incumbent taken from
 the highest of several, and the degenerate incumbent of 0.
 
+**Confirmation 2 confirmed all three findings — Gate 1 is passed** at
+`eb3f588`.
+
 ## Next step
 
-`scripts/gate-run.sh stretch-style-search 1 confirm 1` — second confirmation of
-round 1. `scripts/pregate-verify.sh gate1 stretch-style-search` passes (16 tasks, tier
+`/opsx:apply stretch-style-search` — implementation, starting with the corpus
+builder (task group 1) and the dependency group (task 2.1). `scripts/pregate-verify.sh gate1 stretch-style-search` passes (16 tasks, tier
 declared, applicability table present, links resolve) and
 `openspec validate stretch-style-search --strict` is clean.
 
