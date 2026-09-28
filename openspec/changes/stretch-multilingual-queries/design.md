@@ -117,15 +117,27 @@ measured (the repository has not moved since 2022-09-15, which is a fact about
 today rather than a guarantee about tomorrow) — with
 `torch.load(..., weights_only=True)`: no pickle is executed, and the
 safetensors copy that exists only in an unmerged pull request is not used. The
-revision pins all three files the adapter reads — the config, the checkpoint
-and the tokenizer — because a tokenizer that changes answers differently with
-the same weights. A deployment therefore loads the encoder the numbers were
-taken from, and moving to another revision is an edit to a constant, a new
-measurement and a new line in the ADR. The
-transformer is built with `AutoModel.from_config` and the config of
-`xlm-roberta-large` (a few kilobytes from the Hub, cached like everything else)
-rather than by downloading that model's own 2.2 GB of weights, which the
-checkpoint already contains.
+revision pins all three files the adapter reads from that repository — the
+config, the checkpoint and the tokenizer — because a tokenizer that changes
+answers differently with the same weights.
+
+The transformer is built with `AutoModel.from_config` from the config of
+`FacebookAI/xlm-roberta-large` (a few kilobytes from the Hub, cached like
+everything else) rather than by downloading that model's own 2.2 GB of weights,
+which the checkpoint already contains — and **that fetch is pinned too**, to
+`c23d21b0620b635a76227c604d44e43a9f0ee389`, because a config that changes
+builds a different model under the same encoder key. Two repositories, two
+revisions, and the encoder is the pair:
+
+| What | Repository | Revision |
+|---|---|---|
+| checkpoint, its config, tokenizer | `M-CLIP/XLM-Roberta-Large-Vit-L-14` | `40afa80a85e8efa990384a24bbe5a1f6f1cc81b5` |
+| the architecture the weights are poured into | `FacebookAI/xlm-roberta-large` | `c23d21b0620b635a76227c604d44e43a9f0ee389` |
+
+Both are printed by the benchmark, recorded in ADR-005 and named in the models
+how-to. A deployment therefore loads the encoder the numbers were taken from,
+and moving either revision is an edit to a constant, a new measurement and a
+new line in the ADR.
 
 *What this guarantees:* no new dependency, a load that executes no code from
 the checkpoint, and that the bytes loaded are the bytes measured — the revision
@@ -178,8 +190,9 @@ against the demo corpus (which carries COCO's own labels as tags):
 Every concept is reported with **how many assets carry its tag**, so a reader
 can see what each number was computed against.
 
-Both are reported per language for Russian, German, French and Spanish, over at
-least 30 concepts, with the English CLIP text side as the baseline row.
+Both are reported per language for Russian, German, French and Spanish, over
+the concept set the rules below select — at least 20 of them, and the run prints
+how many survived — with the English CLIP text side as the baseline row.
 
 **The bound is two conditions, fixed here rather than after the data is seen,
 and neither can be passed by an encoder that answers badly.**

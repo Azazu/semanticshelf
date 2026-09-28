@@ -14,19 +14,21 @@
   whose storage model is not enabled refuses to start naming both (delta spec,
   `embedding-models`). Verify: settings tests for the three cases — accepted,
   unknown key, target not enabled.
-- [ ] 1.3 `app/ml/mclip.py`: the adapter. Config, checkpoint and tokenizer all
-  at the **pinned revision** `40afa80a85e8efa990384a24bbe5a1f6f1cc81b5` (design
-  decision 2 — `main` is mutable, and the numbers must be about the weights a
-  deployment loads); the checkpoint read with
+- [ ] 1.3 `app/ml/mclip.py`: the adapter. **Two pinned revisions** (design
+  decision 2 — a branch is mutable, and the numbers must be about the assets a
+  deployment loads): the M-CLIP config, checkpoint and tokenizer at
+  `40afa80a85e8efa990384a24bbe5a1f6f1cc81b5`, and the
+  `FacebookAI/xlm-roberta-large` config the architecture is built from at
+  `c23d21b0620b635a76227c604d44e43a9f0ee389`; the checkpoint read with
   `torch.load(..., weights_only=True)`, the transformer from
   `AutoModel.from_config`, the linear head from `LinearTransformation.*`, mean
   pooling over the attention mask, then the shared normalisation and the
   `ZeroVectorError` guard every embedder uses. It refuses images, like any
   text-only model. Verify: a `models`-suite test (real checkpoint, never in CI)
   asserting width 768, unit norm, a batch keeping its order, and the refusal of
-  images; a unit test that the revision the adapter passes is that constant and
-  not a branch name; the width check demonstrated by pointing the key at
-  `xlm-roberta-large` and watching the load fail.
+  images; a unit test that every revision the adapter passes is one of those two
+  constants and not a branch name; the width check demonstrated by pointing the
+  key at a checkpoint of another width and watching the load fail.
 - [ ] 1.3a A query longer than the encoder's context is cut **and says so**:
   the adapter tokenizes with truncation at the model's maximum and returns one
   `truncated` flag per input, which is what the API answers as
@@ -71,7 +73,7 @@
   baseline itself clearing mean recall@10 of 0.5 — with each concept printed
   beside the number of assets that carry its tag. Per language: mean recall@10,
   the worst concept, and mean agreement@10 with the same concept in English;
-  the English CLIP text side as the baseline row; the pinned model revision in
+  the English CLIP text side as the baseline row; **both** pinned revisions in
   the header; Markdown table on stdout. Reuses the benchmark guard of change 14
   rather than touching the service's tables. Verify: the command runs end to end
   against the demo corpus and prints the table; unit tests for the metrics and
@@ -84,8 +86,8 @@
   recall@10 at least 0.5 in absolute terms, and at least 0.8 × the English
   baseline's over the same concepts. Agreement@10 and the worst concept are
   published without a bound. Verify: the table is in
-  `docs/how-to/benchmarks.md` with the exact command above it, the pinned
-  revision beside it, the per-concept relevant counts included, and every
+  `docs/how-to/benchmarks.md` with the exact command above it, both pinned
+  revisions beside it, the per-concept relevant counts included, and every
   language that misses either bound present with its numbers and named as not
   supported.
 - [ ] 3.3 `docs/adr/ADR-005-multilingual-query-encoder.md`: why a query encoder

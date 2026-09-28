@@ -47,11 +47,15 @@ what has to be measured properly rather than asserted from four queries.
   under the transformers this project pins, and the model it wraps is a
   transformer plus one linear layer, both of which are in the checkpoint.
 - A **measurement**, because the boundary is lifted only with numbers:
-  `scripts/multilingual_benchmark.py` reports, per language, how often a query
-  finds pictures that carry the matching corpus tag (precision@k) and how much
-  its page agrees with the same query in English (agreement@k). Russian,
-  German, French and Spanish are measured and named; the encoder's other 44
-  languages are stated as unmeasured.
+  `scripts/multilingual_benchmark.py` reports, per language, how many of the
+  pictures carrying a concept's tag reach the first ten results (**recall@10**)
+  and how much the page agrees with the same concept in English
+  (**agreement@10**), over a concept set chosen by rules that look at no
+  language's results. Russian, German, French and Spanish are measured and
+  named; the encoder's other 44 languages are stated as unmeasured. A language
+  is claimed only against both an absolute floor and the English baseline —
+  design decision 4 states the rule, so that a low baseline cannot make a poor
+  answer sufficient.
 - **ADR-005** records what the numbers decided, and `docs/how-to/benchmarks.md`
   grows the third section that produces them.
 - The English-only limit is **amended, not deleted**: FR-TXT-5, the README's
@@ -91,6 +95,10 @@ is text search, which already has a spec.
   — the vectors being ranked are the ones already stored under `clip-vit-l14`.
   `POST /search/image` and `GET /assets/{id}/similar` are untouched: a picture
   has no language.
+- **Model assets:** two repositories at two pinned revisions — the M-CLIP
+  checkpoint with its config and tokenizer, and the `xlm-roberta-large` config
+  the architecture is built from. Both revisions are in the code, in the
+  benchmark's output and in ADR-005.
 - **Dependencies:** none added. The adapter uses `transformers`, `torch` and
   `huggingface_hub`, all already pinned. This is deliberate and was checked:
   the package the model card recommends is four years unmaintained and fails on
