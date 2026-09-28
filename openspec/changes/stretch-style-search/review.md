@@ -49,3 +49,14 @@
 | # | Severity | Location | Finding | Status |
 |---|----------|----------|---------|--------|
 | 1 | major | `design.md:227-240`; `tasks.md:67-79` | The proposed cache fingerprint does not identify the actual CLIP and DINOv2 checkpoints or their processors. Both incumbent adapters load configurable model names without a pinned revision (`app/ml/clip.py` and `app/ml/dinov2.py`), so changing a configured name or receiving new weights at the same name can leave the fingerprint unchanged and reuse vectors from a different model. The claimed equivalence between a cached run and a fresh run therefore does not hold. Bind each cache entry to the effective checkpoint and preprocessing identity for every model, or narrow the cache guarantee and ensure the published run recomputes vectors; add a test that changes an incumbent's model identity. | fixed |
+
+## Confirmation 1 · Gate 1 · Round 2
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** 95298a9d35967cdc37752140f6eb305bfb1ab644
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — the new fingerprint includes the configured incumbent name and a commit hash resolved from the local model cache, but it does not bind that hash to the weights and processor actually used. Both adapters call `from_pretrained(name, cache_dir=cache)` separately for the processor and model, without a revision, so the two loads can resolve different snapshots and a later cache lookup can report a snapshot different from either load. The processor's behavior also depends on the installed `transformers` version, which the fingerprint omits. Resolve an immutable revision before loading and use it for both objects, or identify both loaded objects directly; include the preprocessing implementation version (or recompute on a version change). Add tests for a changed resolved revision and for these identity mismatches so a cache hit cannot reuse vectors from different weights or preprocessing. |
