@@ -1,7 +1,7 @@
 # Handoff — stretch-multilingual-queries
 
 **Updated:** 2026-09-28 · claude
-**State:** awaiting-gate-1
+**State:** implementing
 **Branch:** change/stretch-multilingual-queries
 
 ## Done this session
@@ -36,11 +36,19 @@
   API answers as `query_truncated` — was missing from the adapter's task; it has
   its own task and a two-input test now.
 
+- **Gate 1 passed** at `0d4115d` (confirmation 3): three majors raised, all
+  fixed. The two residual rounds were the same defect this project keeps
+  catching — a claim updated in one artifact and left standing in a sibling:
+  the metric (precision → recall) in the proposal, the sample size in the
+  design, and then the second pinned revision missing from two task
+  descriptions that promised it.
+
 ## Next step
 
-`scripts/gate-run.sh stretch-multilingual-queries 1 confirm 1` — the
-confirmation of round 1. `scripts/pregate-verify.sh gate1
-stretch-multilingual-queries` passes (20 tasks).
+`/opsx:apply stretch-multilingual-queries` — 20 tasks in five groups, starting
+with the encoder table in `app/domain.py` and the adapter. The probe script
+that established feasibility is in the session scratchpad, not the repository;
+the adapter is written against the artifacts, not copied from it.
 
 ## Blockers
 
