@@ -1,54 +1,72 @@
 # Handoff — stretch-multilingual-queries
 
 **Updated:** 2026-09-28 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/stretch-multilingual-queries
 
 ## Done this session
 
-- Branch `change/stretch-multilingual-queries` created off `main`, which carries
-  the whole plan archived through change 16.
-- Change scaffolded with `openspec new change` (schema `spec-driven`).
-- `openspec/ROADMAP.md` already carries this as stretch row 17, and
-  `docs/explanation/requirements.md` §9 as the same row — left as they are.
+**The artifacts, and the probe under them.** Before anything was proposed the
+feasibility question was answered rather than assumed: the package the model
+card recommends does not load under this project's transformers, while the
+model itself — XLM-RoBERTa large, a mean pool over the attention mask, one
+linear layer — assembles by hand from the checkpoint and answers at width 768
+in CLIP's space. **Risk-Tier: high** (a model download is egress from a process
+this repository ships; the search endpoint widens).
 
-- The four artifacts are written, and the feasibility question they rest on was
-  **probed before they were written**, not assumed: the package the model card
-  recommends (`multilingual-clip` 1.0.10, 2022) does not load under this
-  project's transformers 5.17, while the model itself — XLM-RoBERTa large, mean
-  pooling, one linear layer into CLIP ViT-L/14's space — assembles by hand from
-  the main revision's checkpoint with 0 missing tensors and answers at width
-  768. Four concepts in Russian returned what English returned, against vectors
-  already in the store. The probe's table is in `design.md` Context.
-- **Risk-Tier: high** — a model download is egress from a process this
-  repository ships, and the change widens what the search endpoint accepts.
-  Gate 1 is required before implementation.
+**Gate 1 — three majors, all accepted**, then two confirmations on the same
+defect this project keeps catching, a claim updated in one artifact and left
+standing in a sibling. The acceptance bound was relative only, so a zero
+baseline would have passed an encoder that finds nothing; the checkpoint was
+read from a mutable branch while the numbers were to be evidence about a stable
+key; and the truncation flag was missing from the adapter's task. Confirmed at
+`0d4115d`.
 
-- **Gate 1 round 1 — three majors, all accepted.** The acceptance bound was
-  only relative, so a zero English baseline would have let an encoder that finds
-  nothing pass: it is now two conditions (absolute mean recall@10 ≥ 0.5 and
-  ≥ 0.8 × the English baseline), over a concept set chosen by rules that look at
-  no language's results, with the relevant-asset counts printed per concept. The
-  adapter read the mutable `main` revision while the numbers were to be evidence
-  about the key: all three files are pinned to
-  `40afa80a85e8efa990384a24bbe5a1f6f1cc81b5`, which the benchmark prints and the
-  ADR records. And the truncation flag `EmbeddingResult.truncated` — which the
-  API answers as `query_truncated` — was missing from the adapter's task; it has
-  its own task and a two-input test now.
+**The implementation**
 
-- **Gate 1 passed** at `0d4115d` (confirmation 3): three majors raised, all
-  fixed. The two residual rounds were the same defect this project keeps
-  catching — a claim updated in one artifact and left standing in a sibling:
-  the metric (precision → recall) in the proposal, the sample size in the
-  design, and then the second pinned revision missing from two task
-  descriptions that promised it.
+- **The encoder as a participant of its own**: `QUERY_ENCODERS` beside the
+  model registry rather than a key in it, an adapter with no new dependency,
+  both repositories pinned, the checkpoint read with `weights_only=True`.
+  Against the real weights: width 768, unit rows, order kept, pictures refused,
+  a query past the context cut and flagged, a wrong declared width refused —
+  and a Russian query landing nearer the red square than the blue one, in
+  vectors CLIP's *image* tower produced.
+- **`model=` resolves to a pair**, and the answer names both. 503 for an
+  encoder this build does not run, 422 for a picture asked of one, the default
+  unchanged. Against a real index: the ranking is the encoder's, and nothing is
+  written under its name — no vector, no job, no row in the stats.
+- **The measurement** (`scripts/multilingual_benchmark.py`): recall@10 against
+  the corpus's own labels and agreement@10 with the English page, over a
+  concept set chosen by rules that look at no language's results. Russian,
+  German, French and Spanish all clear both bounds. Published in
+  `docs/how-to/benchmarks.md`, decided in **ADR-005**.
+- **The documentation that had to change with it**: FR-TXT-5, the README's
+  boundary (carrying the numbers rather than a promise), the searching and
+  models how-tos, the settings reference, both registers.
+
+**Two defects of my own, found by running my own work.** The benchmark
+overwrote its English baseline with the encoder's page when asked for
+`--languages en`, which would have made agreement 1.000 by construction; and
+the width check had no test at all — the plant that removed it changed nothing.
+Both are fixed, and both now have the test that would have caught them.
+
+**Twenty planted violations, twenty failures** (§5.1 of `tasks.md`).
+
+**Checks, in CI's own form**: `make check` 728 passed, integration 296,
+`openspec validate --all --strict` 17/17, `sh -n` clean, `gate_run_test` 77,
+`workflow_verify_test` 23, `make audit` clean on 91 packages, both images
+built — and the `models` suite, which CI never runs and which this change is
+the reason for, 8 passed against the real checkpoint.
 
 ## Next step
 
-`/opsx:apply stretch-multilingual-queries` — 20 tasks in five groups, starting
-with the encoder table in `app/domain.py` and the adapter. The probe script
-that established feasibility is in the session scratchpad, not the repository;
-the adapter is written against the artifacts, not copied from it.
+The user pushes `change/stretch-multilingual-queries` and watches CI, then
+`/gate-review stretch-multilingual-queries 2`.
+
+Two things a reviewer should know where to find. The encoder is **off by
+default**, so CI downloads nothing and the default build is unchanged in every
+respect. The corpus behind the published numbers is the 500-picture demo sample
+indexed with `clip-vit-l14`, and the how-to names the command that produces it.
 
 ## Blockers
 

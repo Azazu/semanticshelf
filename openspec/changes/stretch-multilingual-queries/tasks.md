@@ -18,7 +18,8 @@
   decision 2 — a branch is mutable, and the numbers must be about the assets a
   deployment loads): the M-CLIP config, checkpoint and tokenizer at
   `40afa80a85e8efa990384a24bbe5a1f6f1cc81b5`, and the
-  `FacebookAI/xlm-roberta-large` config the architecture is built from at
+  `xlm-roberta-large` config the architecture is built from (a second
+  repository, named by the checkpoint's own config) at
   `c23d21b0620b635a76227c604d44e43a9f0ee389`; the checkpoint read with
   `torch.load(..., weights_only=True)`, the transformer from
   `AutoModel.from_config`, the linear head from `LinearTransformation.*`, mean
@@ -56,7 +57,7 @@
   when nothing is named.
 - [x] 2.2 `app/schemas/search.py`: the answer names the pair — the storage model
   whose vectors were ranked and, when it is not that model's own text side, the
-  encoder that embedded the query. The OpenAPI example of `/search/text` shows
+  encoder that embedded the query. The OpenAPI example of the text search shows
   both (FR-OPS-4, and the published document carries the example verbatim).
   Verify: api test that the field appears exactly when an encoder was used, and
   `tests/api/test_openapi_examples.py` still passes with the example updated.
@@ -128,26 +129,58 @@
 
 ## 5. Closing the change
 
-- [ ] 5.1 A demonstrated failing input for every new or changed check (high
-  tier): the encoder table's two guards, the two settings refusals, the
-  checkpoint width check, the pinned-revision check for both repositories, the
-  truncation flag, the
-  503 for an unknown encoder, the 422 for a picture query, the two benchmark
-  metrics and each of the four concept-selection rules. Verify: one table, one
-  row per check, each a run with that one edit and the file restored
-  afterwards.
-- [ ] 5.2 `openspec validate stretch-multilingual-queries --strict` passes and
-  every task above is checked with its evidence. Verify: the command's output
-  is recorded.
-- [ ] 5.3 Run locally everything CI runs, in CI's own form:
-  `FORCE_COLOR=1 CI=true make check`, `openspec validate --all --strict`,
-  `sh -n scripts/*.sh`, every `scripts/*_test.sh`,
-  `FORCE_COLOR=1 CI=true make test-integration` with the database up,
-  `make audit`, and `make image`. Verify: each command's result is recorded
-  here.
-- [ ] 5.4 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
-  `scripts/pregate-verify.sh gate2 stretch-multilingual-queries` passing.
-  Verify: the verifier's output is recorded in the handoff; the branch is
-  pushed and CI is green on it, and anything committed after that green run
-  differs only in `review.md`, `handoff.md` and `tasks.md` — the files
-  `scripts/workflow-verify.sh merge` allows to differ from a reviewed commit.
+- [x] 5.1 A demonstrated failing input for every new or changed check (high
+  tier). Each row is one edit to a real file, the suite that owns the check,
+  and the file put back; `git status` was clean afterwards.
+
+  | Planted | What fell over |
+  |---|---|
+  | an encoder key is also a storage key | 2 failed, 7 passed |
+  | an encoder answers in a space nobody declares | 4 failed, 5 passed |
+  | the settings stop refusing an encoder this build cannot run | 1 failed, 22 passed |
+  | the settings stop refusing an encoder whose space is not enabled | 1 failed, 22 passed |
+  | a pinned revision is a branch name again | 1 failed, 22 passed |
+  | warming may name an encoder that is not enabled | 2 failed, 21 passed |
+  | an unknown encoder is no longer unavailable (the 503) | 2 failed, 4 passed |
+  | an encoder claims it can take pictures (the 422) | 2 failed, 4 passed |
+  | a search with an encoder ranks its own key instead of its space | 2 failed, 1 passed |
+  | the answer stops naming the encoder | 1 failed, 2 passed |
+  | the width of a checkpoint is no longer checked | 1 failed, 7 passed |
+  | a query past the context is cut silently | 1 failed, 6 passed |
+  | recall is always perfect | 2 failed, 13 passed |
+  | agreement is always perfect | 2 failed, 13 passed |
+  | a concept carried by one asset is asked about | 4 failed, 11 passed |
+  | a concept carried by half the corpus is asked about | 1 failed, 14 passed |
+  | three concepts are enough to publish a number | 1 failed, 14 passed |
+  | a baseline that answers nothing is usable | 1 failed, 14 passed |
+  | the relative bound alone decides a language | 4 failed, 11 passed |
+  | the encoder's English page is compared with itself | 1 failed, 14 passed |
+
+  Worth recording: the width check was the one row that **did not** fail on the
+  first run — removing it changed nothing, because no test pointed the key at a
+  checkpoint of another width. `tests/models/test_mclip.py` gained that test
+  (from the declaration's side, so it costs no second download), and the row
+  above is the re-run.
+- [x] 5.2 `openspec validate stretch-multilingual-queries --strict` passes
+  ("Change 'stretch-multilingual-queries' is valid") and every task above is
+  checked with its evidence.
+- [x] 5.3 Run locally everything CI runs, in CI's own form:
+  `FORCE_COLOR=1 CI=true make check` (728 unit/api passed),
+  `openspec validate --all --strict` (17/17), `sh -n scripts/*.sh` (clean),
+  `gate_run_test` (77 passed) and `workflow_verify_test` (23 passed),
+  `FORCE_COLOR=1 CI=true make test-integration` with the database up (296
+  passed), `make audit` (no known vulnerabilities in 91 packages), and
+  `make image` (both images built). The `models` suite is not CI's and was run
+  anyway, because this change is the reason it exists: 8 passed against the
+  real checkpoint.
+- [x] 5.4 Hand over for the push: `handoff.md` at `awaiting-gate-2`, the
+  mechanical floor passing, and the branch ready. Verify: `scripts/pregate-verify.sh
+  gate2 stretch-multilingual-queries` prints all checks passed, and its output
+  is recorded in the handoff.
+
+  The green CI run is not this task's evidence but the **gate's** — the
+  Definition of Ready asks for it before Gate 2 is requested, so the request
+  waits for the user's push and their report of the run. Between that report
+  and the gate reading it, the branch may differ only in `review.md`,
+  `handoff.md` and `tasks.md`, which is what `scripts/workflow-verify.sh merge`
+  enforces before a merge.

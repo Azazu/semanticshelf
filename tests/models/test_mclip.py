@@ -19,9 +19,10 @@ from collections.abc import Iterator
 import pytest
 from PIL import Image as PILImage
 
+from app import domain
 from app.core.settings import Settings
 from app.domain import CLIP_VIT_L14, MCLIP_XLMR_L14, dimension_of
-from app.ml.base import ImagesNotSupportedError
+from app.ml.base import CheckpointWidthError, ImagesNotSupportedError
 from app.ml.clip import ClipEmbedder
 from app.ml.mclip import MclipEmbedder
 from tests.embedder_conformance import (
@@ -109,3 +110,23 @@ def test_a_russian_query_lands_beside_the_picture_english_lands_beside() -> None
     asked = MclipEmbedder.load(settings).embed_text(["красный квадрат"]).vectors[0]
 
     assert float(seen[0] @ asked) > float(seen[1] @ asked)
+
+
+def test_a_checkpoint_whose_width_is_not_the_space_s_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The guard, watched to refuse — from the declaration's side.
+
+    What it protects against is a key pointed at weights that are not what it
+    says: substituting a checkpoint of another width, which the settings allow.
+    Moving the declared width instead makes the same disagreement without a
+    second 2 GB download, and exercises the adapter's own call to the guard
+    rather than the shared helper in isolation.
+    """
+    monkeypatch.setitem(domain.EMBEDDING_MODELS, CLIP_VIT_L14, 512)
+
+    with pytest.raises(CheckpointWidthError) as refusal:
+        MclipEmbedder.load(configured())
+
+    assert MCLIP_XLMR_L14 in str(refusal.value)
+    assert "512" in str(refusal.value) and "768" in str(refusal.value)
