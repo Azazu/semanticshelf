@@ -64,3 +64,16 @@
 | 1 | major | `app/ml/mclip.py:113-120` | The transformer checkpoint is loaded with `strict=False`, but the returned missing and unexpected keys are discarded. A checkpoint missing a transformer tensor can therefore load with a randomly initialized layer, pass the 768-wide probe, and serve rankings under the measured `mclip-xlmr-l14` key. Reject missing keys and allow only explicitly understood unexpected keys; demonstrate that removing a required tensor makes loading fail. | fixed |
 | 2 | major | `app/core/settings.py:85-93`; `app/ml/mclip.py:92-110`; `docs/adr/ADR-005-multilingual-query-encoder.md:40-45` | `MCLIP_MODEL_NAME`, `MCLIP_REVISION`, and `MCLIP_BASE_REVISION` can replace the measured assets while the API still reports the same encoder key. The only runtime check is output width; another 768-wide checkpoint or a changed tokenizer/config can answer differently or fail to align with stored CLIP images, yet ADR-005's published language measurements appear to apply. Bind this encoder key to the measured asset identities, or give substitutions a distinct identity and avoid applying the published claim to them. | fixed |
 | 3 | minor | `app/api/search.py:125-140`; `app/schemas/search.py:26-30` | The text endpoint's OpenAPI description still says the query is English and that scores are comparable within a model, and the score field repeats the model-only claim. With the new encoder, the endpoint accepts measured non-English queries and score comparability depends on the `(model, encoder)` pair. Update these public descriptions so they match the response and the new search contract. | fixed |
+
+## Confirmation 1 · Gate 2 · Round 2
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** a2732c398450a93d54774c4bad982838aec9e674
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The adapter checks the result of `load_state_dict`: every missing tensor is rejected, and only the known `embeddings.position_ids` leftover is allowed among unexpected tensors. Unit cases cover missing and unexpected names, and the real-checkpoint test removes a required transformer weight and expects `CheckpointTensorsError`. |
+| 2 | confirmed — The checkpoint and both repository revisions are constants used by the adapter and benchmark; the three substitution settings are removed. ADR-005, the models how-to and settings reference now state that the encoder key is bound to those measured assets. |
+| 3 | confirmed — The text endpoint description now covers the enabled encoder's measured languages and states that scores and thresholds belong to the model and encoder pair. The score field and model parameter descriptions use the same pair rule. |
