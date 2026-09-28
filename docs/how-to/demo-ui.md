@@ -102,14 +102,18 @@ still draws itself.
 ```console
 $ make screenshots
 wrote docs/images/search.png
+wrote docs/images/similar.png
 wrote docs/images/browse.png
+wrote docs/images/upload.png
 wrote docs/images/status.png
 ```
 
 It starts the API and the interface on ports it picks, drives a headless
-Chromium through those three pages and stops both servers afterwards — whatever
-happened. Find similar and Upload are not among them: both begin with a file
-chooser, and a screenshot of an empty one says nothing.
+Chromium through all five pages and stops both servers afterwards — whatever
+happened. Upload begins with a file chooser and an empty form says nothing
+about what the page accepts, so the form is filled before it is photographed;
+nothing is submitted, because a capture must not add to the corpus it is
+capturing.
 
 The first run downloads that browser:
 
@@ -120,6 +124,35 @@ $ uv run --group screenshots playwright install chromium
 It needs a corpus. Against an empty store it says so and writes nothing, which
 is what `make demo` is for. **The integration tests empty the store** (they
 truncate the tables), so run `make demo` again before capturing.
+
+### Which pictures end up on the front page
+
+`make demo` takes whatever the dataset's licence filter allows, which is a fair
+sample of COCO — bathrooms included. For the README that is one place where
+"whatever came back" is not good enough, so the capture is taken from a chosen
+slice rather than from the whole sample:
+
+```console
+$ uv run python scripts/screenshot_corpus.py
+80 pictures copied into .data/demo-shopfront
+$ uv run semanticshelf index-folder .data/demo-shopfront --tags shopfront
+import
+index
+folder: /home/you/semanticshelf/.data/demo-shopfront
+created: 80
+already stored: 0
+refused: 0
+skipped: 0
+indexed: 80
+still queued: 0
+failed: 0
+```
+
+The script copies a picture with its sidecar when the picture has a subject
+worth showing — an animal, a vehicle, a road sign, somebody playing something —
+and nothing else in it that a front page would rather not open with. The
+pictures are the dataset's own; only the selection is ours. `scripts/screenshots.py`
+searches that store for `people playing tennis on a sunny court`.
 
 ## The tests
 

@@ -1,0 +1,144 @@
+# Review — harden-quality-and-docs
+
+## Round 1 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** b9fe520c2ffda98bdb038c7156770136a9968299
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `proposal.md:3-12`; `.github/workflows/ci.yml:105-112`; `AGENTS.md` Risk tiers | This change adds a mandatory dependency-audit step to CI. `AGENTS.md` explicitly assigns verifier/CI infrastructure to `high`, but the proposal declares `medium` and skipped Gate 1. Raise the tier and reconcile the required Gate 1 review before treating this change as merge-ready. | fixed |
+| 2 | major | `app/schemas/jobs.py:76-116`; `tests/api/test_openapi_examples.py:70-87,142-154` | The published `GET /api/v1/assets/{asset_id}/jobs` example drops `lease_expires_at` and `last_error` from each job because FastAPI encodes `responses=` with `exclude_none`. Both fields are required, though nullable, in `IndexingJobRead`. Validating the example extracted from `create_app().openapi()` with `IndexingJobList.model_validate` produces four missing-field errors. The test validates the original constant and deliberately strips its nulls for document comparison, so it misses the invalid example and the delta spec's requirement that the published example parse as the answer. | fixed |
+| 3 | major | `tests/unit/test_layering.py:114-121,166-181` | The router SQL guard examines only `ast.ImportFrom`. A router can add `import sqlalchemy as sa` and call `sa.select(...)` without the guard seeing it; the general forbidden-edge table also has no router-to-`sqlalchemy` rule. Thus the new test does not enforce NFR-QA-2's "routers contain no SQL" promise. Cover direct package imports and demonstrate the check failing on that form. | fixed |
+| 4 | major | `Makefile:82-86`; `docs/explanation/requirements.md:278`; `openspec/changes/harden-quality-and-docs/specs/deployment/spec.md` | The normative NFR-SEC-6 requires CI to fail on known HIGH/CRITICAL advisories with a fix. `make audit` runs plain `uv audit --locked`, which has no severity or fix-availability filter here, while the delta spec silently broadens the failure condition to any fixable vulnerability. Reconcile the normative requirement, delta spec, and implemented failure policy; demonstrate the chosen policy on a failing input. | fixed |
+
+## Round 1 · Gate 1
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** c16f82c13123a6631ed7c76e1543e34ca70aec8e
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | `proposal.md:98-110`; `design.md:45-48,181-183`; `app/core/openapi.py` | The proposal says service behaviour is unchanged and that the only Python changes are schema examples and tests. The change also modifies OpenAPI generation in `app/core/openapi.py` and its installation in `app/main.py` to restore nullable fields in the served document. This is a change to the service's published output and a new implementation mechanism for the delta spec's example guarantee. State that scope and mechanism accurately in the proposal and design so Gate 1 reviews the change actually being made. | fixed |
+| 2 | major | `tasks.md:31-35,88-95,139-142`; `handoff.md:59-65`; branch status | Tasks 1.3, 3.2 and 5.3 are checked even though their verification requires a pushed branch, green CI and the user's report that GitHub rendered the Mermaid diagram. The handoff still asks the user to push and check the diagram, and this branch is ahead of its remote. Record only completed evidence as done; leave the pending external verification open until it occurs. Checked tasks must have evidence, and each task must be feasible at its lifecycle point. | fixed |
+
+## Confirmation 1 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** b3155879ce8afe43eb35700875f08eb4d293d8bf
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — `proposal.md` now names the change to the published OpenAPI document and the `app/core/openapi.py` / `app/main.py` mechanism; `design.md` explains why and how declared examples are restored after encoding. |
+| 2 | changes-requested — Tasks 1.3 and 5.3 are open pending CI on the reviewed head, and task 3.2 records a user report for the unchanged README. But `handoff.md` still asks the user to check the Mermaid rendering, contradicting that recorded evidence. Reconcile the handoff with the task before treating 3.2 as verified. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** a16976bfc3c8456701d6f9c64f5526b46e54138b
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The proposal and design still state that `app/core/openapi.py` changes the published OpenAPI document and explain the mechanism. |
+| 2 | changes-requested — `handoff.md` now agrees with task 3.2 that the unchanged README's Mermaid rendering was already reported by the user, and tasks 1.3 and 5.3 remain open pending CI on the current head. However, task 5.1 is still checked and says "every task above is checked with its evidence" while 1.3 above it is open. Leave 5.1 open or revise its completion condition so checked tasks state only completed evidence. |
+
+## Confirmation 3 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-26
+**Reviewed-Commit:** 7a0aee1c8b4596eb59710c8c46d2ccc937937b95
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — `proposal.md` and `design.md` accurately describe the published OpenAPI document change and the mechanism in `app/core/openapi.py` and `app/main.py`. |
+| 2 | changes-requested — Task 5.1 is now open alongside 1.3 and 5.3, so its completion claim no longer precedes its evidence. But `handoff.md` lines 55–58 still call 1.3 and 5.3 "the only two still open". Reconcile the handoff with the three open tasks before confirming the evidence record. |
+
+## Confirmation 4 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** ff145a3eb047881d781f977941414546b45d88f9
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — `proposal.md` and `design.md` identify the change to the published OpenAPI document and explain how `app/core/openapi.py` restores the declared examples after FastAPI encoding. |
+| 2 | changes-requested — Tasks 1.3 and 3.2 now cite the reported CI run and Mermaid rendering. But task 5.3 is checked despite requiring green CI on the exact HEAD: the reported run was on `b17653e`, while the reviewed HEAD is `ff145a3`, which is still ahead of the remote. `handoff.md` likewise says another push and green run are needed. Task 5.1's claim that every preceding task has its evidence therefore still depends on an unverified 5.3. Leave 5.3 and 5.1 open until that evidence exists, then reconcile the handoff. |
+
+## Confirmation 5 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** 60dbb53ef43bf85ab19939169d01f521c16084e6
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — `proposal.md` and `design.md` accurately name the published OpenAPI document change and the `app/core/openapi.py` / `app/main.py` mechanism. |
+| 2 | changes-requested — Tasks 5.3 and 5.1 are checked on the reported green CI run for `b17653e`, but AGENTS.md requires green CI on the exact HEAD before Gate 2; the record provides no such evidence for `60dbb53`. The Gate 2 freshness exception applies after review and does not replace this prerequisite. Sections 7.2 and 7.3 still say 1.3, 5.3 and 5.1 are open, while their checkboxes and `handoff.md` say every task is closed. Reconcile the task record and handoff with the required evidence. |
+
+## Confirmation 6 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** d39fdeb315674dca560c2debed6da3fb8e72dce0
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — `proposal.md` and `design.md` identify the published OpenAPI document change and explain the `app/core/openapi.py` / `app/main.py` mechanism. |
+| 2 | changes-requested — Sections 7.2 and 7.3 now describe the earlier open tasks in the past tense, and the recorded green runs for `b17653e` and `60dbb53` support those commits. But 5.3 and the dependent 5.1 remain checked while `handoff.md` explicitly asks the user to push the current head and report its CI result. No green CI result is recorded for the reviewed head `d39fdeb`. AGENTS.md requires CI green on the exact HEAD before Gate 2; the `PROTOCOL_FILES` freshness exception in `scripts/workflow-verify.sh` applies at merge after Gate 2 review and does not replace that prerequisite. Leave 5.3 and 5.1 open until the required evidence exists, then reconcile `tasks.md` and `handoff.md`. |
+
+## Waiver · Gate 1
+**Granted-by:** user
+**Date:** 2026-09-28
+**Commit:** cfb8caeb82a931cab34cd89b673b345231878ff9
+**Verdict:** waived
+
+**Reason:** Finding 1 was confirmed in every confirmation from the first. What
+remained of finding 2 is a condition no record can satisfy: the evidence that
+CI is green on a commit can only be written in a later commit, and every gate
+run writes one of its own by committing `review.md`. The substance behind the
+finding was fixed and re-fixed — 1.3, 5.1 and 5.3 reopened and closed against
+named runs (`b17653e`, `60dbb53`, `d39fdeb`, each pushed and reported green by
+the user on 2026-09-28), §7.2 and §7.3 rewritten in the past tense, and the
+duplicated task lists removed from `handoff.md` and §1.2/§2.2 so that one
+authority states each fact. The user, as final arbiter after six
+confirmations, waives the verdict rather than the work.
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** 53f841af8542c0950de16584b6f661137d74d9cb
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The proposal and both roadmap registers now assign `high` to the mandatory CI audit. The design has the high-tier applicability table and `tasks.md` records failing inputs for the added checks. Gate 1 was run on the revised artifacts and its last decision is the user's waiver at `cfb8cae`; the required Gate 1 disposition is recorded. |
+| 2 | confirmed — `app/core/openapi.py` restores declared examples after FastAPI encodes the document, and the test validates examples taken from the published document without stripping nulls. The published jobs example contains both `lease_expires_at` and `last_error` as null; `IndexingJobList.model_validate` accepts it. All nine published examples validate against their response models. |
+| 3 | confirmed — The router guard now rejects `ast.Import` of `sqlalchemy` or its submodules, including aliases, while the existing name allowlist handles `ast.ImportFrom`. The walker self-test covers the new form, and `tasks.md` records failing runs for planted whole-package and submodule imports. |
+| 4 | confirmed — NFR-SEC-6, the deployment delta, proposal, design, `make audit`, CI comments and command reference now state the same policy: any known advisory fails unless an individual advisory is explicitly ignored until fixed. The installed `uv audit --help` confirms `--locked` and `--ignore-until-fixed`; `tasks.md` records exit 1 and four named advisories from a disposable lock with vulnerable dependencies. |
+
+## Confirmation 2 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** 59738869dc639821f97fd91a651a3a4a9509ea9e
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The proposal and roadmap registers declare `high`; the design includes the high-tier applicability table and the tasks record failing inputs. Gate 1's last decision is the user's waiver at `cfb8cae`, so its required disposition is recorded. |
+| 2 | confirmed — The OpenAPI correction restores declared examples after FastAPI encoding. On this head, the generated jobs example contains `lease_expires_at` and `last_error` as null in both items and passes `IndexingJobList.model_validate`; the test validates the published example directly. |
+| 3 | confirmed — The router guard rejects whole-package and submodule `sqlalchemy` imports through `ast.Import`, including aliases, while its existing allowlist covers `ast.ImportFrom`. All 10 focused layering tests pass; `tasks.md` records failing runs for planted imports of both forms. |
+| 4 | confirmed — NFR-SEC-6, the deployment delta, proposal, design, Makefile, CI comments and command reference agree that any known advisory fails unless individually ignored until fixed. The installed `uv audit --help` lists `--locked` and `--ignore-until-fixed`; `tasks.md` records a failing audit against a disposable vulnerable lock. |

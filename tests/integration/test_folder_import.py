@@ -99,9 +99,12 @@ async def rows(engine: AsyncEngine) -> list[Any]:
         return list(
             (
                 await connection.execute(
+                    # By name, not by `created_at`: one import is one
+                    # transaction, and every row in it carries the same `now()`.
                     sa.text(
                         "SELECT id, sha256, content_type, width, height, size_bytes, source, "
-                        "original_filename, tags, meta FROM assets ORDER BY created_at"
+                        "original_filename, tags, meta FROM assets "
+                        "ORDER BY original_filename, id"
                     )
                 )
             ).all()

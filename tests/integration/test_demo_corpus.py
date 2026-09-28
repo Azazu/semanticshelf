@@ -115,7 +115,13 @@ async def rows(engine: AsyncEngine) -> list[sa.Row[tuple[str, list[str], dict[st
         return list(
             (
                 await connection.execute(
-                    sa.text("SELECT original_filename, tags, meta FROM assets ORDER BY created_at")
+                    # By name, not by `created_at`: an import writes its assets in
+                    # one transaction, and `now()` is the same instant for all of
+                    # them, so ordering by it is no order at all.
+                    sa.text(
+                        "SELECT original_filename, tags, meta FROM assets "
+                        "ORDER BY original_filename, id"
+                    )
                 )
             ).all()
         )

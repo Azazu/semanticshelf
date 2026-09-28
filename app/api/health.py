@@ -33,6 +33,18 @@ class ReadyResponse(BaseModel):
     checks: dict[str, str]
 
 
+#: What each probe answers, for the OpenAPI document (FR-OPS-4). Both are real
+#: responses of a running service: the version is the application's own, and the
+#: four checks are the ones `/ready` actually performs. A service that is not
+#: ready answers 503 problem details with the same `checks` member, and the
+#: failing line carries the reason instead of `ok`.
+HEALTH_EXAMPLE: dict[str, object] = {"status": "ok", "version": "0.1.0"}
+READY_EXAMPLE: dict[str, object] = {
+    "status": "ready",
+    "checks": {"database": "ok", "migrations": "ok", "models": "ok", "media": "ok"},
+}
+
+
 class NotReadyProblem(ProblemDetails):
     """The 503 of the readiness probe: problem details plus one line per check."""
 
@@ -44,6 +56,7 @@ class NotReadyProblem(ProblemDetails):
     summary="Liveness probe",
     description="The process is up. Touches no dependency: no database, no filesystem, no model.",
     response_model=HealthResponse,
+    responses={HTTPStatus.OK: {"content": {"application/json": {"example": HEALTH_EXAMPLE}}}},
 )
 async def health() -> HealthResponse:
     return HealthResponse(status="ok", version=__version__)
@@ -62,7 +75,10 @@ async def health() -> HealthResponse:
         "Models are never loaded by this probe: it compares declarations, not weights."
     ),
     response_model=ReadyResponse,
-    responses=problem_responses(HTTPStatus.SERVICE_UNAVAILABLE, model=NotReadyProblem),
+    responses={
+        HTTPStatus.OK: {"content": {"application/json": {"example": READY_EXAMPLE}}},
+        **problem_responses(HTTPStatus.SERVICE_UNAVAILABLE, model=NotReadyProblem),
+    },
 )
 async def ready(request: Request) -> Response:
     engine: AsyncEngine = request.app.state.engine

@@ -1,7 +1,8 @@
 """Capture the screenshots the README uses, from a real service and a real page.
 
 `make screenshots` starts the API and the demo interface on ports it picks,
-drives a headless browser through three pages and writes them to `docs/images/`.
+drives a headless browser through all five pages and writes them to
+`docs/images/`.
 
 Two rules this script keeps, because the alternative is a repository that grows
 stale pictures and a machine that grows orphaned servers:
@@ -9,6 +10,10 @@ stale pictures and a machine that grows orphaned servers:
 - what is captured is the real thing — no fixtures, no mock, no hand-cropping;
 - whatever happens, both children are stopped before this exits, and that is
   checked rather than assumed.
+
+What is *in* the store is chosen, though, and deliberately:
+`scripts/screenshot_corpus.py` copies the part of the demo corpus a front page
+should show. The pictures are still the dataset's own.
 """
 
 import os
@@ -27,7 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent
 IMAGES = ROOT / "docs" / "images"
 VIEWPORT = {"width": 1440, "height": 900}
 START_TIMEOUT_SECONDS = 90
-QUERY = "a red stop sign at a junction"
+QUERY = "people playing tennis on a sunny court"
 
 
 def free_port() -> int:
@@ -117,8 +122,26 @@ def corpus_is_there(api: str) -> bool:
     return bool(stats["assets"])
 
 
+def a_picture_to_upload() -> Path:
+    """Something for the Upload page's form to be holding.
+
+    The demo corpus if it is there — a real picture with a real name is what the
+    page will show a person — and otherwise one drawn here, so the capture works
+    on a machine that has not fetched the dataset.
+    """
+    pictures = sorted((ROOT / ".data" / "demo" / "pictures").rglob("*.jpg"))
+    if pictures:
+        return pictures[0]
+    from PIL import Image
+
+    drawn = ROOT / ".data" / "screenshot-upload.png"
+    drawn.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (640, 480), (52, 96, 148)).save(drawn)
+    return drawn
+
+
 def capture(ui: str) -> None:
-    """Three pages, in the order a person meets them."""
+    """Five pages, in the order a person meets them."""
     from playwright.sync_api import sync_playwright
 
     IMAGES.mkdir(parents=True, exist_ok=True)
@@ -138,6 +161,33 @@ def capture(ui: str) -> None:
             page.wait_for_selector("img", timeout=60_000)
             page.wait_for_timeout(1_500)
             page.screenshot(path=IMAGES / "browse.png")
+
+            # "Find similar" is an action under a thumbnail, so the page it
+            # leads to is captured the way a person actually reaches it.
+            page.get_by_role("button", name="Find similar").first.click()
+            page.wait_for_selector("img", timeout=60_000)
+            page.wait_for_timeout(1_500)
+            page.screenshot(path=IMAGES / "similar.png")
+
+            # The Upload page is a form: empty, it shows nothing about what it
+            # accepts, so it is filled before it is photographed. Nothing is
+            # submitted — a screenshot run must not add to the corpus it is
+            # photographing.
+            page.get_by_role("link", name="Upload").click()
+            page.wait_for_timeout(1_000)
+            page.set_input_files("input[type=file]", str(a_picture_to_upload()))
+            page.get_by_label("Tags").fill("demo, outdoors")
+            # Enter, so the field is a value rather than an edit in progress;
+            # then the heading, so nothing is focused. Streamlit draws both an
+            # unapplied input and a focused one in the theme's primary colour,
+            # which is red here — in a still picture that reads as an error.
+            page.get_by_label("Tags").press("Enter")
+            page.get_by_role("heading", name="Upload").click()
+            # And the pointer off the heading again: Streamlit hangs an anchor
+            # link beside whatever the mouse is over, and the picture would keep it.
+            page.mouse.move(VIEWPORT["width"] - 10, VIEWPORT["height"] - 10)
+            page.wait_for_timeout(1_500)
+            page.screenshot(path=IMAGES / "upload.png")
 
             page.get_by_role("link", name="Status").click()
             page.wait_for_timeout(1_500)
@@ -190,7 +240,7 @@ def main() -> int:
         ):
             capture(ui)
 
-    for name in ("search.png", "browse.png", "status.png"):
+    for name in ("search.png", "similar.png", "browse.png", "upload.png", "status.png"):
         print(f"wrote docs/images/{name}")
     return 0
 

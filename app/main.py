@@ -16,7 +16,7 @@ from app.api import assets, catalogue, health, search
 from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.errors import problem_responses, register_exception_handlers
 from app.core.logging import configure_logging
-from app.core.openapi import install_problem_media_type
+from app.core.openapi import install_document_corrections
 from app.core.request_id import RequestIdMiddleware
 from app.core.settings import Settings
 from app.db.engine import create_engine, create_session_factory
@@ -81,5 +81,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     assets.install(app)
     catalogue.install(app)
     search.install(app)
-    install_problem_media_type(app)
+    install_document_corrections(app)
     return app

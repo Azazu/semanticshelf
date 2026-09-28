@@ -96,13 +96,23 @@ async def a_store_of_every_kind(engine: AsyncEngine) -> dict[str, Asset]:
         gave_up = await add_asset(assets, 3)
         nothing = await add_asset(assets, 4)
         await embeddings.upsert(asset_id=indexed.id, model=DINOV2_LARGE, vector=a_vector(1))
-        for asset, status in ((waiting, "pending"), (gave_up, "failed")):
+        # `created_at` defaults to `now()`, which in PostgreSQL is the time the
+        # *transaction* began — so two rows written here would carry the same
+        # instant and "the order they arrived" would be whatever the heap
+        # returned. These two arrived before this run, and say so.
+        for seconds_ago, (asset, status) in enumerate(((waiting, "pending"), (gave_up, "failed"))):
             await session.execute(
                 sa.text(
-                    "INSERT INTO indexing_jobs (asset_id, model, status, last_error) "
-                    "VALUES (:id, :model, :status, 'RuntimeError')"
+                    "INSERT INTO indexing_jobs (asset_id, model, status, last_error, created_at) "
+                    "VALUES (:id, :model, :status, 'RuntimeError', "
+                    "now() - (:seconds_ago * interval '1 second'))"
                 ),
-                {"id": str(asset.id), "model": DINOV2_LARGE, "status": status},
+                {
+                    "id": str(asset.id),
+                    "model": DINOV2_LARGE,
+                    "status": status,
+                    "seconds_ago": 2 - seconds_ago,
+                },
             )
         await session.commit()
     return {"indexed": indexed, "waiting": waiting, "gave_up": gave_up, "nothing": nothing}

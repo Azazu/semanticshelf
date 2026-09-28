@@ -18,8 +18,13 @@ Authoritative live source: `make help`.
 | `make test-ui` | the `ui` suite: the demo pages against a service that answers from memory; never part of `make check` or CI |
 | `make screenshots` | capture `docs/images/*.png` from a running API and interface; needs the `ui` and `screenshots` groups |
 | `make lock-check` | `uv lock --check`: `uv.lock` matches `pyproject.toml` |
+| `make audit` | `uv audit --locked`: known advisories against the locked dependencies, any severity, fix or none (NFR-SEC-6). Uses uv's experimental audit command, named rather than silenced — `--preview-features audit-command` |
 | `make lint` / `make fmt` / `make fmt-check` / `make types` | ruff check / ruff format / format check / mypy |
 | `make check` | lock check + lint + format + types + unit and api tests — the gate floor |
+| `make image` | build both images from one Dockerfile: the service and the interface |
+| `make stack` / `make stack-down` / `make stack-logs` | the whole system in containers; the first run writes the local environment file. Authority: [running the stack](../how-to/running-the-stack.md) |
+| `make stack-warm` | fill the model-cache volume through the service image, once |
+| `make sca-image` | scan the service image (Trivy): HIGH/CRITICAL findings that have a fix. Deliberately outside CI — see the how-to |
 
 Guarded targets: `make run`, `make migrate`, `make revision MSG='…'` and
 `make test-integration` print `[SKIP] no alembic.ini — application not
