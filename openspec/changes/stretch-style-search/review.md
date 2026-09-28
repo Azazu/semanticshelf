@@ -25,3 +25,16 @@
 | 1 | confirmed — the benchmark and decision tasks now measure `clip-vit-l14` and `dinov2-large`, derive the stored image keys from `app.domain`, and record every incumbent in the ADR. |
 | 2 | changes-requested — the deciding rank preference and diagnostic ratio handle the zero and negative denominator cases, but task 2.4 requires a test where a candidate clears the headroom bound while scoring below 0.5. This is impossible: preference scores lie in [0, 1], so every incumbent is at least 0 and `incumbent + (1 - incumbent) / 2` is at least 0.5. Replace that test with a feasible boundary case; as written, the Gate 1 implementation plan cannot be completed. |
 | 3 | confirmed — the design and task 1.1 now both refuse a constant picture for that photograph. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** eb3f588328bfd032d6ef7f673c2a78579247191f
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the diff retains the comparison against both stored image keys and the task to derive them from `app.domain`; the ADR task still requires every incumbent's result. |
+| 2 | confirmed — task 2.4 replaces the impossible below-0.5 case with feasible tests below, on, and above the strict headroom bound, including an incumbent of 0 and selection of the highest incumbent. The design uses the same single bound; task 2.3 still covers zero and negative diagnostic denominators. |
+| 3 | confirmed — the corpus rule remains consistent: the design and task 1.1 both refuse a constant picture for that photograph. |
