@@ -44,6 +44,13 @@ screenshots = [
 ]
 style = [
     "open-clip-torch>=3.3.0",
+    # `open_clip` brings `torchvision` itself, and left to that it comes from
+    # PyPI while `torch` comes from the CPU index below — two builds of a pair
+    # that is compiled against itself, which imports and then raises "operator
+    # torchvision::nms does not exist". Naming it here is what lets
+    # `[tool.uv.sources]` point it at the same index, because a source mapping
+    # applies to what the project declares, not to what a dependency pulls in.
+    "torchvision>=0.29.0",
 ]
 ui = [
     # `httpx` is a runtime dependency of the service as well, and it is listed
@@ -72,6 +79,11 @@ explicit = true
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu" }]
+# `torchvision` arrives with `open_clip_torch` in the `style` group, and it must
+# come from the same index as `torch`: the two are built against each other, and
+# a PyPI build beside a CPU-index torch loads and then fails at the first call
+# into a torchvision operator ("operator torchvision::nms does not exist").
+torchvision = [{ index = "pytorch-cpu" }]
 
 [tool.ruff]
 line-length = 100

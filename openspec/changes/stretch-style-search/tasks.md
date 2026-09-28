@@ -23,7 +23,7 @@
   `tests/unit/test_image_definition.py` still proves the service image does not
   carry it; the layering test still proves `app/` imports nothing from
   `scripts/`.
-- [ ] 2.2 The candidate's loader in `scripts/`: `open_clip`'s `ViT-L-14` visual
+- [x] 2.2 The candidate's loader in `scripts/`: `open_clip`'s `ViT-L-14` visual
   tower with `visual.proj` removed, the checkpoint read at a **pinned
   revision** (`5bc26a6fb0487f3f00a2a7313135103a005b1b67`) with
   `weights_only=True` and the four-entry allowlist of design decision 4, the
@@ -31,7 +31,7 @@
   unexpected**, and `module.last_layer_style` applied to the pooled output.
   Verify: a `models`-suite test (real checkpoint, never in CI) asserting width
   768, unit rows, a batch keeping its order, and the refusal when a tensor is
-  missing; a unit test that the allowlist is exactly those four inert types and
+  missing; a unit test that the allowlist is exactly those four globals and
   that `weights_only=False` appears nowhere in the repository.
 - [ ] 2.3 The two statistics of design decision 2. **Deciding:** the rank
   preference — over every triple (anchor, a different picture under the anchor's

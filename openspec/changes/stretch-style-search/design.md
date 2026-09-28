@@ -26,8 +26,8 @@ established the exact, short list that unblocks it —
 `numpy.core.multiarray.scalar` (which must be allowlisted under its *legacy*
 module path, because numpy renamed the module to `numpy._core` while the
 pickle still names the old one), `numpy.dtype`, `numpy.dtypes.Float64DType` and
-`argparse.Namespace` — all of them inert data types that construct a value and
-run nothing.
+`argparse.Namespace` — three types and numpy's own scalar constructor for
+pickles, each of which builds a value and runs nothing else.
 
 **The backbone loads cleanly, in one order only.** With `open_clip`'s
 `ViT-L-14` visual tower and `visual.proj` removed **before** the load — CSD
@@ -186,13 +186,14 @@ writing the adapter properly; what moves is code that has already been run.
 Change 17 refused to execute a pickle and could, because its checkpoint was
 plain tensors. This one is not: it is a training checkpoint with numpy scalars
 and an `argparse.Namespace` in it. The two honest options are to allowlist
-those four inert types, or not to use the model.
+those four globals, or not to use the model.
 
 `weights_only=False` is the third option and is refused: it would let any
 object in the file run code on load, which is the thing the flag exists to
 stop. The allowlist is written out in the code with the reason beside it, and
-each entry is a data type whose unpickling constructs a value — no callables,
-no modules, nothing that can reach the filesystem.
+each entry builds one value and runs nothing else — three types and numpy's
+own scalar constructor for pickles; no modules, nothing that can reach the
+filesystem.
 
 *What this guarantees:* the load cannot execute code from the file. *What it
 does not:* it does not make the weights trustworthy — nothing can; what it
@@ -216,8 +217,9 @@ and the record of that is one of the more useful things in this repository.
   maintained (3.3.0, February 2026), and justified against the hand-written
   alternative in the proposal.
 - **A training checkpoint with pickled objects** → a four-entry allowlist of
-  inert types, never `weights_only=False`, with the reason recorded and a test
-  that the allowlist is exactly those four.
+  globals that each build one value and run nothing else, never
+  `weights_only=False`, with the reason recorded and a test that the allowlist
+  is exactly those four.
 - **The bound could be wrong** → it is published beside the numbers, so a
   reader who disagrees can see what a different bound would have decided. What
   is not negotiable is that it was fixed before the run.
