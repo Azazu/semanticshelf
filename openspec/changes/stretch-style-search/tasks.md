@@ -67,15 +67,22 @@
 - [ ] 2.6 The instalments of design decision 6: `--only <model>` measures one
   model and stops, and `--cache <directory>` stores what a run computed and
   reuses it when a later run asks for the same thing. A cached file carries a
-  fingerprint over everything that can change a vector — the model, the
-  checkpoint revision for the candidate, the corpus root, **each photograph's
-  content**, the looks and the labels — and one whose fingerprint does not match
-  is recomputed rather than read. The write is to a temporary name in the same
-  directory, then a rename. Verify: unit tests, each watched to refuse — a cache
-  is not read when a photograph's bytes changed, when one is added or removed,
-  when the set of looks changed, when the model or the candidate's revision
-  changed; a round trip returns the same vectors and the same labels; a run with
-  no `--cache` creates no file; and the write is shown to be a rename of a
+  fingerprint over everything that can change a vector — the corpus root, **each
+  photograph's content**, the looks, the labels, and **each model's observed
+  identity**: `CHECKPOINT@REVISION` plus the `open_clip` version for the
+  candidate, and the configured checkpoint name plus the commit hash the local
+  model cache resolved it to for an incumbent, whose key alone says nothing
+  about which weights answered. A file whose fingerprint does not match is
+  recomputed rather than read, and a model whose identity cannot be resolved
+  disables the cache for that model. The write is to a temporary name in the
+  same directory, then a rename. Verify: unit tests, each watched to refuse — a
+  cache is not read when a photograph's bytes changed, when one is added or
+  removed, when the set of looks changed, when the candidate's pinned revision
+  changed, when the `open_clip` version changed, when **an incumbent's
+  configured checkpoint name changed**, and when **the commit hash that name
+  resolves to changed**; an unresolvable identity disables the cache rather than
+  reading it; a round trip returns the same vectors and the same labels; a run
+  with no `--cache` creates no file; and the write is shown to be a rename of a
   temporary file rather than a write in place.
 
 ## 3. The decision

@@ -225,13 +225,32 @@ operator's convenience, and a final run that assembles the table in seconds.
 argument is what an operator reaches for when the machine is shared.
 
 **What "the same thing" means is the whole design.** A cache that served a
-vector from a different corpus would corrupt a published number in a way no
-reader could see, so a cached file carries a fingerprint over everything that
-can change a vector: the model, the checkpoint revision for the candidate, the
-corpus root, every photograph's **content**, the set of looks, and the labels
-the stream produced. A file whose fingerprint does not match is not read — it is
-recomputed and replaced. Nothing about a cached file is trusted except after
+vector from a different corpus, or from different weights, would corrupt a
+published number in a way no reader could see. So a cached file carries a
+fingerprint over everything that can change a vector: the corpus root, every
+photograph's **content**, the set of looks, the labels the stream produced, and
+the model's identity. A file whose fingerprint does not match is not read — it
+is recomputed and replaced. Nothing about a cached file is trusted except after
 that comparison.
+
+**A model's identity is not its key.** Only the candidate is pinned by this
+repository; `clip-vit-l14` and `dinov2-large` load a checkpoint *name* that is a
+setting, with no revision, so the same key can mean different weights on two
+machines or on the same machine a month apart — and the processor that resizes
+and normalises a picture comes from that same repository. What goes into the
+fingerprint is therefore what the run can observe about the weights it actually
+read:
+
+- for the candidate, `CHECKPOINT@REVISION` — pinned here — **and the
+  `open_clip` version**, because its preprocessing comes from the package
+  rather than from the checkpoint;
+- for an incumbent, the configured checkpoint name **and the commit hash the
+  local model cache resolved that name to**, which is the snapshot
+  `from_pretrained` read and which carries the processor with it.
+
+If a model's identity cannot be resolved, the cache is not used for that model:
+it recomputes and says so. Fail-closed, because the alternative is a number
+whose provenance nobody can reconstruct.
 
 **Writes are atomic.** Written to a temporary name in the same directory and
 renamed, so a crash leaves either the previous file or none, never half of one.
@@ -267,9 +286,13 @@ that computes everything.
   outcome this change is shaped to allow, and the requirement it adds makes it
   the normal one rather than a failure.
 - **A cache could publish a number nobody measured** → the fingerprint covers
-  every input that can change a vector, including each photograph's content, and
-  a file that does not match it is recomputed rather than read. The tests for it
-  are tests of the mismatch, not of the hit.
+  every input that can change a vector: each photograph's content, the looks and
+  labels, and each model's observed identity — the pinned revision and the
+  `open_clip` version for the candidate, the configured name and the resolved
+  commit hash for an incumbent, whose key alone says nothing about which weights
+  answered. A file that does not match is recomputed rather than read, an
+  identity that cannot be resolved disables the cache for that model, and the
+  tests for all of it are tests of the mismatch, not of the hit.
 
 ## Migration Plan
 

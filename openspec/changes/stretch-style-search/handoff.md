@@ -82,10 +82,21 @@ Two rows of the applicability table changed with it — "crash around an externa
 effect" now has a second effect to answer for, and "concurrent writers" is no
 longer `n/a`.
 
+**Round 2 returned one major finding, and it was the right one to find.** The
+fingerprint named "the model", but only the candidate is pinned here:
+`clip-vit-l14` and `dinov2-large` load a checkpoint *name* that is a setting,
+with no revision, and the processor comes from that same repository. A cache
+keyed on the model key would have served vectors from different weights under
+the same name. Fixed: the fingerprint carries what a run can observe about the
+weights it actually read — `CHECKPOINT@REVISION` plus the `open_clip` version
+for the candidate, the configured name plus the commit hash the local model
+cache resolved it to for an incumbent — and an identity it cannot resolve
+disables the cache for that model rather than guessing.
+
 ## Next step
 
-`scripts/gate-run.sh stretch-style-search 1 full` — Gate 1 round 2 on the
-reshaped artifacts, then task 2.6 and the run.
+`scripts/gate-run.sh stretch-style-search 1 confirm 2` — confirmation of round
+2, then task 2.6 and the run.
 
 **Then blocked on one run** (below). When its output exists: fill ADR-006's Decision
 and Consequences and set its status, add "What one run says" and "Reading it" to
