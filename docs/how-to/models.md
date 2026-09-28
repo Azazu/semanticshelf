@@ -41,12 +41,19 @@ nothing to be compared with. Which languages are claimed, and on what evidence:
 
 Three things about this checkpoint are worth knowing before you enable it.
 
-- **It is pinned, and by two revisions.** `MCLIP_REVISION` is the checkpoint,
-  its config and its tokenizer; `MCLIP_BASE_REVISION` is the
-  `xlm-roberta-large` config the architecture is built from. Both default to
-  the commits the published measurement was taken at, because a branch can move
-  and then a deployment answers differently under the same key with nothing to
-  notice it by.
+- **It is pinned, by two revisions, and there is no setting to move them.**
+  One revision is the checkpoint with its config and tokenizer, the other the
+  `xlm-roberta-large` config the architecture is built from; both are constants
+  in `app/ml/mclip.py`. The two models *do* have a setting for their
+  checkpoint, because a mirror or a compatible fine-tune is your choice and the
+  width check keeps it honest. This key is different in kind: it claims to land
+  in another model's space, nothing at runtime can check that, and what backs
+  it is a measurement of these bytes. Other weights are another encoder, with a
+  key and numbers of their own.
+- **A checkpoint that does not fill the architecture is refused at load.** A
+  tensor the model expects and the file does not carry would stay randomly
+  initialised and answer anyway, at the right width; the adapter compares what
+  the load reports against one known leftover and refuses everything else.
 - **Its weights are a pickle, and are read as data.** The repository has no
   safetensors copy on its main revision (the one that exists is an unmerged
   pull request), so the adapter loads it with `weights_only=True`: tensors are

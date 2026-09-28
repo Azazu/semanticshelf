@@ -58,10 +58,20 @@ Both are fixed, and both now have the test that would have caught them.
 built — and the `models` suite, which CI never runs and which this change is
 the reason for, 8 passed against the real checkpoint.
 
+**Gate 2 round 1 — two majors and a minor, all accepted** (§6 of `tasks.md`).
+The adapter threw away what `load_state_dict` reported, so a checkpoint missing
+a tensor would have loaded with a random layer and ranked under a published
+key; the three `MCLIP_*` settings could point the key at other weights while
+ADR-005's languages rode along on it, and are gone — the checkpoint and both
+revisions are constants, because an encoder's key claims alignment that nothing
+at runtime can check; and the endpoint still described itself as English-only
+with scores comparable within a model. Twenty-two plants now, twenty-two
+failures.
+
 ## Next step
 
 The user pushes `change/stretch-multilingual-queries` and watches CI, then
-`/gate-review stretch-multilingual-queries 2`.
+`/gate-review stretch-multilingual-queries 2 confirm 2`.
 
 Two things a reviewer should know where to find. The encoder is **off by
 default**, so CI downloads nothing and the default build is unchanged in every

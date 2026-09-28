@@ -27,6 +27,7 @@ from PIL.Image import Image
 
 from app.domain import MCLIP_XLMR_L14, dimension_of
 from app.ml.base import (
+    CheckpointTensorsError,
     EmbeddingResult,
     ImagesNotSupportedError,
     batches,
@@ -37,6 +38,24 @@ from app.ml.base import (
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only
     from app.core.settings import Settings
+
+#: The assets this key *is*, rather than assets it may be pointed at.
+#:
+#: The two models have a setting for their checkpoint, because a mirror or a
+#: compatible fine-tune is an operator's legitimate choice and the width check
+#: is the guard that keeps it honest. An encoder is different in kind: its key
+#: carries a claim — that its output lands in another model's space — which no
+#: runtime check can verify, and which this repository backs with a published
+#: measurement (ADR-005) of *these* bytes. So there is nothing to point
+#: elsewhere: other weights are another encoder, with a key and numbers of
+#: their own. An air-gapped deployment uses the cache and `HF_HUB_OFFLINE=1`,
+#: which is how the models how-to already tells it to.
+CHECKPOINT: Final = "M-CLIP/XLM-Roberta-Large-Vit-L-14"
+REVISION: Final = "40afa80a85e8efa990384a24bbe5a1f6f1cc81b5"
+#: The architecture the weights are poured into comes from a second repository,
+#: named by the checkpoint's own config, and is pinned for the same reason: a
+#: config that changes builds a different model under the same name.
+BASE_REVISION: Final = "c23d21b0620b635a76227c604d44e43a9f0ee389"
 
 #: Embedded once at load to see how wide this checkpoint's vectors really are.
 WIDTH_PROBE: Final = "a photograph"
@@ -50,7 +69,27 @@ TRANSFORMER_PREFIX: Final = "transformer."
 #: The field of the checkpoint's config that names the architecture to build.
 BASE_FIELD: Final = "modelBase"
 CHECKPOINT_FILE: Final = "pytorch_model.bin"
+#: The one tensor this checkpoint carries that the architecture no longer has:
+#: a buffer transformers persisted in 4.x and derives in 5.x. Everything else
+#: left over would mean the file is not what this adapter thinks it is.
+KNOWN_EXTRA_TENSORS: Final = frozenset({"embeddings.position_ids"})
 CONFIG_FILE: Final = "config" + ".json"
+
+
+def check_tensors(missing: Sequence[str], unexpected: Sequence[str]) -> None:
+    """Refuse a checkpoint that does not fill the architecture, or overfills it.
+
+    Missing is always fatal: that tensor keeps its random initialisation.
+    Unexpected is fatal unless it is the one leftover named above — a file
+    carrying tensors this architecture has no place for is not the file this
+    adapter was written against, whatever its width turns out to be.
+    """
+    surprising = sorted(set(unexpected) - KNOWN_EXTRA_TENSORS)
+    if missing or surprising:
+        raise CheckpointTensorsError(
+            f"checkpoint for {MCLIP_XLMR_L14!r} does not match the architecture: "
+            f"missing {sorted(missing) or 'nothing'}, unexpected {surprising or 'nothing'}"
+        )
 
 
 class MclipEmbedder:
@@ -89,8 +128,8 @@ class MclipEmbedder:
 
         cache = settings.model_cache
         cache.mkdir(parents=True, exist_ok=True)
-        name = settings.mclip_model_name
-        revision = settings.mclip_revision
+        name = CHECKPOINT
+        revision = REVISION
 
         described = json.loads(
             Path(hf_hub_download(name, CONFIG_FILE, cache_dir=cache, revision=revision)).read_text(
@@ -107,10 +146,10 @@ class MclipEmbedder:
         # checkpoint's own config; its weights do not, because this checkpoint
         # already carries them.
         base = AutoConfig.from_pretrained(
-            str(described[BASE_FIELD]), cache_dir=cache, revision=settings.mclip_base_revision
+            str(described[BASE_FIELD]), cache_dir=cache, revision=BASE_REVISION
         )
         transformer = AutoModel.from_config(base)
-        transformer.load_state_dict(
+        loaded = transformer.load_state_dict(
             {
                 key.removeprefix(TRANSFORMER_PREFIX): value
                 for key, value in weights.items()
@@ -118,6 +157,11 @@ class MclipEmbedder:
             },
             strict=False,
         )
+        # `strict=False` is what lets the known leftover through; what it
+        # reports is then the whole point, and throwing it away would let a
+        # checkpoint with a tensor missing load with a random layer, pass the
+        # width probe, and rank under a key whose numbers are published.
+        check_tensors(loaded.missing_keys, loaded.unexpected_keys)
         head = torch.nn.Linear(
             in_features=int(weights[HEAD_WEIGHT].shape[1]),
             out_features=int(weights[HEAD_WEIGHT].shape[0]),

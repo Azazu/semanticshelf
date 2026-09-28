@@ -139,7 +139,7 @@
   | an encoder answers in a space nobody declares | 4 failed, 5 passed |
   | the settings stop refusing an encoder this build cannot run | 1 failed, 22 passed |
   | the settings stop refusing an encoder whose space is not enabled | 1 failed, 22 passed |
-  | a pinned revision is a branch name again | 1 failed, 22 passed |
+  | the encoder's checkpoint becomes a setting again | 1 failed, 22 passed |
   | warming may name an encoder that is not enabled | 2 failed, 21 passed |
   | an unknown encoder is no longer unavailable (the 503) | 2 failed, 4 passed |
   | an encoder claims it can take pictures (the 422) | 2 failed, 4 passed |
@@ -155,6 +155,8 @@
   | a baseline that answers nothing is usable | 1 failed, 14 passed |
   | the relative bound alone decides a language | 4 failed, 11 passed |
   | the encoder's English page is compared with itself | 1 failed, 14 passed |
+  | what the state-dict load reports is thrown away | 1 failed, 8 passed |
+  | the tensor check accepts anything | 3 failed, 2 passed |
 
   Worth recording: the width check was the one row that **did not** fail on the
   first run — removing it changed nothing, because no test pointed the key at a
@@ -184,3 +186,36 @@
   and the gate reading it, the branch may differ only in `review.md`,
   `handoff.md` and `tasks.md`, which is what `scripts/workflow-verify.sh merge`
   enforces before a merge.
+
+## 6. Gate 2 round 2 — two majors and a minor, all accepted
+
+- [x] 6.1 Finding 1: `load_state_dict(strict=False)` reported what was missing
+  and what was left over, and the adapter threw both away. A checkpoint with a
+  tensor missing would have loaded with that layer still randomly initialised,
+  passed the width probe and ranked under a key whose numbers are published.
+  `check_tensors` now refuses any missing tensor and any unexpected one but the
+  single known leftover — `embeddings.position_ids`, a buffer transformers 4.x
+  persisted and 5.x derives — and `CheckpointTensorsError` says which. Verify:
+  five unit cases on the helper, a `models`-suite test that drops a real tensor
+  on its way out of the checkpoint and watches the load refuse, and two rows in
+  §5.1 (the call removed; the check weakened).
+- [x] 6.2 Finding 2: the three `MCLIP_*` settings could point the key at other
+  weights while ADR-005's published languages rode along on it. They are gone:
+  the checkpoint and both revisions are constants in `app/ml/mclip.py`. A
+  model's checkpoint stays a setting because a mirror or a compatible fine-tune
+  is an operator's choice and the width check is the guard; an encoder's key
+  claims alignment with another model's space, which nothing at runtime can
+  verify and which a measurement of particular bytes backs — so other weights
+  are another encoder, with a key and numbers of their own. An air-gapped
+  deployment uses the warm cache and `HF_HUB_OFFLINE=1`, as it already does for
+  the models. Verify: a unit test that no setting carries the encoder's name, a
+  row in §5.1 for re-introducing one, and the reason stated in ADR-005, the
+  models how-to and the settings reference.
+- [x] 6.3 Finding 3 (minor): the text endpoint still described itself as
+  English-only and said scores are comparable within a model, and the score
+  field repeated the model-only claim — both written before the encoder
+  existed. The endpoint now says what embeds the query, that comparability is
+  per pair of model and encoder, and that the languages are the ones the
+  enabled encoder was measured in; the score field says the same in one
+  sentence. Verify: `make check` green with the OpenAPI example tests, and the
+  published document re-read for both strings.

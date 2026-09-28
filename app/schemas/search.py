@@ -27,7 +27,9 @@ class SearchHit(BaseModel):
     score: float = Field(
         description=(
             "Cosine similarity between the query and this asset's vector, in [-1, 1]. "
-            "Larger is nearer. Comparable only within one model."
+            "Larger is nearer. Comparable only within one pair of model and encoder, both "
+            "named beside this page: a query embedded by a different tower gives numbers of "
+            "its own, even in the same space."
         )
     )
 

@@ -37,12 +37,26 @@ encoder both put a query into one space, and which of them did it is named in
 every answer (`model` and `encoder`), because two scores are comparable only
 within that pair.
 
-**Both repositories the adapter reads are pinned to a revision** —
+**The key is bound to the assets the numbers were measured on.** Both
+repositories are read at a pinned revision —
 `40afa80a85e8efa990384a24bbe5a1f6f1cc81b5` for the checkpoint, its config and
-the tokenizer, and `c23d21b0620b635a76227c604d44e43a9f0ee389` for the
-`xlm-roberta-large` config the architecture is built from. The numbers below
-are evidence about those bytes; a branch would let a deployment answer
-differently under the same key with nothing to notice it by.
+the tokenizer, `c23d21b0620b635a76227c604d44e43a9f0ee389` for the
+`xlm-roberta-large` config the architecture is built from — and, unlike the two
+storage models, **there is no setting to point the key elsewhere**. A model's
+checkpoint may be substituted because a mirror or a compatible fine-tune is an
+operator's choice and the width check is the guard; an encoder's key claims
+alignment with another model's space, which nothing at runtime can verify and
+which the measurement below backs for particular bytes. Other weights are
+another encoder, with a key and numbers of their own. (Gate 2 round 2 asked for
+exactly this: a substitution that kept the key would have carried these
+published numbers along with it.)
+
+**A checkpoint that does not fill the architecture is refused at load.** The
+transformer is built from a config and the weights are poured in with
+`strict=False`, which is what lets through the one buffer transformers 4.x
+persisted and 5.x derives; what that call *reports* is then checked. A missing
+tensor would otherwise stay randomly initialised, pass the width probe, and
+rank under a key whose numbers are published.
 
 **The adapter is written here rather than imported.** The package the model
 card recommends (`multilingual-clip` 1.0.10, June 2022, MIT) does not load

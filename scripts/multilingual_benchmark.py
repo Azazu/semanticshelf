@@ -53,6 +53,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.core.settings import Settings  # noqa: E402
 from app.db.engine import create_engine  # noqa: E402
 from app.domain import CLIP_VIT_L14, MCLIP_XLMR_L14, dimension_of  # noqa: E402
+from app.ml.mclip import BASE_REVISION, CHECKPOINT, REVISION  # noqa: E402
 
 #: How many results a page of this measurement holds.
 AT = 10
@@ -594,8 +595,8 @@ def report(
     print("## Multilingual queries\n")
     print(f"- corpus: {len(corpus.ids)} assets with a `{CLIP_VIT_L14}` vector")
     print(f"- concepts: {len(concepts)} tags carried by {MIN_ASSETS}–{MAX_ASSETS} assets each")
-    print(f"- encoder: `{settings.mclip_model_name}` at `{settings.mclip_revision}`")
-    print(f"- architecture config at `{settings.mclip_base_revision}`")
+    print(f"- encoder: `{CHECKPOINT}` at `{REVISION}`")
+    print(f"- architecture config at `{BASE_REVISION}`")
     print(
         f"- ranked exactly, at {AT}; a language is claimed at recall ≥ {ABSOLUTE_FLOOR} "
         f"and ≥ {RELATIVE_FLOOR} × the English baseline\n"

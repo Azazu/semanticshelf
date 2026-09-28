@@ -18,9 +18,15 @@ file next to `pyproject.toml` (the environment wins). Source of truth:
 | `CLIP_MODEL_NAME` | no | `openai/clip-vit-large-patch14` | API, CLI | The checkpoint behind the `clip-vit-l14` key. A mirror or compatible fine-tune may be substituted; one of another width is refused at load. |
 | `DINOV2_MODEL_NAME` | no | `facebook/dinov2-large` | API, CLI | The checkpoint behind the `dinov2-large` key, under the same rule. It has no text tower: asking it for words is refused rather than approximated. |
 | `ENABLED_QUERY_ENCODERS` | no | empty | API, CLI | Comma-separated query-encoder keys. An encoder embeds a query into another model's space and stores nothing of its own, so enabling one needs no migration; it is empty by default because the one this build implements is 2.24 GB of weights for a question many deployments never ask. Only implemented keys are accepted, and an encoder whose space is not in `ENABLED_MODELS` refuses at start, naming both. See [ADR-005](../adr/ADR-005-multilingual-query-encoder.md). |
-| `MCLIP_MODEL_NAME` | no | `M-CLIP/XLM-Roberta-Large-Vit-L-14` | API, CLI | The checkpoint behind the `mclip-xlmr-l14` key, under the same substitution rule as the models above. |
-| `MCLIP_REVISION` | no | `40afa80a85e8efa990384a24bbe5a1f6f1cc81b5` | API, CLI | The revision that checkpoint, its config and its tokenizer are read at. Pinned rather than a branch: the published measurement is evidence about these bytes, and a moving branch would let a deployment answer differently under the same key. |
-| `MCLIP_BASE_REVISION` | no | `c23d21b0620b635a76227c604d44e43a9f0ee389` | API, CLI | The revision of the `xlm-roberta-large` config the encoder's architecture is built from — its weights come from the checkpoint above, only the shape comes from here. Pinned for the same reason. |
+
+There is deliberately **no setting for the encoder's checkpoint or its
+revisions**. A model's checkpoint is a setting because a mirror or a compatible
+fine-tune is an operator's choice and the width check keeps it honest; an
+encoder's key carries a claim about another model's space that no runtime check
+can verify and that [ADR-005](../adr/ADR-005-multilingual-query-encoder.md)
+backs with a measurement of particular bytes. Other weights are another
+encoder, with a key and numbers of their own. An air-gapped deployment uses the
+warm cache and `HF_HUB_OFFLINE=1`, as it does for the models.
 | `TORCH_NUM_THREADS` | no | `0` | API, CLI | Threads for one forward pass. `0` leaves torch its own default; set it to the CPU quota in a container. |
 | `EMBED_BATCH_SIZE` | no | `8` | API, CLI | Inputs per forward pass. Memory, not speed, sets this: a batch is one tensor. |
 | `INFERENCE_WORKERS` | no | `2` | API | Threads that load models and run inference, away from the event loop. |

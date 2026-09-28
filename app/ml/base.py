@@ -39,6 +39,15 @@ class CheckpointWidthError(RuntimeError):
     """A checkpoint produces vectors of a width its model key does not declare."""
 
 
+class CheckpointTensorsError(RuntimeError):
+    """A checkpoint does not fill the architecture its adapter poured it into.
+
+    A tensor the architecture expects and the file does not carry stays at its
+    random initialisation, and the result is a model that loads, answers, and
+    ranks with one layer of noise in it — which no width check can see.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class EmbeddingResult:
     """Vectors, and whether each input had to be cut to fit the model.

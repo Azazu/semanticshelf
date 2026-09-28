@@ -22,7 +22,11 @@ from PIL import Image as PILImage
 from app import domain
 from app.core.settings import Settings
 from app.domain import CLIP_VIT_L14, MCLIP_XLMR_L14, dimension_of
-from app.ml.base import CheckpointWidthError, ImagesNotSupportedError
+from app.ml.base import (
+    CheckpointTensorsError,
+    CheckpointWidthError,
+    ImagesNotSupportedError,
+)
 from app.ml.clip import ClipEmbedder
 from app.ml.mclip import MclipEmbedder
 from tests.embedder_conformance import (
@@ -130,3 +134,27 @@ def test_a_checkpoint_whose_width_is_not_the_space_s_is_refused(
 
     assert MCLIP_XLMR_L14 in str(refusal.value)
     assert "512" in str(refusal.value) and "768" in str(refusal.value)
+
+
+def test_a_checkpoint_with_a_tensor_missing_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The call site of the tensor check, against the real file.
+
+    One tensor is dropped on its way out of the checkpoint. Without the check
+    the layer would keep its random initialisation, the width probe would pass,
+    and the encoder would rank under a key whose numbers are published.
+    """
+    import torch
+
+    read = torch.load
+
+    def without_one_tensor(*args: object, **kwargs: object) -> dict[str, object]:
+        weights = read(*args, **kwargs)  # type: ignore[arg-type]
+        weights.pop("transformer.encoder.layer.0.attention.self.query.weight")
+        return weights  # type: ignore[no-any-return]
+
+    monkeypatch.setattr(torch, "load", without_one_tensor)
+
+    with pytest.raises(CheckpointTensorsError) as refusal:
+        MclipEmbedder.load(configured())
+
+    assert "attention.self.query.weight" in str(refusal.value)

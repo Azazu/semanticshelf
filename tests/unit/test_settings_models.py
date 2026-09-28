@@ -2,7 +2,6 @@
 the environment, and the guard that keeps a configuration from naming a model
 this build cannot run."""
 
-import re
 from pathlib import Path
 
 import pytest
@@ -185,12 +184,18 @@ def test_the_encoder_list_is_written_the_same_way_as_the_models(
     assert s.enabled_query_encoders == (MCLIP_XLMR_L14,)
 
 
-def test_the_pinned_revisions_are_commits_rather_than_branches() -> None:
-    # A branch moves, and the numbers ADR-005 publishes are about these bytes.
-    s = settings()
+def test_the_encoder_cannot_be_pointed_at_other_weights() -> None:
+    """There is no setting for it, and that is the point.
 
-    for revision in (s.mclip_revision, s.mclip_base_revision):
-        assert re.fullmatch(r"[0-9a-f]{40}", revision), revision
+    A model's checkpoint is a setting because a mirror or a compatible
+    fine-tune is an operator's choice and the width check keeps it honest. The
+    encoder's key carries a claim about another model's space that no runtime
+    check can verify and that ADR-005 backs with a measurement of *these*
+    bytes, so other weights are another encoder rather than this one.
+    """
+    fields = set(Settings.model_fields)
+
+    assert not [name for name in fields if "mclip" in name]
 
 
 def test_warming_may_name_an_enabled_encoder() -> None:
