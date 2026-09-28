@@ -40,6 +40,7 @@ It writes nothing, reads no database, and needs the `style` dependency group:
 
 import argparse
 import sys
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -238,10 +239,27 @@ def embed(
     labels: list[Label] = []
     rows: list[np.ndarray] = []
     stream = style_corpus.batched(style_corpus.images(corpus), settings.embed_batch_size)
+    started = time.monotonic()
     for batch_labels, pictures in stream:
         labels.extend(batch_labels)
         rows.append(embedder.embed_images(pictures).vectors)
+        progress(model, len(labels), corpus.size, time.monotonic() - started)
+    print(file=sys.stderr)
     return labels, np.concatenate(rows)
+
+
+def progress(model: str, done: int, total: int, elapsed: float) -> str:
+    """One line, rewritten in place, with what is left to wait for.
+
+    Three model passes over several hundred pictures on a CPU is minutes per
+    model. A command that prints nothing until it is finished cannot be told
+    apart from one that has hung, and its cost cannot be planned for, so it
+    says where it is.
+    """
+    left = (total - done) * elapsed / done if done else 0.0
+    line = f"[{model}] {done}/{total} images, {elapsed:5.0f}s elapsed, ~{left:4.0f}s left"
+    print(f"\r{line}", end="", file=sys.stderr, flush=True)
+    return line
 
 
 def shown(value: float | None) -> str:
@@ -313,7 +331,6 @@ def main() -> int:
     rows: list[Scored] = []
     agreed: list[Label] | None = None
     for model in (style_candidate.LABEL, *incumbents()):
-        print(f"[{model}] embedding {corpus.size} images…", file=sys.stderr)
         labels, vectors = embed(model, corpus, settings)
         if agreed is None:
             agreed = labels

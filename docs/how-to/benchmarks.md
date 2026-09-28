@@ -1,6 +1,6 @@
 # Benchmarks
 
-Three measurements live on this page, each with a command that produces it.
+Four measurements live on this page, each with a command that produces it.
 
 - **[The plan a narrowed search takes](#the-plan-a-narrowed-search-takes)** —
   which of three ways PostgreSQL answers a search that narrows by a tag or by
@@ -13,6 +13,10 @@ Three measurements live on this page, each with a command that produces it.
   — how well the multilingual query encoder answers, against the corpus's own
   labels and against the English page (change 17; the decision is
   [ADR-005](../adr/ADR-005-multilingual-query-encoder.md)).
+- **[Does a style key answer something the keys here do not?](#does-a-style-key-answer-something-the-keys-here-do-not)**
+  — whether a style descriptor separates *how a picture looks* from *what is in
+  it* better than the two keys already stored do (change 18; the decision is
+  [ADR-006](../adr/ADR-006-style-as-a-third-key.md)).
 
 The first two build their corpus in a schema of their own, inside the database
 `DATABASE_URL` names, and drop only what they created. Neither can touch the
@@ -20,7 +24,8 @@ tables the service uses: that promise is one module (`scripts/bench_schema.py`)
 both commands import, and the integration suite runs each published command
 against a populated store and checks that every row is still there. The third
 builds nothing at all — it measures a model against the corpus that is already
-there, so it reads in a transaction it declares read-only.
+there, so it reads in a transaction it declares read-only. The fourth touches
+no database of any kind: its corpus is files, built by the command itself.
 
 ## The plan a narrowed search takes
 
@@ -453,3 +458,94 @@ name: a sentence, a mood, a proper noun. Nothing about a corpus other than this
 one; a claim about somebody's own pictures needs their own run of the same
 command. And nothing about how the *index* behaves for these queries, which is
 the measurement above.
+
+
+## Does a style key answer something the keys here do not?
+
+The roadmap asked for a style embedding as a third key. A key is permanent — it
+is part of an embedding's identity, it takes a value in the schema's allowlist,
+it costs an index and a vector for every asset, and it queues work for every
+upload — and this service already stores image vectors under two keys that both
+rank pictures by something neighbouring style. So change 18 asked the question
+first, and `embedding-models` now carries the rule it followed: a key earns its
+place by a published, re-runnable measurement against **every** key of its kind,
+with a bound fixed before the numbers are seen.
+
+```console
+$ uv run --group style python scripts/style_benchmark.py --pictures 100
+```
+
+It needs the `style` dependency group, which nothing installs implicitly
+(`uv sync` leaves it out and the service image cannot carry it). It reads no
+database, writes nothing anywhere, and prints its progress because three model
+passes over several hundred pictures on a CPU take minutes per model. On a
+laptop that has other work to do, `TORCH_NUM_THREADS=4 nice -n 19` in front of
+it keeps the machine responsive at the cost of wall-clock time.
+
+### The corpus is built, not found
+
+A corpus of paintings would be the natural thing to measure on, and this project
+cannot have one: WikiArt's licence is `unknown`, and change 9 set the rule that
+only licences permitting reuse are taken, because the service re-encodes a
+thumbnail and that is a derivative work.
+
+So the command builds its corpus from the pictures already here, by applying six
+deterministic looks to each photograph of a folder — the picture untouched,
+grayscale, posterised, edges, painterly, sepia. Every look is a pure function of
+the bytes, so two images share a look because the same function produced them
+and share a subject because they came from the same photograph: a ground truth
+nobody has to label, and one a re-run rebuilds exactly.
+
+Two rules keep a run from publishing a number it cannot stand behind. A look
+that flattens a photograph to one colour keeps no subject, so that one
+combination is dropped rather than measured — the rule reads the picture's
+interior, because a 3x3 filter leaves the outermost ring untouched and a
+flattened picture still carries its own frame. And a corpus below 20 photographs
+or 4 looks is refused outright.
+
+**These are filters, not painters.** What the measurement can support is a
+statement about separating *how a picture looks* from *what is in it*, which is
+the property a style key would be bought for. It is not evidence about
+Impressionism; a claim about Impressionists needs Impressionists.
+
+### The number that decides, and the one that only informs
+
+Two statistics come out of the same vectors, and they can disagree.
+
+- **Prefers the look** — the deciding one. Over every triple (an anchor, another
+  photograph under the anchor's look, the anchor's photograph under another
+  look), the fraction where the model scores the look-mate above the
+  picture-mate, a tie counting a half. 0.5 is indifference.
+- **The ratio of averages** — the diagnostic. Mean "same look, different
+  picture" over mean "same picture, different look".
+
+The ratio is the obvious statistic and it is the wrong one to decide on, because
+a model's own similarity scale moves it. Models differ in how widely they spread
+cosine similarity, and one whose scores all sit in a narrow high band scores well
+on a ratio of two means while ranking the subject first every single time. A
+ratio compares two population means; a search compares two candidates **against
+the same anchor**. The preference is a proportion of a set the corpus fixes the
+size of, so it has no zero denominator, no negative value, and no dependence on
+that scale — and it survives any rescaling of the scores, which is what the
+spec now requires of the number a bound is read on. The ratio is published
+anyway, with `undefined` in place of a value wherever its denominator is not
+positive, because seeing that the two disagree is worth more than not seeing it.
+
+### The bound, fixed before the run
+
+A candidate earns a key when its preference is **strictly greater** than
+
+```text
+incumbent + (1 - incumbent) / 2
+```
+
+where `incumbent` is the highest preference among the keys the service already
+stores. Half the remaining distance to a perfect score is the only scale-free
+way to say "decisively better" about a proportion: a multiplicative rule is
+meaningless where `3 x 0.4` exceeds 1, and a fixed additive margin is easy
+against a weak incumbent and unreachable against a strong one. One condition,
+not two — the right-hand side is `(1 + incumbent) / 2` and a preference lies in
+[0, 1], so a candidate that clears it has already been shown to prefer the look.
+
+The measured keys are read from `app.domain`, not written out in the command, so
+a key added to `EMBEDDING_MODELS` later cannot be left out of the comparison.

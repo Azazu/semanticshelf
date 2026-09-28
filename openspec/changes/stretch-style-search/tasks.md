@@ -79,7 +79,7 @@
   standing** (design decision 5). It says in its own words that filters are not
   painters and what that limits the claim to. Verify: the ADR index carries its
   row; every number in it matches the how-to exactly.
-- [ ] 3.3 Reconcile the plan with what was decided: `openspec/ROADMAP.md` and
+- [x] 3.3 Reconcile the plan with what was decided: `openspec/ROADMAP.md` and
   `docs/explanation/requirements.md` §9 — row 18 is this measurement, and
   shipping the key is row 18a, proposed only if ADR-006 says yes. Verify: both
   re-read whole; no document promises a third key as settled.

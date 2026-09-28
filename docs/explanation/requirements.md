@@ -367,7 +367,8 @@ The stage plan is the source for `openspec/ROADMAP.md`; ids are stable across bo
 | # | Change id | Scope | Tier |
 |---|---|---|---|
 | 17 | `stretch-multilingual-queries` | a multilingual text encoder in CLIP's space behind the protocol, measured against English CLIP on the demo corpus | **high** (raised at the proposal: a model download is egress from a process this repository ships, and the change widens what the search endpoint accepts) |
-| 18 | `stretch-style-search` | a style embedding model as a third key with its own index and `model=` support | medium |
+| 18 | `stretch-style-search` | a style embedding measured against every key the service already stores image vectors under, over a corpus the command builds; the decision is **ADR-006** | **high** (raised at the proposal: a new dependency, a model download, and a decision that governs a later migration) |
+| 18a | `stretch-style-key` | the third key itself — its own dimension, CHECK value and index, re-index, and `model=` on the picture searches — proposed only if ADR-006 says yes | high |
 | 19 | `stretch-rag-captions` | generated captions/tags per image through a vision-language model; egress policy ADR | high |
 
 ---
@@ -393,7 +394,7 @@ The stage plan is the source for `openspec/ROADMAP.md`; ids are stable across bo
 Taken only after stages 1–4 are archived, each as its own change:
 
 - **Multilingual queries** (D13): swap or add the text encoder (a multilingual CLIP variant as a new model key, or a multilingual text tower aligned to CLIP's image space) and measure on the demo corpus; the English-only limit of FR-TXT-5 is lifted only with numbers.
-- **Style search**: a style-embedding model as a third key (its own dimension, CHECK and index), exposed through `model=` on `/search/image` and `/similar`.
+- **Style search**: does a style embedding answer something the keys already stored do not? Change 18 asked that first, because a third key is permanent — its own dimension, CHECK value and index, a vector for every asset and a job for every upload — and `clip-vit-l14` and `dinov2-large` both rank pictures by something that neighbours style. It built a corpus and published the measurement (**ADR-006**, `docs/how-to/benchmarks.md`); shipping the key, exposed through `model=` on `/search/image` and `/similar`, is a change of its own, taken only if that record says yes.
 - **Generated captions and tags** through a vision-language model; if it runs outside the host it is egress and needs the ADR of NFR-SEC-4.
 - **Re-embedding tooling**: a `models migrate <old-key> <new-key>` command that re-indexes the corpus under a new key and retires the old one, for model upgrades without downtime.
 - **Perceptual deduplication** (near-duplicate detection through the DINOv2 index) as an operator report.
