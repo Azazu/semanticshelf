@@ -6,39 +6,45 @@
 
 ## Done this session
 
-- Branch `change/stretch-style-search` created off `main`, which carries the
-  whole plan and stretch 17 archived.
-- Change scaffolded with `openspec new change` (schema `spec-driven`).
-- `openspec/ROADMAP.md` already carries this as stretch row 18, and
-  `docs/explanation/requirements.md` §9 as the same row — left as they are.
+Gate 1 round 1 returned `changes-requested` with three findings. All three are
+fixed, and finding 1 turned out to reach further than it was written.
 
-- The four artifacts are written, and the three questions this handoff opened
-  with are answered in them — two by a probe run before a word was written.
-- **The candidate exists and loads**: `tomg-group-umd/CSD-ViT-L` (CC-BY-4.0,
-  declared). Its `config.json` is `{"model_type": "custom"}` and the file is a
-  *training* checkpoint in OpenAI CLIP's module layout, so `transformers`
-  cannot build it; `open_clip`'s ViT-L-14 visual tower takes the weights with
-  nothing missing and nothing unexpected once CLIP's own projection is removed.
-  `weights_only=True` refuses the file until four inert types are allowlisted
-  (a numpy scalar under its legacy module path, two numpy types and
-  `argparse.Namespace`) — the design refuses `weights_only=False` outright.
-- **It answers something DINOv2 does not.** Four photographs under six looks:
-  CSD leans toward style at 0.92 (same look 0.507 against same picture 0.551),
-  DINOv2 at 0.145 (0.104 against 0.718).
-- **The scope is reshaped, deliberately.** The roadmap's row 18 says "a third
-  key with its own index"; this change **measures and decides**, and shipping
-  the key — migration, index, re-index, `model=` on the picture searches — is a
-  follow-up proposed only if ADR-006 says yes. The user chose that shape when
-  the change was started; the proposal states it and the specs carry the rule
-  that produced it.
-- **Risk-Tier: high** — a new dependency, a model download, and a decision that
-  governs a later migration.
+- **Finding 1 (major) — only one incumbent was being measured.** `clip-vit-l14`
+  stores image vectors too. The probe was re-run against it, and it is the key
+  that matters: on the ratio the proposal published it scores 0.675, against
+  `dinov2-large`'s 0.145 and the candidate's 0.92. The benchmark, the ADR and
+  the spec now cover every key the service stores vectors of that kind under,
+  read from `app.domain` rather than written out.
+- **Finding 2 (major) — the ratio is undefined where it must not be**, and it
+  answers the wrong question. Adding CLIP showed both at once: it ranks a shared
+  look above a shared subject in 1.9% of triples while the ratio calls it two
+  thirds of the way to a style model, because its similarities sit in a narrow
+  high band. The deciding number is now a **rank preference** — a proportion of
+  a finite set of triples, so no zero denominator, no negative value, no
+  dependence on a model's similarity scale — and the bound is `> 0.5` plus half
+  the remaining headroom over the best incumbent, both derived from the metric
+  rather than from the probe. The ratio stays as a printed diagnostic that
+  decides nothing, with `undefined` where its denominator is not positive.
+- **Finding 3 (minor) — the applicability table and task 1.1 disagreed** about a
+  look that returns a blank picture. One rule now: the corpus builder refuses a
+  look that returns a constant picture for a given photograph, so nothing blank
+  reaches an embedder.
+- **Swept for the claim, not the line:** `rg` over `leaning`, `3×`, `incumbent`
+  and `blank` found and fixed three stale siblings — the Goals line naming only
+  DINOv2, the "one candidate, one incumbent" non-goal, and the "one candidate
+  against the incumbent" non-goal.
+- **One claim checked and made precise while here:** "0 missing and 0
+  unexpected" holds only when CLIP's own projection is removed *before* the
+  load; leave it attached and the report names `proj` missing. Verified in the
+  prescribed order, and the order is now in task 2.2 and in the design.
+- Tasks grew from 15 to 16: the bound is its own task with its own tests.
 
 ## Next step
 
-`/gate-review stretch-style-search 1` — Gate 1 on the artifacts.
-`scripts/pregate-verify.sh gate1 stretch-style-search` passes (15 tasks, tier
-declared, applicability table present, links resolve).
+`scripts/gate-run.sh stretch-style-search 1 confirm 1` — confirmation of round
+1. `scripts/pregate-verify.sh gate1 stretch-style-search` passes (16 tasks, tier
+declared, applicability table present, links resolve) and
+`openspec validate stretch-style-search --strict` is clean.
 
 ## Blockers
 

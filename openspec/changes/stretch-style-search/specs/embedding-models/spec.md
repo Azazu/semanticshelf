@@ -9,12 +9,22 @@ added, this repository SHALL publish what that model answers **that the keys
 already present do not**, and SHALL do it as a measurement rather than as a
 description.
 
+The comparison SHALL cover **every key the service already stores vectors of
+that kind under**, not a key chosen for the comparison: a candidate that beats
+one incumbent and duplicates another has not answered the question.
+
 The measurement SHALL be produced by a command in the repository, over a corpus
 the command builds or names, so that anyone can re-run it and get the same
 answer. Its bound SHALL be fixed before the numbers are seen, and SHALL be
-about the margin over what the service already runs — a key that is only
-marginally better than an existing one at the same question has not earned a
-migration.
+about the margin over the best of those keys — a key that is only marginally
+better than an existing one at the same question has not earned a migration.
+
+The number the bound is read on SHALL be one that a model's own similarity scale
+cannot move. Models differ in how widely they spread cosine similarity, so a
+statistic built from the size of the scores can rank a candidate above an
+incumbent that in fact orders results the other way round. A statistic about the
+**order** a model puts candidates in survives that; any other number may be
+published beside it, as a diagnostic that decides nothing.
 
 A candidate that does not clear the bound SHALL NOT be added, and the
 measurement SHALL be published anyway, in the record that decided it. "Not
@@ -30,6 +40,13 @@ answering in another key's space — is measured under the rule it already has.
   it clears the stated margin over every key the service already runs
 - **THEN** the key may be added, and the record that admits it cites the
   measurement and the command that produced it
+
+#### Scenario: A statistic a model's own scale can move
+- **WHEN** the candidate is ranked above an incumbent by a statistic computed
+  from how large the similarity scores are, rather than from the order they put
+  results in
+- **THEN** that statistic does not decide: the bound is read on a number that
+  survives rescaling, and the record publishes both and says which one decided
 
 #### Scenario: A candidate that duplicates a key already present
 - **WHEN** the measurement shows the candidate does not clear the margin

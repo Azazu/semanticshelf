@@ -29,10 +29,12 @@ pickle still names the old one), `numpy.dtype`, `numpy.dtypes.Float64DType` and
 `argparse.Namespace` — all of them inert data types that construct a value and
 run nothing.
 
-**The backbone loads cleanly.** With `open_clip`'s `ViT-L-14` visual tower and
-`visual.proj` removed (CSD replaces CLIP's own 1024→768 projection with its two
-heads), the checkpoint's `module.backbone.*` tensors load with **0 missing and
-0 unexpected**.
+**The backbone loads cleanly, in one order only.** With `open_clip`'s
+`ViT-L-14` visual tower and `visual.proj` removed **before** the load — CSD
+replaces CLIP's own 1024→768 projection with its two (1024, 768) heads — the
+checkpoint's `module.backbone.*` tensors load with **0 missing and 0
+unexpected**. Removed after the load, the same call reports `proj` missing, so
+"nothing missing" is a statement about a sequence, not about the weights alone.
 
 **The probe's numbers**, four photographs × six looks, are in `proposal.md`.
 
@@ -40,8 +42,9 @@ heads), the checkpoint's `module.backbone.*` tensors load with **0 missing and
 
 **Goals**
 
-- A number that says whether a style key answers something `dinov2-large` does
-  not, produced by a command, over a corpus that command builds.
+- A number that says whether a style key answers something neither
+  `clip-vit-l14` nor `dinov2-large` answers, produced by a command, over a
+  corpus that command builds.
 - A decision recorded where decisions live, including the decision *not* to add
   a key.
 - The rule that produced it written into the specs, so the next candidate key
@@ -49,15 +52,15 @@ heads), the checkpoint's `module.backbone.*` tensors load with **0 missing and
 
 **Non-Goals** (beyond the proposal's)
 
-- No abstraction over "any candidate model". One candidate, one incumbent, one
-  command.
+- No abstraction over "any candidate model". One candidate, the keys the
+  service already stores, one command.
 - No attempt to make the benchmark reusable for text models.
 
 ## Applicability (high tier)
 
 | Question | This change |
 |---|---|
-| Empty, zero and null inputs | The corpus is built from pictures the repository already holds; a look that produces a blank image (a fully posterised white photograph) would give a vector like any other, and a **zero vector** cannot be normalised — the shared guard refuses it rather than dividing into `nan`. The benchmark refuses a corpus below its minimum rather than publishing a number computed from three pictures. |
+| Empty, zero and null inputs | A look that returns a **constant picture** — one colour everywhere, as a hard posterisation of a near-white photograph can — keeps no subject, so the pair it would form carries no ground truth. The corpus builder refuses that look for that picture (task 1.1) rather than measuring it, so nothing blank reaches an embedder and the zero vector the shared guard exists for cannot arise here. The deciding metric is a proportion of a finite set of triples: a corpus with fewer than two pictures or two looks yields no triple, and the benchmark refuses such a corpus rather than dividing by zero — the same refusal as its minimum size. The diagnostic ratio prints `undefined` rather than a value whenever its denominator is not positive. |
 | Crash around an external effect | The only external effect is the checkpoint download; a failed one leaves nothing half-built, because the benchmark writes nothing anywhere. It reads no database at all — the corpus is files. |
 | Idempotent retries | The looks are deterministic functions of the bytes, the vectors are deterministic given the weights, so a re-run reproduces the table exactly. That is the requirement's "can be re-run" scenario, not a nicety. |
 | Authorization boundary | n/a — nothing in the service changes; the benchmark is a command an operator runs. |
@@ -76,9 +79,12 @@ re-encodes a thumbnail and that is a derivative work. A museum's CC0 API would
 be a demo-dataset change of its own size.
 
 So the corpus is **built from the pictures already here**, by applying a fixed
-set of deterministic looks — grayscale, posterise, edges, painterly, sepia —
-to each. Every look is a pure function of the bytes, so the corpus is
-reproducible by the command, needs no download and raises no licence question.
+set of deterministic looks — the picture untouched, grayscale, posterise,
+edges, painterly, sepia — to each. Every look is a pure function of the bytes,
+so the corpus is reproducible by the command, needs no download and raises no
+licence question. The untouched picture is one of the looks and stays in: a
+style search is run against ordinary photographs, and leaving them out would
+measure a corpus nobody has.
 
 *What this guarantees:* a ground truth nobody has to label — two pictures share
 a look because the same function produced them, and share a subject because
@@ -91,33 +97,65 @@ about Impressionism, and the ADR will say so in those words.
 not reproducible by a command, and "hand-picked" is where a measurement starts
 to measure the person.
 
-### 2. One number: how far a model leans toward style
+### 2. Two ways to ask, and the one the decision rests on
 
-For a corpus of `pictures × looks`, two averages over unit vectors:
+For a corpus of `pictures × looks` the obvious statistic is two averages over
+unit vectors — **same look, different picture** against **same picture,
+different look** — and their ratio. The probe computed it, and it is the wrong
+number for this question in two separate ways.
 
-- **same look, different picture** — the style side;
-- **same picture, different look** — the subject side.
+*It is undefined where it must not be.* Both averages are means of cosine
+similarities, so either can be zero or negative even when neither set of pairs
+is empty. A zero denominator has no value at all, a negative one reverses the
+ordering, and a non-positive incumbent makes any multiplicative bound vacuous.
 
-The **leaning** is their ratio. A model that ranks by subject has a small
-leaning (DINOv2: 0.145 in the probe); a model that ranks by style approaches or
-exceeds 1 (CSD: 0.92).
+*It measures the wrong comparison.* A ratio compares two population means; a
+search compares two candidates **against the same anchor**. `clip-vit-l14`
+scores 0.675 on the ratio — far above `dinov2-large`'s 0.145, two thirds of the
+candidate's — while ranking a shared look above a shared subject in 1.9% of
+triples. Its similarities sit in a narrow high band, which lifts both means
+together and says nothing about the order results come back in.
 
-**The bound, fixed here and before the full run: a candidate earns a key only
-if its leaning is at least 3× the incumbent's** on the same corpus. Three,
-because a key costs a migration, an index, a vector for every asset and a job
-for every upload, and a candidate that is merely somewhat more style-aware than
-a model already installed has not bought that. The probe informed *feasibility*
-— that a style descriptor exists and loads — and deliberately not this number:
-four pictures decide nothing, and a bound chosen after seeing the full table
-would be a bound fitted to it.
+So the deciding number is a **rank preference**: over every triple (an anchor, a
+different picture under the anchor's look, the anchor's picture under another
+look), the fraction where the model scores the look-mate above the picture-mate,
+a tie counting a half. It is a proportion of a set the corpus fixes the size of,
+so it is never negative, never has a zero denominator, and is unchanged by any
+monotone rescaling of a model's similarities — none of the three defects above
+can arise in it. 0.5 is indifference; `dinov2-large` sits at 0.003.
 
-Both numbers are published per model, and the per-look breakdown with them, so
-a reader can see which look carried the average.
+**The bound, fixed here and before the full run.** A candidate earns a key only
+when both hold against the **best** of the keys the service already stores:
 
-*What this guarantees:* the decision is one comparison against the thing the
-service already runs. *What it does not:* it says nothing about which model
-retrieves *better* for a person's actual query — that would need human judgement and
-a corpus this project cannot have.
+1. its preference is **above 0.5** — it must actually prefer the look, because a
+   model that still ranks the subject first is answering the question the two
+   installed keys already answer;
+2. it closes **half the remaining distance to a perfect score**:
+   `candidate ≥ incumbent + (1 − incumbent) / 2`.
+
+Neither number is read off the probe. The first is the metric's own point of
+indifference. The second is the only scale-free way to say "decisively better"
+about a proportion: a multiplicative rule is meaningless where `3 × 0.4` exceeds
+1, and a fixed additive margin is easy against a weak incumbent and impossible
+against a strong one, while half the remaining headroom costs the same effort
+wherever the incumbent stands. On the probe's four pictures that bound is 0.510
+and the candidate reaches 0.450 — close enough that the full run genuinely
+decides, which is the shape a measurement should have.
+
+The ratio is published **beside** the preference, per model, as a diagnostic,
+with `undefined` printed in place of a value whenever its denominator is not
+positive. It decides nothing. The ADR records it, and records what it would have
+decided, because "the obvious statistic was the wrong one here" is the most
+transferable thing this measurement produced.
+
+Both numbers are published per model, and the per-look breakdown with them, so a
+reader can see which look carried each average.
+
+*What this guarantees:* the decision is one comparison against every key the
+service already runs, in a number that cannot be moved by how widely a model
+spreads its similarities. *What it does not:* it says nothing about which model
+retrieves *better* for a person's actual query — that would need human judgement
+and a corpus this project cannot have.
 
 ### 3. The candidate's adapter lives in the benchmark, not in `app/`
 
@@ -154,11 +192,12 @@ bounds is the blast radius of reading them.
 
 ### 5. What the ADR must contain, whichever way it goes
 
-The numbers, the corpus it was run on with its size and its looks, the pinned
-revision, the bound, and the decision — **including "no key" as a decision
-with the same standing as "a key"**. Change 14 is the precedent: it measured,
-decided to change nothing, and the record of that is one of the more useful
-things in this repository.
+The numbers **for the candidate and for every key the service already stores**,
+the corpus it was run on with its size and its looks, the pinned revision, the
+bound, the disagreement between the deciding metric and the diagnostic one, and
+the decision — **including "no key" as a decision with the same standing as
+"a key"**. Change 14 is the precedent: it measured, decided to change nothing,
+and the record of that is one of the more useful things in this repository.
 
 ## Risks / Trade-offs
 
@@ -174,6 +213,11 @@ things in this repository.
 - **The bound could be wrong** → it is published beside the numbers, so a
   reader who disagrees can see what a different bound would have decided. What
   is not negotiable is that it was fixed before the run.
+- **The incumbent that matters is not the one we expected** → the probe compared
+  the candidate with both stored keys, and `clip-vit-l14` — not `dinov2-large` —
+  is the one the naive statistic ranked as the rival. Every key the service
+  stores image vectors under is measured, and the bound is taken against the
+  best of them, not against a chosen one.
 - **The answer may be "no key"**, after the work of measuring → that is the
   outcome this change is shaped to allow, and the requirement it adds makes it
   the normal one rather than a failure.

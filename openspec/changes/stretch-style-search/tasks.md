@@ -7,8 +7,9 @@
   edges, painterly, sepia — each a pure function of the bytes, applied to every
   picture of a named folder. Verify: unit tests that each look is deterministic
   (the same input twice gives identical bytes), that it produces a picture of
-  the same size, and that a look which would return a blank image is refused
-  rather than measured.
+  the same size, and that a look which would return a **constant picture** — one
+  colour everywhere, which keeps no subject — is refused for that picture rather
+  than measured.
 - [ ] 1.2 The corpus refuses to be too small to mean anything: at least 20
   photographs and at least 4 looks, or the run reports that and measures
   nothing (design decision 2's "four pictures decide nothing", made mechanical).
@@ -32,30 +33,49 @@
   768, unit rows, a batch keeping its order, and the refusal when a tensor is
   missing; a unit test that the allowlist is exactly those four inert types and
   that `weights_only=False` appears nowhere in the repository.
-- [ ] 2.3 The leaning of design decision 2: mean similarity of "same look,
-  different picture" over mean similarity of "same picture, different look",
-  per model, with the per-look breakdown beside it. Verify: unit tests of the
-  arithmetic on hand-made vectors — a model that is perfectly style-leaning, one
-  that is perfectly subject-leaning, and the degenerate corpus where one of the
-  two sets is empty.
-- [ ] 2.4 `scripts/style_benchmark.py` runs the candidate and `dinov2-large`
-  over the built corpus and prints a Markdown table: the two averages, the
-  leaning, the per-look rows, the corpus's size and looks, and the pinned
+- [ ] 2.3 The two statistics of design decision 2. **Deciding:** the rank
+  preference — over every triple (anchor, a different picture under the anchor's
+  look, the anchor's picture under another look), the fraction where the
+  look-mate scores above the picture-mate, a tie counting a half.
+  **Diagnostic:** the ratio of the two averages, printed as `undefined` when its
+  denominator is not positive. Per model, with the per-look breakdown beside
+  both. Verify: unit tests of the arithmetic on hand-made vectors — a model that
+  is perfectly style-preferring (1.0), one that is perfectly subject-preferring
+  (0.0), an exact tie (0.5), and the degenerate corpora, each watched to refuse
+  or to report `undefined` rather than to divide: no triples at all, an empty
+  pair set, a zero denominator and a negative denominator.
+- [ ] 2.4 The bound of design decision 2 as code, not as prose: a candidate
+  clears it only when its preference is above 0.5 **and** at least
+  `incumbent + (1 - incumbent) / 2`, where `incumbent` is the highest preference
+  among the keys the service already stores. Verify: unit tests on hand-made
+  numbers — a candidate above 0.5 but short of the headroom, one that clears the
+  headroom but sits below 0.5, one that clears both, and the boundary values
+  themselves (exactly 0.5, exactly the headroom).
+- [ ] 2.5 `scripts/style_benchmark.py` runs the candidate and **every key the
+  service stores image vectors under** — `clip-vit-l14` and `dinov2-large`, read
+  from `app.domain`, not from a list written out here, so a key added later
+  cannot be forgotten — over the built corpus, and prints a Markdown table: the
+  rank preference, the two averages and their ratio, the per-look rows, the
+  corpus's size and looks, the bound the numbers are held to, and the pinned
   revision. Verify: the command runs end to end against the demo pictures and
-  prints the table; it writes nothing (the working tree is clean afterwards).
+  prints the table; a unit test proves the set of measured incumbents is derived
+  from `app.domain` rather than hard-coded; it writes nothing (the working tree
+  is clean afterwards).
 
 ## 3. The decision
 
 - [ ] 3.1 Run it over at least 100 photographs of the demo corpus and record
-  the numbers. The bound is fixed in design decision 2: a key is earned only at
-  **leaning ≥ 3 × the incumbent's**. Verify: the table is in
-  `docs/how-to/benchmarks.md` under the exact command that produced it, with
-  the corpus and the revision named.
-- [ ] 3.2 `docs/adr/ADR-006-style-as-a-third-key.md`: the numbers, the corpus
-  and its looks, the bound, and the decision — **including "no key" as a
-  decision of the same standing** (design decision 5). It says in its own words
-  that filters are not painters and what that limits the claim to. Verify: the
-  ADR index carries its row; every number in it matches the how-to exactly.
+  the numbers for all three models. The bound is fixed in design decision 2 and
+  is read on the rank preference only. Verify: the table is in
+  `docs/how-to/benchmarks.md` under the exact command that produced it, with the
+  corpus, the bound and the revision named.
+- [ ] 3.2 `docs/adr/ADR-006-style-as-a-third-key.md`: the numbers for the
+  candidate and for every stored key, the corpus and its looks, the bound, **the
+  disagreement between the two statistics and what the diagnostic one would have
+  decided**, and the decision — **including "no key" as a decision of the same
+  standing** (design decision 5). It says in its own words that filters are not
+  painters and what that limits the claim to. Verify: the ADR index carries its
+  row; every number in it matches the how-to exactly.
 - [ ] 3.3 Reconcile the plan with what was decided: `openspec/ROADMAP.md` and
   `docs/explanation/requirements.md` §9 — row 18 is this measurement, and
   shipping the key is row 18a, proposed only if ADR-006 says yes. Verify: both
@@ -64,21 +84,25 @@
 ## 4. The rule this change followed
 
 - [ ] 4.1 The `embedding-models` delta lands as written: a key earns its place
-  by a published, re-runnable measurement with a bound fixed beforehand, and
-  "not added" is an outcome of the same standing. Verify: `openspec validate
-  --strict`; the ADR and the how-to are the evidence its scenarios describe.
+  by a published, re-runnable measurement against **every** key of its kind, with
+  a bound fixed beforehand and read on a number a model's own similarity scale
+  cannot move, and "not added" is an outcome of the same standing. Verify:
+  `openspec validate --strict`; the ADR and the how-to are the evidence its four
+  scenarios describe, the scale scenario included.
 - [ ] 4.2 `docs/how-to/benchmarks.md` gains the fourth section with the command
-  in its exact form, what the two averages mean, and what the measurement does
-  **not** say. Verify: re-read whole after the last edit; every command in it
+  in its exact form, what the rank preference means, why the ratio sits beside it
+  and decides nothing, and what the measurement does **not** say. Verify: re-read whole after the last edit; every command in it
   was run.
 
 ## 5. Closing the change
 
 - [ ] 5.1 A demonstrated failing input for every new or changed check (high
-  tier): each look's determinism, the two corpus bounds, the allowlist, the
-  missing-tensor refusal, the width check, and the leaning's two degenerate
-  cases. Verify: one table, one row per check, each a run with that one edit and
-  the file restored afterwards.
+  tier): each look's determinism, the blank-look refusal, the two corpus bounds,
+  the allowlist, the missing-tensor refusal, the width check, the incumbents
+  being derived from `app.domain`, the preference's degenerate corpora, the
+  ratio's non-positive denominator, and both halves of the bound. Verify: one
+  table, one row per check, each a run with that one edit and the file restored
+  afterwards.
 - [ ] 5.2 `openspec validate stretch-style-search --strict` passes and every
   task above is checked with its evidence.
 - [ ] 5.3 Run locally everything CI runs, in CI's own form:
