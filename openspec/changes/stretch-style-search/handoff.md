@@ -6,58 +6,77 @@
 
 ## Done this session
 
-Gate 1 round 1 returned `changes-requested` with three findings. All three are
-fixed, and finding 1 turned out to reach further than it was written.
+**Gate 1 passed** at `eb3f588` (round 1 changes-requested, confirmation 1
+changes-requested, confirmation 2 confirmed). Findings 1 and 2 reshaped the
+measurement: `clip-vit-l14` is measured too, and the deciding statistic is a
+rank preference rather than a ratio of averages, because a ratio is moved by a
+model's own similarity scale.
 
-- **Finding 1 (major) — only one incumbent was being measured.** `clip-vit-l14`
-  stores image vectors too. The probe was re-run against it, and it is the key
-  that matters: on the ratio the proposal published it scores 0.675, against
-  `dinov2-large`'s 0.145 and the candidate's 0.92. The benchmark, the ADR and
-  the spec now cover every key the service stores vectors of that kind under,
-  read from `app.domain` rather than written out.
-- **Finding 2 (major) — the ratio is undefined where it must not be**, and it
-  answers the wrong question. Adding CLIP showed both at once: it ranks a shared
-  look above a shared subject in 1.9% of triples while the ratio calls it two
-  thirds of the way to a style model, because its similarities sit in a narrow
-  high band. The deciding number is now a **rank preference** — a proportion of
-  a finite set of triples, so no zero denominator, no negative value, no
-  dependence on a model's similarity scale — and the bound is `> 0.5` plus half
-  the remaining headroom over the best incumbent, both derived from the metric
-  rather than from the probe. The ratio stays as a printed diagnostic that
-  decides nothing, with `undefined` where its denominator is not positive.
-- **Finding 3 (minor) — the applicability table and task 1.1 disagreed** about a
-  look that returns a blank picture. One rule now: the corpus builder refuses a
-  look that returns a constant picture for a given photograph, so nothing blank
-  reaches an embedder.
-- **Swept for the claim, not the line:** `rg` over `leaning`, `3×`, `incumbent`
-  and `blank` found and fixed three stale siblings — the Goals line naming only
-  DINOv2, the "one candidate, one incumbent" non-goal, and the "one candidate
-  against the incumbent" non-goal.
-- **One claim checked and made precise while here:** "0 missing and 0
-  unexpected" holds only when CLIP's own projection is removed *before* the
-  load; leave it attached and the report names `proj` missing. Verified in the
-  prescribed order, and the order is now in task 2.2 and in the design.
-- Tasks grew from 15 to 16: the bound is its own task with its own tests.
+Implemented, 9 of 16 tasks:
 
-**Confirmation 1** confirmed findings 1 and 3 and returned finding 2: task 2.4
-asked for a test that cannot exist. The bound `incumbent + (1 - incumbent) / 2`
-is `(1 + incumbent) / 2`, which is never below 0.5, so no candidate can clear it
-while scoring under 0.5 — the second condition was redundant and its test
-impossible. The bound is now **one strict comparison**, the design says why that
-subsumes the indifference floor, and task 2.4's cases are the ones that exist:
-short of the bound, exactly on it (refused), above it, the incumbent taken from
-the highest of several, and the degenerate incumbent of 0.
+- **1.1, 1.2** `scripts/style_corpus.py` — six looks as pure functions of the
+  bytes, the stream the benchmark walks, and the refusals: a corpus below 20
+  photographs or 4 looks, and a look that flattens a photograph to one colour.
+  That last rule reads the picture's **interior**: a 3x3 filter leaves the
+  outermost ring, so `edges` of a uniform picture is a flat field inside the
+  original frame and a whole-picture rule missed exactly the case it exists for.
+- **2.1** `open_clip_torch` in a group of its own, and `torchvision` declared
+  beside it so `[tool.uv.sources]` can point it at the same index as `torch` —
+  left to `open_clip` it came from PyPI and every import ended in "operator
+  torchvision::nms does not exist". The image test now asserts the service
+  builder names **no** group at all.
+- **2.2** `scripts/style_candidate.py` — the tower with CLIP's projection
+  removed before the load, the checkpoint at its pinned revision read with
+  `weights_only=True` and four named globals, 0 missing and 0 unexpected, the
+  style head applied to the pooled output.
+- **2.3, 2.4, 2.5** `scripts/style_benchmark.py` — the rank preference, the
+  diagnostic ratio, the bound as one strict comparison, and the command. The
+  measured keys are read from `app.domain`; a unit test proves no key is
+  written out in the command.
+- **3.3** roadmap and requirements register reshaped: row 18 is the
+  measurement, row 18a is the key, proposed only if ADR-006 says yes.
+- **5.1** the demonstrated failing inputs, below.
 
-**Confirmation 2 confirmed all three findings — Gate 1 is passed** at
-`eb3f588`.
+Also written, pending only the numbers: **ADR-006** at `proposed`, carrying the
+candidate, the corpus, the statistic and the bound — everything fixed *before*
+the run, so the bound cannot be fitted to the table; and the fourth section of
+`docs/how-to/benchmarks.md` minus its results.
+
+## Demonstrated failing inputs (high tier, task 5.1)
+
+Each guard removed on its own, the covering test run, the file restored.
+
+| check | file | test | with the guard removed |
+|---|---|---|---|
+| a look is deterministic | `scripts/style_corpus.py` | `test_a_look_gives_the_same_bytes_every_time` | FAILED |
+| a look that returns one colour is refused | `scripts/style_corpus.py` | `test_style_corpus.py -k refused` | FAILED |
+| the corpus is large enough | `scripts/style_corpus.py` | `test_too_few_photographs_is_refused` | FAILED |
+| the corpus has enough looks | `scripts/style_corpus.py` | `test_too_few_looks_is_refused` | FAILED |
+| the allowlist is exactly four globals | `scripts/style_candidate.py` | `test_the_allowlist_is_exactly_these_four_globals` | FAILED |
+| no source file turns the pickle check off | `scripts/style_candidate.py` | `test_no_source_file_turns_the_pickle_check_off` | FAILED |
+| a checkpoint short of a tensor is refused | `scripts/style_candidate.py` | `test_style_candidate.py -k checkpoint` | FAILED |
+| the checkpoint's width is the declared one | `scripts/style_candidate.py` | `tests/models/test_style_candidate.py` (real weights) | FAILED — `CheckpointWidthError` |
+| the measured keys come from `app.domain` | `scripts/style_benchmark.py` | `-k measured_keys or no_model_key` | FAILED |
+| a corpus forming no triple is refused | `scripts/style_benchmark.py` | `-k no_triple` | FAILED |
+| the ratio has no value through a non-positive denominator | `scripts/style_benchmark.py` | `-k denominator` | FAILED |
+| the bound is strict | `scripts/style_benchmark.py` | `-k exactly_on_the_bound or indifference_itself` | FAILED |
+| the bound is taken against the best incumbent | `scripts/style_benchmark.py` | `test_the_bound_is_taken_against_the_best_incumbent_not_the_first` | FAILED |
 
 ## Next step
 
-`/opsx:apply stretch-style-search` — implementation, starting with the corpus
-builder (task group 1) and the dependency group (task 2.1). `scripts/pregate-verify.sh gate1 stretch-style-search` passes (16 tasks, tier
-declared, applicability table present, links resolve) and
-`openspec validate stretch-style-search --strict` is clean.
+**Blocked on one run** (below). When its output exists: fill ADR-006's Decision
+and Consequences and set its status, add "What one run says" and "Reading it" to
+the how-to (tasks 3.1, 3.2, 4.1, 4.2), then 5.2, 5.3 and 5.4.
 
 ## Blockers
 
-None.
+The published measurement needs 600 images through three ViT-L-scale models on
+a CPU — about 25 minutes at four threads, and the machine it would run on is in
+use. The command is
+`TORCH_NUM_THREADS=4 nice -n 19 uv run --group style python scripts/style_benchmark.py --pictures 100`
+and it prints its progress and the time remaining.
+
+Paying for it in instalments would need the command to keep the vectors it has
+already computed between runs, which contradicts the design's "the benchmark
+writes nothing anywhere" — a change of the command's contract, so a proposal
+for it reopens Gate 1 rather than being an implementation detail.

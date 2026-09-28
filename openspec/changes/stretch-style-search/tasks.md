@@ -99,7 +99,7 @@
 
 ## 5. Closing the change
 
-- [ ] 5.1 A demonstrated failing input for every new or changed check (high
+- [x] 5.1 A demonstrated failing input for every new or changed check (high
   tier): each look's determinism, the blank-look refusal, the two corpus bounds,
   the allowlist, the missing-tensor refusal, the width check, the incumbents
   being derived from `app.domain`, the preference's degenerate corpora, the
