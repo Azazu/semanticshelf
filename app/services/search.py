@@ -30,7 +30,9 @@ from app.domain import (
     Asset,
     Narrowing,
     NeighbourHit,
+    is_query_encoder,
     modality_of,
+    space_of,
 )
 from app.ml.base import TextNotSupportedError
 from app.ml.pool import acquire, run_in_pool
@@ -121,6 +123,11 @@ class SearchPage:
     has_more: bool
     model: str
     query_truncated: bool
+    #: The query encoder that embedded the question, when it was not the search
+    #: model's own text side. Two scores are comparable only within one pair of
+    #: space and encoder, so an answer that hides which pair produced it invites
+    #: exactly the comparison this project refuses everywhere else.
+    encoder: str | None = None
     #: True when the search stopped at the bound on how far it may look rather
     #: than at the end of the ranking. Only a narrowed search can set it, and a
     #: client that sees it knows a short page is not the whole answer.
@@ -200,7 +207,7 @@ def check_model(model: str, *, settings: Settings, kind: QueryKind) -> None:
     The order matters when both hold: what a deployment runs is the fact about
     *this* service, and it is the one worth reporting.
     """
-    if model not in settings.enabled_models:
+    if model not in settings.enabled_models and model not in settings.enabled_query_encoders:
         raise SearchUnavailableError(f"model {model!r} is not enabled in this build")
     modality = modality_of(model)
     if kind == "text" and not modality.text:
@@ -376,6 +383,10 @@ async def search_text(
     """One page of the assets nearest to what the query describes."""
     check_depth(limit=limit, offset=offset)
     vector, truncated = await embed_query(query, model=model, settings=settings, pool=pool)
+    # What was asked for may be a query encoder, which owns no vectors: what is
+    # ranked is the space it answers in, and what embedded the question is said
+    # in the answer rather than left to be inferred from the key.
+    space = space_of(model)
 
     async with session.begin():
         await _set_effort(
@@ -386,7 +397,7 @@ async def search_text(
         page = await _page_of(
             vector,
             session=session,
-            model=model,
+            model=space,
             limit=limit,
             offset=offset,
             min_score=min_score,
@@ -397,9 +408,10 @@ async def search_text(
         hits=page.hits,
         statuses=page.statuses,
         has_more=page.has_more,
-        model=model,
+        model=space,
         query_truncated=truncated,
         scan_limited=page.scan_limited,
+        encoder=model if is_query_encoder(model) else None,
     )
 
 

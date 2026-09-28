@@ -13,10 +13,20 @@ file next to `pyproject.toml` (the environment wins). Source of truth:
 | `LOG_JSON` | no | `true` | API | `true`: one JSON object per log line on stdout. `false`: a coloured console renderer for local development. |
 | `READINESS_TIMEOUT_SECONDS` | no | `3` | API | Budget for each database check of `GET /ready`; a slower database reports `not-ready`. The `SELECT 1` runs first, then the revision and model checks together under the same budget, so the probe answers within about twice this value. |
 | `ENABLED_MODELS` | no | `clip-vit-l14,dinov2-large` | API, CLI | Comma-separated model keys the service may use. The default is every key this build implements, so an upload is queued for both and both kinds of search answer. Only keys this build has an adapter for are accepted; anything else refuses at start, naming the offender. A deployment that runs one model halves what an upload costs and gives up the search the other one answers — without `dinov2-large` a picture query and `GET /assets/{id}/similar` are 503. |
-| `MODEL_WARMUP` | no | empty | API | Comma-separated keys loaded at start, on the inference pool. Must be a subset of `ENABLED_MODELS`. Empty means a model is loaded on its first use. |
+| `MODEL_WARMUP` | no | empty | API | Comma-separated keys loaded at start, on the inference pool. Must name only what is enabled — a model of `ENABLED_MODELS` or an encoder of `ENABLED_QUERY_ENCODERS`. Empty means each is loaded on its first use. |
 | `MODEL_CACHE` | no | `.data/models` | API, CLI | Directory the weights are cached in: about 1.6 GB for CLIP and 1.2 GB for DINOv2, downloaded on first use. Gitignored, and mountable into a container. |
 | `CLIP_MODEL_NAME` | no | `openai/clip-vit-large-patch14` | API, CLI | The checkpoint behind the `clip-vit-l14` key. A mirror or compatible fine-tune may be substituted; one of another width is refused at load. |
 | `DINOV2_MODEL_NAME` | no | `facebook/dinov2-large` | API, CLI | The checkpoint behind the `dinov2-large` key, under the same rule. It has no text tower: asking it for words is refused rather than approximated. |
+| `ENABLED_QUERY_ENCODERS` | no | empty | API, CLI | Comma-separated query-encoder keys. An encoder embeds a query into another model's space and stores nothing of its own, so enabling one needs no migration; it is empty by default because the one this build implements is 2.24 GB of weights for a question many deployments never ask. Only implemented keys are accepted, and an encoder whose space is not in `ENABLED_MODELS` refuses at start, naming both. See [ADR-005](../adr/ADR-005-multilingual-query-encoder.md). |
+
+There is deliberately **no setting for the encoder's checkpoint or its
+revisions**. A model's checkpoint is a setting because a mirror or a compatible
+fine-tune is an operator's choice and the width check keeps it honest; an
+encoder's key carries a claim about another model's space that no runtime check
+can verify and that [ADR-005](../adr/ADR-005-multilingual-query-encoder.md)
+backs with a measurement of particular bytes. Other weights are another
+encoder, with a key and numbers of their own. An air-gapped deployment uses the
+warm cache and `HF_HUB_OFFLINE=1`, as it does for the models.
 | `TORCH_NUM_THREADS` | no | `0` | API, CLI | Threads for one forward pass. `0` leaves torch its own default; set it to the CPU quota in a container. |
 | `EMBED_BATCH_SIZE` | no | `8` | API, CLI | Inputs per forward pass. Memory, not speed, sets this: a batch is one tensor. |
 | `INFERENCE_WORKERS` | no | `2` | API | Threads that load models and run inference, away from the event loop. |

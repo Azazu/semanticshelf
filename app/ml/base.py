@@ -22,12 +22,30 @@ class TextNotSupportedError(RuntimeError):
     """Text was asked of a model that has no text tower."""
 
 
+class ImagesNotSupportedError(RuntimeError):
+    """The mirror of the above: a text-only tower has no image side to ask.
+
+    A query encoder is the first embedder of that shape. The router refuses a
+    picture query for it before anything is loaded, so this is the second line:
+    an adapter says what it is rather than returning a vector from nowhere.
+    """
+
+
 class ZeroVectorError(ValueError):
     """A vector of length zero cannot be normalised, and must not become `nan`."""
 
 
 class CheckpointWidthError(RuntimeError):
     """A checkpoint produces vectors of a width its model key does not declare."""
+
+
+class CheckpointTensorsError(RuntimeError):
+    """A checkpoint does not fill the architecture its adapter poured it into.
+
+    A tensor the architecture expects and the file does not carry stays at its
+    random initialisation, and the result is a model that loads, answers, and
+    ranks with one layer of noise in it — which no width check can see.
+    """
 
 
 @dataclass(frozen=True, slots=True)

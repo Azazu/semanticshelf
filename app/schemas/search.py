@@ -27,7 +27,9 @@ class SearchHit(BaseModel):
     score: float = Field(
         description=(
             "Cosine similarity between the query and this asset's vector, in [-1, 1]. "
-            "Larger is nearer. Comparable only within one model."
+            "Larger is nearer. Comparable only within one pair of model and encoder, both "
+            "named beside this page: a query embedded by a different tower gives numbers of "
+            "its own, even in the same space."
         )
     )
 
@@ -40,8 +42,15 @@ class SearchPage(BaseModel):
     limit: int
     offset: int
     has_more: bool
-    model: str = Field(
-        description="The model whose vectors were ranked, and which embedded the query."
+    model: str = Field(description="The model whose vectors were ranked.")
+    encoder: str | None = Field(
+        default=None,
+        description=(
+            "The query encoder that embedded the query, when it was not the ranked model's "
+            "own text side. Null means the model answered its own question. A score is "
+            "comparable only within one pair of model and encoder — a threshold tuned for "
+            "one of them means nothing for the other."
+        ),
     )
     query_truncated: bool = Field(
         description="True when the model could not represent the whole query and cut it."
@@ -88,6 +97,10 @@ SEARCH_PAGE_EXAMPLE: dict[str, Any] = {
     "offset": 0,
     "has_more": True,
     "model": "clip-vit-l14",
+    # Null because this search named no encoder: the model answered its own
+    # question. It is shown rather than omitted, so a reader sees the field a
+    # multilingual search fills and knows a score belongs to a pair.
+    "encoder": None,
     "query_truncated": False,
     "scan_limited": False,
 }

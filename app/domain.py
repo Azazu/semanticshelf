@@ -62,6 +62,32 @@ EMBEDDING_MODELS: Final[Mapping[str, int]] = {
 #: set as a table of factories, and a unit test holds the two together.
 IMPLEMENTED_MODELS: Final[frozenset[str]] = frozenset({CLIP_VIT_L14, DINOV2_LARGE})
 
+# --- query encoders ----------------------------------------------------------
+
+MCLIP_XLMR_L14: Final = "mclip-xlmr-l14"
+
+#: Query encoder key -> the storage key whose space it answers in.
+#:
+#: An encoder puts a *query* into a space it does not own: it embeds words, and
+#: what those words are compared with are the vectors another model stored.
+#: Nothing is ever written under an encoder's key — no row, no CHECK, no index,
+#: no queued work — which is why these are not in `EMBEDDING_MODELS`, where a
+#: key means "a column value the database will carry forever".
+#:
+#: That an encoder really lands in that space is a claim about how it was
+#: trained, and no code here can check it. What holds the claim up is the
+#: measurement in ADR-005; this table only records which space the claim is
+#: about. An entry pointing at a key `EMBEDDING_MODELS` does not know is
+#: refused by a unit test, because a space that does not exist holds nothing.
+QUERY_ENCODERS: Final[Mapping[str, str]] = {
+    # M-CLIP's XLM-RoBERTa large tower, trained against CLIP ViT-L/14's images.
+    MCLIP_XLMR_L14: CLIP_VIT_L14,
+}
+
+#: The subset of `QUERY_ENCODERS` this build has an adapter for, under the same
+#: rule as `IMPLEMENTED_MODELS`: configuration may enable only what runs.
+IMPLEMENTED_QUERY_ENCODERS: Final[frozenset[str]] = frozenset({MCLIP_XLMR_L14})
+
 
 @dataclass(frozen=True, slots=True)
 class Modality:
@@ -93,6 +119,11 @@ MODEL_MODALITIES: Final[Mapping[str, Modality]] = {
     DINOV2_LARGE: Modality(text=False, images=True),  # no text tower at all
 }
 
+#: What a query encoder can be asked. Words, by construction: an encoder exists
+#: to put a question into a space whose pictures are already there, and a
+#: picture query has the storage model's own image side to go to.
+ENCODER_MODALITY: Final = Modality(text=True, images=False)
+
 
 class UnknownModelError(LookupError):
     """A model key the application does not declare.
@@ -107,8 +138,35 @@ def vector_index_name(model: str) -> str:
     return "ix_embeddings_" + model.replace("-", "_")
 
 
+def is_query_encoder(key: str) -> bool:
+    """Whether a key names a query encoder rather than a storage model."""
+    return key in QUERY_ENCODERS
+
+
+def space_of(key: str) -> str:
+    """The storage key whose vectors a search with this key ranks.
+
+    A storage model answers in its own space; an encoder answers in the space
+    it declares. Everything that reads or writes `embeddings` uses this, so a
+    key that stores nothing can never become a value of the `model` column.
+    """
+    if key in EMBEDDING_MODELS:
+        return key
+    try:
+        return QUERY_ENCODERS[key]
+    except KeyError as exc:
+        raise UnknownModelError(f"unknown embedding model: {key!r}") from exc
+
+
 def dimension_of(model: str) -> int:
-    """The declared dimension of a model key, or `KeyError` for an unknown key."""
+    """The declared dimension of a key, or `KeyError` for an unknown one.
+
+    An encoder's width is its space's: producing anything else would make its
+    vectors uncomparable with the ones stored there, which is the whole point
+    of the key existing.
+    """
+    if model in QUERY_ENCODERS:
+        return EMBEDDING_MODELS[QUERY_ENCODERS[model]]
     return EMBEDDING_MODELS[model]
 
 
@@ -118,6 +176,8 @@ def modality_of(model: str) -> Modality:
     Raises `UnknownModelError` rather than `KeyError`, because the key usually
     arrives from a request: every layer reports an unknown model the same way.
     """
+    if model in QUERY_ENCODERS:
+        return ENCODER_MODALITY
     try:
         return MODEL_MODALITIES[model]
     except KeyError as exc:

@@ -187,8 +187,42 @@ $ curl -s "http://127.0.0.1:8010/api/v1/assets/e75e85e2-…/similar?model=dinov3
 
 There is no fallback to another model, ever. A score from `clip-vit-l14` and a
 score from `dinov2-large` are numbers from different spaces: comparing them, or
-mixing their results into one ranking, would be meaningless, and the query is
-always embedded by the model whose stored vectors are searched.
+mixing their results into one ranking, would be meaningless.
+
+### Asking in another language
+
+`model` may also name a **query encoder** — a text tower that embeds a question
+into another model's space rather than one of its own. This build ships one,
+`mclip-xlmr-l14`, which answers in `clip-vit-l14`'s space: your words are
+embedded by it, and what they are ranked against are the vectors CLIP already
+stored for your pictures. Nothing is re-indexed and nothing is stored under the
+encoder's name.
+
+It is **off unless a deployment enables it**, because it is 2.2 GB of weights
+for a question many deployments never ask:
+
+```console
+$ ENABLED_QUERY_ENCODERS=mclip-xlmr-l14 make run
+$ curl -s "http://127.0.0.1:8010/api/v1/search/text?q=зебра+в+траве&model=mclip-xlmr-l14&limit=2" \
+    | python -m json.tool | head -4
+{
+    "items": [...],
+    "model": "clip-vit-l14",
+    "encoder": "mclip-xlmr-l14",
+```
+
+The answer names **both**, and that is the point: a score belongs to a pair of
+space and encoder. Two consequences a client should plan for —
+
+- a `min_score` tuned for CLIP's English tower means something else for the
+  encoder, so a threshold is per pair;
+- the same query in two languages may return slightly different pages of the
+  same quality. How different, measured:
+  [`benchmarks.md`](benchmarks.md) and
+  [ADR-005](../adr/ADR-005-multilingual-query-encoder.md).
+
+Asking an encoder for a picture is 422, like any other model that cannot take
+that kind of query, and an encoder this build does not run is 503.
 
 ## What a score is, and is not
 
@@ -508,10 +542,14 @@ thumbnails are not counted, and nothing walks the media root to produce it.
 
 ## What this search does not do yet
 
-- **Other languages.** CLIP ViT-L/14 was trained on English captions; other
-  languages degrade towards a random ranking. The service does not translate,
-  and says so rather than pretending. A picture query has no language at all,
-  which is one reason to reach for it.
+- **Languages nobody measured.** With `clip-vit-l14` answering, the query is
+  English: that tower was trained on English captions and other languages
+  degrade towards a random ranking. With the query encoder enabled, **Russian,
+  German, French and Spanish** are measured and published
+  ([ADR-005](../adr/ADR-005-multilingual-query-encoder.md)); the other 44
+  languages it accepts are untested here, and untested is what this page calls
+  them. The service never translates a query, in any configuration. A picture
+  query has no language at all, which is one reason to reach for it.
 - **A promise about recall.** A deep page is *searched* as deeply as it asks —
   `hnsw.ef_search` is raised per query to cover the page, the row beyond it and
   any row the search must discard — but how close an approximate ranking is to

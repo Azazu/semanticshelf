@@ -89,8 +89,11 @@ TAGS_ANY_DESCRIPTION = "Rank only assets carrying at least one of these tags."
 
 MODEL_DESCRIPTION = (
     "Which model answers. It must be one this build runs — otherwise 503 — and one that can "
-    "take this kind of query — otherwise 422. Scores of different models are never comparable, "
-    "and the query is always embedded by the model whose vectors are searched."
+    "take this kind of query — otherwise 422. A text search may also name a **query encoder**, "
+    "which embeds the question into another model's space and ranks the vectors stored there; "
+    "the answer then names both. Scores are comparable only within one pair of model and "
+    "encoder — never across models, and never between a model's own text side and an encoder "
+    "answering in its space."
 )
 
 
@@ -114,6 +117,7 @@ def _rendered(page: ServicePage, *, limit: int, offset: int) -> SearchPage:
         offset=offset,
         has_more=page.has_more,
         model=page.model,
+        encoder=page.encoder,
         query_truncated=page.query_truncated,
         scan_limited=page.scan_limited,
     )
@@ -123,16 +127,20 @@ def _rendered(page: ServicePage, *, limit: int, offset: int) -> SearchPage:
     "/text",
     summary="Find pictures by describing them",
     description=(
-        "Embeds the query with the search model's text tower and ranks that model's stored image "
-        "vectors by cosine similarity. `q` is required and at most 256 characters after "
+        "Embeds the query — with the search model's own text tower, or with the query encoder "
+        "named in `model` — and ranks the stored image vectors of that model's space by cosine "
+        "similarity. `q` is required and at most 256 characters after "
         "trimming; the answer says when the model had to cut it. `limit` defaults to 20 and is "
         "at most 100, "
         f"and `limit + offset` may not exceed {MAX_PAGE_DEPTH} — the index answers at most 1000 "
         "candidates for one query and the last of them is the row that says whether more exist, "
         "so a deeper page is refused rather than answered worse. `min_score` drops "
         "results below it after ranking, which makes a page shorter rather than reaching "
-        "further down. Scores are comparable only within one model, which the answer names. "
-        "The query is English: the model was trained on English captions. "
+        "further down. Scores are comparable only within one pair of model and encoder, both of "
+        "which the answer names, so a threshold does not carry from one pair to another. "
+        "With `clip-vit-l14` answering the query is English, because that tower was trained on "
+        "English captions; a build that enables a query encoder can be asked in the languages "
+        "that encoder was measured in. "
         f"{NARROWING_DESCRIPTION} A narrowed search may stop at the bound on how far it may "
         "look before the page is full, and `scan_limited` in the answer says when it did."
     ),

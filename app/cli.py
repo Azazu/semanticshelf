@@ -29,7 +29,11 @@ app.add_typer(index_app, name="index")
 
 @models_app.command("warm")
 def warm() -> None:
-    """Load every enabled model, so the first request does not pay for it.
+    """Load everything enabled, so the first request does not pay for it.
+
+    Every model, and every query encoder — an encoder is the largest download
+    this service has, and leaving it out would make the first query in another
+    language wait for all of it.
 
     Downloads the weights into MODEL_CACHE if they are not there yet. Run it in
     the image build or before the service takes traffic.
@@ -38,7 +42,7 @@ def warm() -> None:
 
     # Values come from the environment; mypy cannot see that the required field is read there.
     settings = Settings()  # type: ignore[call-arg]
-    for key in settings.enabled_models:
+    for key in (*settings.enabled_models, *settings.enabled_query_encoders):
         started = time.monotonic()
         embedder = get_embedder(key, settings)
         elapsed = time.monotonic() - started

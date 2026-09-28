@@ -9,7 +9,13 @@ from pydantic import ValidationError
 
 from app.core import settings as settings_module
 from app.core.settings import Settings
-from app.domain import CLIP_VIT_L14, DINOV2_LARGE, IMPLEMENTED_MODELS
+from app.domain import (
+    CLIP_VIT_L14,
+    DINOV2_LARGE,
+    IMPLEMENTED_MODELS,
+    MCLIP_XLMR_L14,
+    QUERY_ENCODERS,
+)
 
 VALID_URL = "postgresql+asyncpg://localhost/semanticshelf"
 
@@ -134,3 +140,74 @@ def test_the_same_forms_are_read_from_a_dotenv_file(
 
     assert s.enabled_models == (CLIP_VIT_L14,)
     assert s.model_warmup == ()
+
+
+# --- query encoders -----------------------------------------------------------
+
+
+def test_no_encoder_is_enabled_by_default() -> None:
+    # Unlike the models: an encoder is gigabytes of weights for a question most
+    # deployments never ask, so enabling one is a decision somebody took.
+    assert settings().enabled_query_encoders == ()
+
+
+def test_an_encoder_is_enabled_beside_the_model_it_answers_in() -> None:
+    s = settings(enabled_query_encoders=(MCLIP_XLMR_L14,))
+
+    assert s.enabled_query_encoders == (MCLIP_XLMR_L14,)
+    assert QUERY_ENCODERS[MCLIP_XLMR_L14] in s.enabled_models
+
+
+def test_an_encoder_this_build_does_not_implement_is_refused() -> None:
+    with pytest.raises(ValidationError) as refusal:
+        settings(enabled_query_encoders=("mclip-of-the-future",))
+
+    assert "does not implement" in str(refusal.value)
+    assert "mclip-of-the-future" in str(refusal.value)
+
+
+def test_an_encoder_whose_space_is_not_enabled_is_refused() -> None:
+    # Its vectors would have nothing to be compared with, and a search would
+    # answer an empty page as if the corpus were empty.
+    with pytest.raises(ValidationError) as refusal:
+        settings(enabled_query_encoders=(MCLIP_XLMR_L14,), enabled_models=(DINOV2_LARGE,))
+
+    message = str(refusal.value)
+    assert MCLIP_XLMR_L14 in message and CLIP_VIT_L14 in message
+
+
+def test_the_encoder_list_is_written_the_same_way_as_the_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    s = environment_settings(monkeypatch, ENABLED_QUERY_ENCODERS=MCLIP_XLMR_L14)
+
+    assert s.enabled_query_encoders == (MCLIP_XLMR_L14,)
+
+
+def test_the_encoder_cannot_be_pointed_at_other_weights() -> None:
+    """There is no setting for it, and that is the point.
+
+    A model's checkpoint is a setting because a mirror or a compatible
+    fine-tune is an operator's choice and the width check keeps it honest. The
+    encoder's key carries a claim about another model's space that no runtime
+    check can verify and that ADR-005 backs with a measurement of *these*
+    bytes, so other weights are another encoder rather than this one.
+    """
+    fields = set(Settings.model_fields)
+
+    assert not [name for name in fields if "mclip" in name]
+
+
+def test_warming_may_name_an_enabled_encoder() -> None:
+    # The largest download this service has: leaving it out of the warm-up
+    # would make the first query in another language wait for all of it.
+    s = settings(enabled_query_encoders=(MCLIP_XLMR_L14,), model_warmup=(MCLIP_XLMR_L14,))
+
+    assert s.model_warmup == (MCLIP_XLMR_L14,)
+
+
+def test_warming_an_encoder_that_is_not_enabled_is_refused() -> None:
+    with pytest.raises(ValidationError) as refusal:
+        settings(model_warmup=(MCLIP_XLMR_L14,))
+
+    assert "not enabled" in str(refusal.value)

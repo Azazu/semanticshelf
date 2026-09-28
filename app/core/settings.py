@@ -11,7 +11,14 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-from app.domain import CLIP_VIT_L14, IMPLEMENTED_MODELS, INLINE_RUNNER, IndexingRunner
+from app.domain import (
+    CLIP_VIT_L14,
+    IMPLEMENTED_MODELS,
+    IMPLEMENTED_QUERY_ENCODERS,
+    INLINE_RUNNER,
+    QUERY_ENCODERS,
+    IndexingRunner,
+)
 
 ASYNCPG_SCHEME = "postgresql+asyncpg://"
 
@@ -61,6 +68,10 @@ class Settings(BaseSettings):
     #: mirror or compatible fine-tune is fine, a different width is refused at
     #: load rather than stored.
     dinov2_model_name: str = DEFAULT_DINOV2_CHECKPOINT
+    #: Which query encoders this build runs. Empty by default: an encoder is
+    #: gigabytes of weights for a question most deployments do not ask, and
+    #: enabling one must be a decision rather than an inheritance.
+    enabled_query_encoders: Annotated[tuple[str, ...], NoDecode] = ()
     #: 0 leaves torch its own default of one thread per physical core.
     torch_num_threads: int = Field(default=0, ge=0)
     embed_batch_size: int = Field(default=8, gt=0)
@@ -131,7 +142,7 @@ class Settings(BaseSettings):
     def _normalise_log_level(cls, value: object) -> object:
         return value.strip().lower() if isinstance(value, str) else value
 
-    @field_validator("enabled_models", "model_warmup", mode="before")
+    @field_validator("enabled_models", "model_warmup", "enabled_query_encoders", mode="before")
     @classmethod
     def _split_comma_separated(cls, value: object) -> object:
         """`ENABLED_MODELS=clip-vit-l14,dinov2-large` rather than JSON.
@@ -161,10 +172,33 @@ class Settings(BaseSettings):
                 f"ENABLED_MODELS names models this build does not implement: {', '.join(unknown)}; "
                 f"implemented: {', '.join(sorted(IMPLEMENTED_MODELS))}"
             )
-        not_enabled = [key for key in self.model_warmup if key not in self.enabled_models]
+        runnable = (*self.enabled_models, *self.enabled_query_encoders)
+        not_enabled = [key for key in self.model_warmup if key not in runnable]
         if not_enabled:
             raise ValueError(
                 f"MODEL_WARMUP names models that are not enabled: {', '.join(not_enabled)}"
+            )
+        unknown_encoders = [
+            key for key in self.enabled_query_encoders if key not in IMPLEMENTED_QUERY_ENCODERS
+        ]
+        if unknown_encoders:
+            raise ValueError(
+                "ENABLED_QUERY_ENCODERS names encoders this build does not implement: "
+                f"{', '.join(unknown_encoders)}; "
+                f"implemented: {', '.join(sorted(IMPLEMENTED_QUERY_ENCODERS)) or 'none'}"
+            )
+        # An encoder answers in another model's space, so without that model
+        # there is nothing for its vectors to be compared with: a search would
+        # return an empty page and look like a corpus problem.
+        spaceless = [
+            f"{key} (needs {QUERY_ENCODERS[key]})"
+            for key in self.enabled_query_encoders
+            if QUERY_ENCODERS[key] not in self.enabled_models
+        ]
+        if spaceless:
+            raise ValueError(
+                "ENABLED_QUERY_ENCODERS names encoders whose model is not enabled: "
+                f"{', '.join(spaceless)}"
             )
         return self
 
