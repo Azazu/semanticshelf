@@ -20,14 +20,12 @@
   function — in both import forms — and every rule is checked to be about
   modules that exist, since a rule over a layer nobody wrote passes without
   looking at code.
-- [ ] 1.3 `make audit` runs `uv audit --locked` with its preview feature named,
+- [x] 1.3 `make audit` runs `uv audit --locked` with its preview feature named,
   and the existing CI `python` job runs the same command (design decision 4).
-  Verify: `make audit` passes locally and its output is recorded (done: no known
+  Verify: `make audit` passes locally and its output is recorded (no known
   vulnerabilities in 91 packages); `make help` and `docs/reference/commands.md`
-  list it (done); the workflow parses and the step is green on the commit Gate 2
-  reviews — **open**: green on `bc06c2b`, whose step is identical but for its
-  comment, and this branch has moved since. Closes when the user pushes this
-  head and reports the run.
+  list it; the workflow parses and the "Audit the locked dependencies" step is
+  green — the user pushed `b17653e` and reported the run green (2026-09-28).
 - [x] 1.4 The audit fails when there is something to fail on. Verified against a
   throwaway project in the scratchpad (never this repository's lock) pinned to
   `requests==2.19.1`: the same command exits **1** and names what it found —
@@ -113,11 +111,9 @@
 
 ## 5. Closing the change
 
-- [ ] 5.1 `openspec validate harden-quality-and-docs --strict` passes (done,
-  and re-run after every edit since) and every task above is checked with its
-  evidence. **Open** while 1.3 and 5.3 wait for the CI run on the head Gate 2
-  reviews: a task that says every task above it is checked cannot itself be
-  checked before they are. It closes with them.
+- [x] 5.1 `openspec validate harden-quality-and-docs --strict` passes (re-run
+  after every edit since) and every task above is checked with its evidence —
+  which became true with 1.3 and 5.3, on the green run of `b17653e`.
 - [x] 5.2 Run locally everything CI runs, in CI's own form:
   `FORCE_COLOR=1 CI=true make check`, `openspec validate --all --strict`,
   `sh -n scripts/*.sh`, every `scripts/*_test.sh`,
@@ -127,12 +123,12 @@
   validation 17/17, `sh -n` clean, `workflow_verify_test` 23 passed,
   `gate_run_test` 77 passed, the audit reporting no known vulnerabilities in 91
   packages, and both images built.
-- [ ] 5.3 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
+- [x] 5.3 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
   `scripts/pregate-verify.sh gate2 harden-quality-and-docs` passing. Verify: the
-  verifier's output is recorded in the handoff; the gate follows the user's push
-  and a green CI run on that exact head. **Open** until that run exists: the
-  branch moved under both review rounds, so the evidence from the earlier push
-  is not evidence about this head.
+  verifier's output is recorded in the handoff; the user pushed `b17653e` and
+  reported CI green on it (2026-09-28), and the only commit after it — the one
+  that records this — touches `tasks.md` and `handoff.md`, which is what the
+  freshness rule allows and what the second push re-runs CI over.
 
 ## 6. Gate 2 round 1 — four majors, all accepted
 

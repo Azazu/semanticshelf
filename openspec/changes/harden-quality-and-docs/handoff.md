@@ -1,7 +1,7 @@
 # Handoff — harden-quality-and-docs
 
-**Updated:** 2026-09-26 · claude
-**State:** awaiting-gate-1
+**Updated:** 2026-09-28 · claude
+**State:** awaiting-gate-2
 **Branch:** change/harden-quality-and-docs
 
 ## Done this session
@@ -52,17 +52,14 @@ seventeen planted failures of §6.5.
 
 ## Next step
 
-1. The user pushes `change/harden-quality-and-docs` and watches CI. That run is
-   what the open tasks of `tasks.md` wait for — which ones they are is recorded
-   there and not repeated here, because a second copy of that list is what
-   Gate 1 kept finding out of date. The branch has moved under both review
-   rounds since the last green run. The README's Mermaid diagram needs no second
-   look: the user reported it renders on the pushed page (`bc06c2b`) and
-   `README.md` has not changed since.
-2. On green: close those tasks against that run, and push again — the commit
-   that closes them touches `tasks.md` and this file only.
-3. The Gate 1 confirmation on that head, then
-   `/gate-review harden-quality-and-docs 2 confirm 1`.
+The user pushed `b17653e` and reported CI green on it, so every task in
+`tasks.md` is closed with its evidence. The commit that records that touches
+`tasks.md` and this file only.
+
+1. The user pushes again, so the green run is on the head the gates read.
+2. `scripts/gate-run.sh harden-quality-and-docs 1 confirm 1` — the fourth
+   confirmation of Gate 1 round 1, now that nothing waits on evidence.
+3. `/gate-review harden-quality-and-docs 2 confirm 1`, then `/git:merge`.
 
 ## Blockers
 
