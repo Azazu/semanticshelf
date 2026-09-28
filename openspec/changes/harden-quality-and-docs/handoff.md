@@ -1,7 +1,7 @@
 # Handoff — harden-quality-and-docs
 
 **Updated:** 2026-09-28 · claude
-**State:** awaiting-gate-2
+**State:** ready-to-merge
 **Branch:** change/harden-quality-and-docs
 
 ## Done this session
@@ -59,10 +59,12 @@ Every task in `tasks.md` is closed with its evidence. The user pushed
 `scripts/workflow-verify.sh merge` allows to differ from a reviewed commit and
 the only three a gate's own record-keeping touches.
 
-1. The user pushes the current head (protocol files only, so the run stays
-   green) and reports it.
-2. `scripts/gate-run.sh harden-quality-and-docs 1 confirm 1`.
-3. `/gate-review harden-quality-and-docs 2 confirm 1`, then `/git:merge`.
+**Gate 1** — waived by the user at `cfb8cae` after six confirmations: finding 1
+was confirmed throughout, and what remained of finding 2 was a condition no
+record can satisfy, since the evidence that CI is green on a commit can only be
+written in a later one. **Gate 2** — confirmed at `53f841a`, all four findings.
+
+Next: `/git:merge harden-quality-and-docs`, then `/opsx:archive`.
 
 ## Blockers
 
