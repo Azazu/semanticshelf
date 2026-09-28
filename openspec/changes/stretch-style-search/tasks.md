@@ -2,7 +2,7 @@
 
 ## 1. The corpus that can be built rather than found
 
-- [ ] 1.1 `scripts/style_corpus.py` (or the same module inside the benchmark):
+- [x] 1.1 `scripts/style_corpus.py` (or the same module inside the benchmark):
   the deterministic looks of design decision 1 — plain, grayscale, posterise,
   edges, painterly, sepia — each a pure function of the bytes, applied to every
   picture of a named folder. Verify: unit tests that each look is deterministic
@@ -10,7 +10,7 @@
   the same size, and that a look which would return a **constant picture** — one
   colour everywhere, which keeps no subject — is refused for that picture rather
   than measured.
-- [ ] 1.2 The corpus refuses to be too small to mean anything: at least 20
+- [x] 1.2 The corpus refuses to be too small to mean anything: at least 20
   photographs and at least 4 looks, or the run reports that and measures
   nothing (design decision 2's "four pictures decide nothing", made mechanical).
   Verify: unit tests for both bounds, each watched to refuse.
