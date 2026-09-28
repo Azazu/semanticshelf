@@ -1,7 +1,7 @@
 # Handoff — stretch-style-search
 
 **Updated:** 2026-09-28 · claude
-**State:** implementing
+**State:** awaiting-gate-1
 **Branch:** change/stretch-style-search
 
 ## Done this session
@@ -12,7 +12,7 @@ measurement: `clip-vit-l14` is measured too, and the deciding statistic is a
 rank preference rather than a ratio of averages, because a ratio is moved by a
 model's own similarity scale.
 
-Implemented, 9 of 16 tasks:
+Implemented, 9 of 17 tasks:
 
 - **1.1, 1.2** `scripts/style_corpus.py` — six looks as pure functions of the
   bytes, the stream the benchmark walks, and the refusals: a corpus below 20
@@ -62,9 +62,32 @@ Each guard removed on its own, the covering test run, the file restored.
 | the bound is strict | `scripts/style_benchmark.py` | `-k exactly_on_the_bound or indifference_itself` | FAILED |
 | the bound is taken against the best incumbent | `scripts/style_benchmark.py` | `test_the_bound_is_taken_against_the_best_incumbent_not_the_first` | FAILED |
 
+## Scope change, and why Gate 1 is requested again
+
+The machine this measurement runs on is in use, and twenty-five minutes of
+CPU on it is not a number that can be scheduled around. The user asked for the
+run to be payable in instalments while staying a full one, and agreed to the
+shape below; that agreement is not a gate record, so the artifacts carry it and
+the gate decides.
+
+**Design decision 6** adds `--only <model>` and `--cache <directory>`, and
+**task 2.6** implements them. The default is unchanged — with no `--cache` the
+command writes nothing anywhere. What the decision is really about is the
+fingerprint: a cache that served a vector from a different corpus would corrupt
+a published number invisibly, so a cached file is read only when the model, the
+candidate's revision, the corpus root, **every photograph's content**, the looks
+and the labels all match, and a write is a rename of a temporary file.
+
+Two rows of the applicability table changed with it — "crash around an external
+effect" now has a second effect to answer for, and "concurrent writers" is no
+longer `n/a`.
+
 ## Next step
 
-**Blocked on one run** (below). When its output exists: fill ADR-006's Decision
+`scripts/gate-run.sh stretch-style-search 1 full` — Gate 1 round 2 on the
+reshaped artifacts, then task 2.6 and the run.
+
+**Then blocked on one run** (below). When its output exists: fill ADR-006's Decision
 and Consequences and set its status, add "What one run says" and "Reading it" to
 the how-to (tasks 3.1, 3.2, 4.1, 4.2), then 5.2, 5.3 and 5.4.
 
@@ -76,7 +99,6 @@ use. The command is
 `TORCH_NUM_THREADS=4 nice -n 19 uv run --group style python scripts/style_benchmark.py --pictures 100`
 and it prints its progress and the time remaining.
 
-Paying for it in instalments would need the command to keep the vectors it has
-already computed between runs, which contradicts the design's "the benchmark
-writes nothing anywhere" — a change of the command's contract, so a proposal
-for it reopens Gate 1 rather than being an implementation detail.
+Paying for it in instalments is what design decision 6 and task 2.6 add, and
+why this change is at Gate 1 again rather than implementing them on a chat
+agreement.

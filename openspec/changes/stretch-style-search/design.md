@@ -61,10 +61,10 @@ unexpected**. Removed after the load, the same call reports `proj` missing, so
 | Question | This change |
 |---|---|
 | Empty, zero and null inputs | A look that returns a **constant picture** — one colour everywhere, as a hard posterisation of a near-white photograph can — keeps no subject, so the pair it would form carries no ground truth. The corpus builder refuses that look for that picture (task 1.1) rather than measuring it, so nothing blank reaches an embedder and the zero vector the shared guard exists for cannot arise here. The deciding metric is a proportion of a finite set of triples: a corpus with fewer than two pictures or two looks yields no triple, and the benchmark refuses such a corpus rather than dividing by zero — the same refusal as its minimum size. The diagnostic ratio prints `undefined` rather than a value whenever its denominator is not positive. |
-| Crash around an external effect | The only external effect is the checkpoint download; a failed one leaves nothing half-built, because the benchmark writes nothing anywhere. It reads no database at all — the corpus is files. |
-| Idempotent retries | The looks are deterministic functions of the bytes, the vectors are deterministic given the weights, so a re-run reproduces the table exactly. That is the requirement's "can be re-run" scenario, not a nicety. |
+| Crash around an external effect | Two external effects. The checkpoint download leaves nothing half-built, and a failed one simply leaves the command with no model. The optional vector cache (decision 6) is written by `write to a temporary name, then rename`, so a crash mid-write leaves either the previous file or no file, never a truncated one that the next run would read as a corpus it never embedded. It reads no database at all — the corpus is files. |
+| Idempotent retries | The looks are deterministic functions of the bytes, the vectors are deterministic given the weights, so a re-run reproduces the table exactly. That is the requirement's "can be re-run" scenario, not a nicety, and it is what makes the cache legitimate: a cached vector is the value the run would have computed. A retry after a cached model therefore costs nothing rather than repeating it. |
 | Authorization boundary | n/a — nothing in the service changes; the benchmark is a command an operator runs. |
-| Concurrent writers | n/a — nothing is written. |
+| Concurrent writers | Two runs sharing a `--cache` directory write the same file. Both write the same bytes for the same fingerprint, and the rename is atomic, so the loser of the race is overwritten by an identical file. Two runs over *different* corpora cannot corrupt each other's numbers, because a reader checks the fingerprint before it trusts a file and recomputes when it does not match. |
 | Money and rounding | n/a. |
 | Deletion and expiry | n/a. |
 
@@ -208,6 +208,41 @@ the decision — **including "no key" as a decision with the same standing as
 "a key"**. Change 14 is the precedent: it measured, decided to change nothing,
 and the record of that is one of the more useful things in this repository.
 
+### 6. The measurement can be paid for in instalments
+
+Three ViT-L-scale passes over a corpus of a hundred photographs under six looks
+is about twenty-five minutes of CPU. On a shared laptop that is not a number one
+can schedule around: it is either convenient now or the measurement does not
+happen, and "the measurement does not happen" is how a project ends up with an
+argument instead of an ADR.
+
+So the command takes two optional arguments. `--only <model>` measures one model
+and stops; `--cache <directory>` stores the vectors a run computed and reuses
+them when a later run asks for the same thing. Three eight-minute pieces at the
+operator's convenience, and a final run that assembles the table in seconds.
+
+**Default is unchanged.** Without `--cache` nothing is written, anywhere; the
+argument is what an operator reaches for when the machine is shared.
+
+**What "the same thing" means is the whole design.** A cache that served a
+vector from a different corpus would corrupt a published number in a way no
+reader could see, so a cached file carries a fingerprint over everything that
+can change a vector: the model, the checkpoint revision for the candidate, the
+corpus root, every photograph's **content**, the set of looks, and the labels
+the stream produced. A file whose fingerprint does not match is not read — it is
+recomputed and replaced. Nothing about a cached file is trusted except after
+that comparison.
+
+**Writes are atomic.** Written to a temporary name in the same directory and
+renamed, so a crash leaves either the previous file or none, never half of one.
+
+*What this guarantees:* a cached number is a number the run would have computed,
+and the published measurement is the same whether it was paid for at once or in
+pieces. *What it does not:* it does not make the cache a store. It is scratch a
+run may delete at any time, it lives where the operator says and never in the
+repository, and the published command in `docs/how-to/benchmarks.md` is the one
+that computes everything.
+
 ## Risks / Trade-offs
 
 - **The filters are not styles** → stated in the ADR, in the how-to and in the
@@ -231,6 +266,10 @@ and the record of that is one of the more useful things in this repository.
 - **The answer may be "no key"**, after the work of measuring → that is the
   outcome this change is shaped to allow, and the requirement it adds makes it
   the normal one rather than a failure.
+- **A cache could publish a number nobody measured** → the fingerprint covers
+  every input that can change a vector, including each photograph's content, and
+  a file that does not match it is recomputed rather than read. The tests for it
+  are tests of the mismatch, not of the hit.
 
 ## Migration Plan
 

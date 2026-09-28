@@ -62,13 +62,27 @@
   corpus's size and looks, the bound the numbers are held to, and the pinned
   revision. Verify: the command runs end to end against the demo pictures and
   prints the table; a unit test proves the set of measured incumbents is derived
-  from `app.domain` rather than hard-coded; it writes nothing (the working tree
-  is clean afterwards).
+  from `app.domain` rather than hard-coded; with no `--cache` it writes nothing
+  anywhere (the working tree is clean afterwards and the run creates no file).
+- [ ] 2.6 The instalments of design decision 6: `--only <model>` measures one
+  model and stops, and `--cache <directory>` stores what a run computed and
+  reuses it when a later run asks for the same thing. A cached file carries a
+  fingerprint over everything that can change a vector — the model, the
+  checkpoint revision for the candidate, the corpus root, **each photograph's
+  content**, the looks and the labels — and one whose fingerprint does not match
+  is recomputed rather than read. The write is to a temporary name in the same
+  directory, then a rename. Verify: unit tests, each watched to refuse — a cache
+  is not read when a photograph's bytes changed, when one is added or removed,
+  when the set of looks changed, when the model or the candidate's revision
+  changed; a round trip returns the same vectors and the same labels; a run with
+  no `--cache` creates no file; and the write is shown to be a rename of a
+  temporary file rather than a write in place.
 
 ## 3. The decision
 
 - [ ] 3.1 Run it over at least 100 photographs of the demo corpus and record
-  the numbers for all three models. The bound is fixed in design decision 2 and
+  the numbers for all three models — in one run or in instalments through
+  `--only` and `--cache`, which produce the same table. The bound is fixed in design decision 2 and
   is read on the rank preference only. Verify: the table is in
   `docs/how-to/benchmarks.md` under the exact command that produced it, with the
   corpus, the bound and the revision named.
@@ -103,7 +117,8 @@
   tier): each look's determinism, the blank-look refusal, the two corpus bounds,
   the allowlist, the missing-tensor refusal, the width check, the incumbents
   being derived from `app.domain`, the preference's degenerate corpora, the
-  ratio's non-positive denominator, and the bound's strict comparison. Verify: one
+  ratio's non-positive denominator, the bound's strict comparison, and each
+  input the cache's fingerprint covers. Verify: one
   table, one row per check, each a run with that one edit and the file restored
   afterwards.
 - [ ] 5.2 `openspec validate stretch-style-search --strict` passes and every
