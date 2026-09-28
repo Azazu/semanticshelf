@@ -52,13 +52,13 @@ Both are fixed, and both now have the test that would have caught them.
 
 **Twenty planted violations, twenty failures** (§5.1 of `tasks.md`).
 
-**Checks, in CI's own form**: `make check` 728 passed, integration 296,
+**Checks, in CI's own form**: `make check` 733 passed, integration 296,
 `openspec validate --all --strict` 17/17, `sh -n` clean, `gate_run_test` 77,
 `workflow_verify_test` 23, `make audit` clean on 91 packages, both images
 built — and the `models` suite, which CI never runs and which this change is
-the reason for, 8 passed against the real checkpoint.
+the reason for, 9 passed against the real checkpoint.
 
-**Gate 2 round 1 — two majors and a minor, all accepted** (§6 of `tasks.md`).
+**Gate 2 round 2 — two majors and a minor, all accepted** (§6 of `tasks.md`).
 The adapter threw away what `load_state_dict` reported, so a checkpoint missing
 a tensor would have loaded with a random layer and ranked under a published
 key; the three `MCLIP_*` settings could point the key at other weights while
