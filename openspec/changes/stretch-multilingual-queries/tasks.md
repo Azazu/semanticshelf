@@ -100,12 +100,12 @@
 
 ## 4. Saying what is now true
 
-- [ ] 4.1 `docs/how-to/searching.md`: how to ask for the encoder, what the
+- [x] 4.1 `docs/how-to/searching.md`: how to ask for the encoder, what the
   answer names, that a `min_score` tuned for one pair does not carry to
   another, and which languages are measured. Verify: every command in the
   section was run in its exact form; the section is re-read whole after the
   last edit.
-- [ ] 4.2 `docs/how-to/models.md`: the encoder beside the two models — what it
+- [x] 4.2 `docs/how-to/models.md`: the encoder beside the two models — what it
   is, what it costs on disk (2.24 GB), that it is fetched only when enabled,
   **both** pinned revisions and why an encoder is the pair of them (design
   decision 2), that the checkpoint is read with no pickle executed, and the
@@ -113,16 +113,16 @@
   the warming command appears in the exact form it is run
   (`uv run semanticshelf models warm` on the host, `make stack-warm` in the
   stack), and both were run for this encoder.
-- [ ] 4.3 `docs/explanation/requirements.md`: FR-TXT-5 amended in place — the
+- [x] 4.3 `docs/explanation/requirements.md`: FR-TXT-5 amended in place — the
   English-only limit becomes English plus the measured languages, naming this
   change and ADR-005; §7 row 17 and `openspec/ROADMAP.md` carry the tier this
   change declares. Verify: `rg -n "English"` over the repository leaves no
   statement that the service answers English only.
-- [ ] 4.4 `README.md`: the boundary paragraph reworded to the measured claim,
+- [x] 4.4 `README.md`: the boundary paragraph reworded to the measured claim,
   with the number beside it and a link rather than a restatement; the commands
   table unchanged. Verify: re-read whole; the claim matches
   `docs/how-to/benchmarks.md`.
-- [ ] 4.5 `docs/reference/settings.md`: `ENABLED_QUERY_ENCODERS` with its
+- [x] 4.5 `docs/reference/settings.md`: `ENABLED_QUERY_ENCODERS` with its
   default and what it refuses. Verify: every setting the service reads appears
   in the page, checked against `app/core/settings.py`.
 

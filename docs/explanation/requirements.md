@@ -101,7 +101,7 @@ Requirement ids (`FR-<AREA>-<n>`) are stable references for specs, tasks and tes
 - **FR-TXT-2** `q` is required, 1–256 characters after trimming; CLIP truncates at its context length (77 tokens) and the response states `query_truncated: true` when that happened.
 - **FR-TXT-3** Result item: `{asset: <FR-AST-8>, score: float}` with `score = 1 − cosine_distance` ∈ [−1, 1]; items are ordered by score desc, `asset.id` asc for ties, which every page carries — where a page's edge cuts a group of identical scores, which of that group the page holds is not promised (change 8, design decision 7). Only assets that have a `clip-vit-l14` vector can appear — corrected in change 8 from "whose job is `done`", because a `reindex` puts the work back while the vector stays, and hiding the asset until that work runs would take it out of search for no gain; the vector it has answers until a new one replaces it.
 - **FR-TXT-4** The response is `{items, limit, offset, has_more, model: "clip-vit-l14", query_truncated, scan_limited}`; `has_more` is computed by fetching `limit + 1` candidates. `scan_limited` (change 12, FR-FLT-6) is always present and is false for every unnarrowed search. No total (§4).
-- **FR-TXT-5** The query is English: CLIP ViT-L/14 was trained on English captions and other languages degrade to near-random ranking. The API does not translate; the README says so; a multilingual encoder is a stretch change (§9, D13).
+- **FR-TXT-5** The query is English **unless a build enables a query encoder**: CLIP ViT-L/14 was trained on English captions and other languages degrade to near-random ranking, so with `clip-vit-l14` answering, English is the language. Change 17 (§9, D13) added the encoder the stretch allowed for — a multilingual text tower that answers in `clip-vit-l14`'s own space, off by default — and lifted the limit for the four languages it measured and published (Russian, German, French and Spanish; **ADR-005**, `docs/how-to/benchmarks.md`). The other languages that encoder accepts are named as untested rather than implied, and the API still does not translate a query in any configuration.
 
 ### 2.6 Image→image search (IMG)
 
@@ -366,7 +366,7 @@ The stage plan is the source for `openspec/ROADMAP.md`; ids are stable across bo
 
 | # | Change id | Scope | Tier |
 |---|---|---|---|
-| 17 | `stretch-multilingual-queries` | a multilingual text encoder in CLIP's space (or a multilingual CLIP variant as a new key) behind the protocol, measured against English CLIP on the demo corpus | medium |
+| 17 | `stretch-multilingual-queries` | a multilingual text encoder in CLIP's space behind the protocol, measured against English CLIP on the demo corpus | **high** (raised at the proposal: a model download is egress from a process this repository ships, and the change widens what the search endpoint accepts) |
 | 18 | `stretch-style-search` | a style embedding model as a third key with its own index and `model=` support | medium |
 | 19 | `stretch-rag-captions` | generated captions/tags per image through a vision-language model; egress policy ADR | high |
 

@@ -58,6 +58,10 @@ make ui                   # http://127.0.0.1:8501
   pictures→pictures, loaded lazily, never on the event loop, replaced by a
   deterministic fake in every test that is not about the weights themselves
   ([models](docs/how-to/models.md)).
+- **A query encoder that owns no vectors** — a multilingual text tower embeds
+  the question into CLIP's space and ranks the vectors already stored there, so
+  four more languages cost no migration, no second index and no re-indexing
+  ([ADR-005](docs/adr/ADR-005-multilingual-query-encoder.md)).
 - **Vectors in PostgreSQL, not a second database** — one `embeddings` table,
   one partial HNSW index per model over a dimension cast, and the model key as
   part of an embedding's identity so two models are never compared
@@ -133,9 +137,16 @@ Three boundaries, stated rather than discovered later:
   that authenticates in front of it.
 - **CPU only.** There is no device setting; a build that cannot be configured
   onto a GPU should not pretend to be. The latencies above are what that means.
-- **English queries.** CLIP's text tower was trained on English captions; other
-  languages degrade toward a random ranking. The service says so rather than
-  translating, and a picture query has no language at all.
+- **English queries, or four more.** CLIP's text tower was trained on English
+  captions; other languages degrade toward a random ranking. A build may enable
+  a multilingual **query encoder** — a text tower that answers in CLIP's own
+  space, so nothing is re-indexed — and then Russian, German, French and
+  Spanish are measured rather than hoped for: mean recall@10 of 0.66–0.68
+  against the English baseline's 0.65, agreeing with its page 0.84–0.87 of the
+  time ([ADR-005](docs/adr/ADR-005-multilingual-query-encoder.md),
+  [benchmarks](docs/how-to/benchmarks.md)). The other 44 languages it accepts
+  are untested and said to be. The service never translates a query, and a
+  picture query has no language at all.
 
 ## Commands
 

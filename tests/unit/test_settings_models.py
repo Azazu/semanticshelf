@@ -191,3 +191,18 @@ def test_the_pinned_revisions_are_commits_rather_than_branches() -> None:
 
     for revision in (s.mclip_revision, s.mclip_base_revision):
         assert re.fullmatch(r"[0-9a-f]{40}", revision), revision
+
+
+def test_warming_may_name_an_enabled_encoder() -> None:
+    # The largest download this service has: leaving it out of the warm-up
+    # would make the first query in another language wait for all of it.
+    s = settings(enabled_query_encoders=(MCLIP_XLMR_L14,), model_warmup=(MCLIP_XLMR_L14,))
+
+    assert s.model_warmup == (MCLIP_XLMR_L14,)
+
+
+def test_warming_an_encoder_that_is_not_enabled_is_refused() -> None:
+    with pytest.raises(ValidationError) as refusal:
+        settings(model_warmup=(MCLIP_XLMR_L14,))
+
+    assert "not enabled" in str(refusal.value)

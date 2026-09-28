@@ -21,6 +21,43 @@ halves what an upload costs and gives up the search the other one
 answers; the vectors already stored are not touched, and enabling the
 model again later is `semanticshelf index missing`.
 
+### And one query encoder
+
+| Key | Checkpoint | Answers in | Takes |
+|---|---|---|---|
+| `mclip-xlmr-l14` | `M-CLIP/XLM-Roberta-Large-Vit-L-14` | `clip-vit-l14`'s space | text, in 48 languages |
+
+A **query encoder** embeds a question into a space it does not own. This one is
+a multilingual text tower trained against CLIP ViT-L/14's images, so a query in
+Russian, German, French or Spanish is ranked against the vectors `clip-vit-l14`
+already stored — **nothing is re-indexed, and nothing is ever written under the
+encoder's key**: no vector, no queued work, no row in `/stats`.
+
+It is **off by default**: 2.24 GB of weights for a question many deployments
+never ask. `ENABLED_QUERY_ENCODERS=mclip-xlmr-l14` turns it on, and the service
+refuses to start if `clip-vit-l14` is not enabled too — its vectors would have
+nothing to be compared with. Which languages are claimed, and on what evidence:
+[ADR-005](../adr/ADR-005-multilingual-query-encoder.md).
+
+Three things about this checkpoint are worth knowing before you enable it.
+
+- **It is pinned, and by two revisions.** `MCLIP_REVISION` is the checkpoint,
+  its config and its tokenizer; `MCLIP_BASE_REVISION` is the
+  `xlm-roberta-large` config the architecture is built from. Both default to
+  the commits the published measurement was taken at, because a branch can move
+  and then a deployment answers differently under the same key with nothing to
+  notice it by.
+- **Its weights are a pickle, and are read as data.** The repository has no
+  safetensors copy on its main revision (the one that exists is an unmerged
+  pull request), so the adapter loads it with `weights_only=True`: tensors are
+  read and no code from the file runs.
+- **Its licence is not declared.** The model card states none and the hub's API
+  returns none; the project that produced it
+  ([FreddeFrallan/Multilingual-CLIP](https://github.com/FreddeFrallan/Multilingual-CLIP))
+  is MIT. If your deployment needs certainty about the weights themselves, ask
+  the model's authors — this repository records the question rather than
+  answering it for you.
+
 ## The download
 
 The weights come from the Hugging Face hub the first time a model is
@@ -45,12 +82,20 @@ does not ask for a model.
 ```console
 $ uv run semanticshelf models warm
 clip-vit-l14: 768 dimensions, loaded in 5.7s
+
+$ ENABLED_QUERY_ENCODERS=mclip-xlmr-l14 uv run semanticshelf models warm
+dinov2-large: 1024 dimensions, loaded in 4.3s
+mclip-xlmr-l14: 768 dimensions, loaded in 5.0s
 ```
 
-The command loads every key in `ENABLED_MODELS`, downloading what is
-missing, and prints each model's width and load time. It reads the same
-settings as the service, so it needs `DATABASE_URL` to be set even
-though it never opens a connection.
+The command loads every key in `ENABLED_MODELS` **and every enabled query
+encoder**, downloading what is missing, and prints each one's width and load
+time. An encoder prints the width of the space it answers in, because that is
+the width of what it produces. It reads the same settings as the service, so it
+needs `DATABASE_URL` to be set even though it never opens a connection.
+
+In the container stack the same thing is `make stack-warm`, which runs it
+inside the service image and fills the model volume.
 
 To have the application itself warm up at start, name the keys in
 `MODEL_WARMUP`:
@@ -58,6 +103,10 @@ To have the application itself warm up at start, name the keys in
 ```dotenv
 MODEL_WARMUP=clip-vit-l14,dinov2-large
 ```
+
+A query encoder may be named there too, once it is enabled — it is the largest
+download this service has, and a first query in another language that waits for
+all of it is the thing warming exists to prevent.
 
 The lifespan then loads exactly those keys, on the inference pool rather
 than on the event loop, and the process is ready to embed as soon as it

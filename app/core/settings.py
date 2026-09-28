@@ -189,7 +189,8 @@ class Settings(BaseSettings):
                 f"ENABLED_MODELS names models this build does not implement: {', '.join(unknown)}; "
                 f"implemented: {', '.join(sorted(IMPLEMENTED_MODELS))}"
             )
-        not_enabled = [key for key in self.model_warmup if key not in self.enabled_models]
+        runnable = (*self.enabled_models, *self.enabled_query_encoders)
+        not_enabled = [key for key in self.model_warmup if key not in runnable]
         if not_enabled:
             raise ValueError(
                 f"MODEL_WARMUP names models that are not enabled: {', '.join(not_enabled)}"

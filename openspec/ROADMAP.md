@@ -87,6 +87,6 @@ next need turns out to be.
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 17 | `stretch-multilingual-queries` | multilingual text encoder behind the protocol, measured against English CLIP | medium |
+| 17 | `stretch-multilingual-queries` | multilingual text encoder behind the protocol, measured against English CLIP | **high** (a model download is egress; the search endpoint widens) |
 | 18 | `stretch-style-search` | style embedding model as a third key with its own index | medium |
 | 19 | `stretch-rag-captions` | generated captions/tags per image via a vision-language model; egress policy ADR | high |
