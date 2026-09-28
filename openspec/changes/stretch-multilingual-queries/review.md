@@ -12,3 +12,16 @@
 | 1 | major | `design.md` decision 4; `tasks.md` 3.1–3.2 | The sole acceptance bound is `mean precision@10 >= 0.8 × English mean precision@10`. If the English baseline is zero, an encoder returning no relevant pictures passes; a low baseline also makes a near-random result sufficient. The plan therefore cannot substantiate the promised claim that a language works. Specify a minimum usable baseline and an absolute quality floor or another guard against a trivial pass, and require the benchmark to report the relevant-asset counts for its concepts. | fixed |
 | 2 | major | `design.md` decision 2 and decision 4; `tasks.md` 1.3 and 3.2 | The adapter downloads the checkpoint from the mutable `main` revision while the published measurements are treated as evidence for the stable `mclip-xlmr-l14` key. A fresh deployment may load different weights or tokenizer/config and answer differently from the measured build without a key or documentation change. Pin the model assets to an immutable revision, and record that revision with the benchmark results so the measured encoder is the one deployed. | fixed |
 | 3 | major | `tasks.md` 1.3; `openspec/specs/embedding-models/spec.md` “Text longer than the model's context is truncated and the caller is told” | The new adapter's task covers tokenization and vector properties but omits detection and reporting of tokenizer truncation. `EmbeddingResult.truncated` feeds `query_truncated` in the text-search response; silently cutting an XLM-R query would violate the existing contract. Add implementation and a real-checkpoint test with an over-context query proving the flag is true, alongside an ordinary-query false case. | fixed |
+
+## Confirmation 1 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** e67a09269bcffee61d37307d978a15d8efbf193e
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — The new baseline guard, absolute recall floor and per-concept relevant-asset counts address the trivial-pass case in `design.md` and `tasks.md`. The same measurement is still specified inconsistently: `proposal.md` promises precision@k, while the design and tasks require recall@10; `design.md` requires at least 30 concepts, while task 3.1 permits a report with 20. Align these claims so the promised benchmark and its minimum sample are unambiguous. |
+| 2 | changes-requested — The M-CLIP checkpoint and tokenizer are assigned an immutable revision, and task 3.2 records it with the results. But decision 2 also constructs the transformer from the config of the separate `xlm-roberta-large` repository without specifying an immutable revision for that fetch. Pin or vendor that config too, and record the complete set of revisions used for the measurement; otherwise a fresh deployment can still load different model assets under the same encoder key. |
+| 3 | confirmed — Decision 2 and task 1.3a require per-input truncation reporting at the model context limit. The planned real-checkpoint test covers an ordinary query and an over-context query in one batch, and an API test checks propagation to `query_truncated`. |
