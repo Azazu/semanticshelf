@@ -73,3 +73,15 @@
 |---|------------|
 | 1 | confirmed — `proposal.md` and `design.md` identify the change to the published OpenAPI document and explain how `app/core/openapi.py` restores the declared examples after FastAPI encoding. |
 | 2 | changes-requested — Tasks 1.3 and 3.2 now cite the reported CI run and Mermaid rendering. But task 5.3 is checked despite requiring green CI on the exact HEAD: the reported run was on `b17653e`, while the reviewed HEAD is `ff145a3`, which is still ahead of the remote. `handoff.md` likewise says another push and green run are needed. Task 5.1's claim that every preceding task has its evidence therefore still depends on an unverified 5.3. Leave 5.3 and 5.1 open until that evidence exists, then reconcile the handoff. |
+
+## Confirmation 5 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** 60dbb53ef43bf85ab19939169d01f521c16084e6
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — `proposal.md` and `design.md` accurately name the published OpenAPI document change and the `app/core/openapi.py` / `app/main.py` mechanism. |
+| 2 | changes-requested — Tasks 5.3 and 5.1 are checked on the reported green CI run for `b17653e`, but AGENTS.md requires green CI on the exact HEAD before Gate 2; the record provides no such evidence for `60dbb53`. The Gate 2 freshness exception applies after review and does not replace this prerequisite. Sections 7.2 and 7.3 still say 1.3, 5.3 and 5.1 are open, while their checkboxes and `handoff.md` say every task is closed. Reconcile the task record and handoff with the required evidence. |
