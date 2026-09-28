@@ -60,3 +60,14 @@
 | # | Resolution |
 |---|------------|
 | 1 | changes-requested — the new fingerprint includes the configured incumbent name and a commit hash resolved from the local model cache, but it does not bind that hash to the weights and processor actually used. Both adapters call `from_pretrained(name, cache_dir=cache)` separately for the processor and model, without a revision, so the two loads can resolve different snapshots and a later cache lookup can report a snapshot different from either load. The processor's behavior also depends on the installed `transformers` version, which the fingerprint omits. Resolve an immutable revision before loading and use it for both objects, or identify both loaded objects directly; include the preprocessing implementation version (or recompute on a version change). Add tests for a changed resolved revision and for these identity mismatches so a cache hit cannot reuse vectors from different weights or preprocessing. |
+
+## Confirmation 2 · Gate 1 · Round 2
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** b433fb85177fbad7d339ae13e0152d05cf3f4846
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | changes-requested — re-embedding the first few images establishes agreement only on those images, not that the loaded weights and processor produced every cached vector. A changed incumbent can agree within tolerance on the probes and differ on other corpus images, so the claimed equality of cached and fresh measurements still does not follow; the design explicitly acknowledges this gap. Task 3.1 still permits assembling the published table from cached runs, and the proposal still promises a fingerprint over every input that can change a vector. Bind cache entries to the effective weights and preprocessing identity, or require the published run to recompute all vectors and narrow the cache claim accordingly. Test the chosen protection with an incumbent whose identity changes while its probe outputs remain the same and other outputs differ. |
