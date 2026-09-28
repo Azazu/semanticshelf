@@ -66,11 +66,22 @@ executable — up, ready, an upload the worker indexes, a search that finds it, 
 real browser fetching the thumbnail — and `docs/how-to/running-the-stack.md` is
 what a reader follows.
 
-One change is left in the plan.
+`harden-quality-and-docs` closes the stage and the plan. The README is the one a
+stranger meets — five screenshots from a corpus chosen for the front page, a
+Mermaid diagram of the three paths, the measured numbers with the commands
+behind them, and the three boundaries stated as boundaries (no authentication,
+CPU only, English queries) — with `docs/explanation/architecture.md` behind it
+and an index that matches what is on disk. Two rules that were prose became
+checks that fail on a planted violation: the dependency rule over the import
+graph (NFR-QA-2), read whole including imports inside functions, and `uv audit`
+against the lock in `make` and in CI, with one policy stated the same way
+everywhere. Every operation of the API carries an example that parses as the
+answer it illustrates — which needed the published document corrected, since
+FastAPI encodes it with `exclude_none` and a null the service really answers
+with would otherwise vanish from the example beneath a schema that requires it.
 
-| # | Change id | Scope (summary) | Tier |
-|---|---|---|---|
-| 16 | `harden-quality-and-docs` | README with screenshots, a Mermaid architecture diagram and the measured numbers; an architecture page; the dependency-rule test of NFR-QA-2 with a planted violation per rule; `uv audit` in CI and in `make`; the documentation index; OpenAPI examples on every operation that answers with a body, with the three exemptions stated where the rule is enforced | high (raised at Gate 2: a mandatory audit step in CI is CI infrastructure) |
+Nothing is left in the plan. What follows is the stretch list, or whatever the
+next need turns out to be.
 
 ## Stretch
 
