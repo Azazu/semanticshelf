@@ -1,6 +1,6 @@
 # Benchmarks
 
-Two measurements live on this page, each with a command that produces it.
+Three measurements live on this page, each with a command that produces it.
 
 - **[The plan a narrowed search takes](#the-plan-a-narrowed-search-takes)** —
   which of three ways PostgreSQL answers a search that narrows by a tag or by
@@ -9,12 +9,18 @@ Two measurements live on this page, each with a command that produces it.
   the true ranking the vector index returns, what it costs, and how HNSW and
   IVFFlat compare per model (change 14; the decision is
   [ADR-002](../adr/ADR-002-vector-index-family-and-parameters.md)).
+- **[What a query in another language costs](#what-a-query-in-another-language-costs)**
+  — how well the multilingual query encoder answers, against the corpus's own
+  labels and against the English page (change 17; the decision is
+  [ADR-005](../adr/ADR-005-multilingual-query-encoder.md)).
 
-Both build their corpus in a schema of their own, inside the database
+The first two build their corpus in a schema of their own, inside the database
 `DATABASE_URL` names, and drop only what they created. Neither can touch the
 tables the service uses: that promise is one module (`scripts/bench_schema.py`)
 both commands import, and the integration suite runs each published command
-against a populated store and checks that every row is still there.
+against a populated store and checks that every row is still there. The third
+builds nothing at all — it measures a model against the corpus that is already
+there, so it reads in a transaction it declares read-only.
 
 ## The plan a narrowed search takes
 
@@ -358,3 +364,92 @@ What the numbers support is a decision for this project at this size — which i
 what
 [ADR-002](../adr/ADR-002-vector-index-family-and-parameters.md) records, limits
 included.
+
+## What a query in another language costs
+
+The service's text tower was trained on English captions, and FR-TXT-5 made
+that a boundary: other languages degrade toward a random ranking. Change 17
+adds a **query encoder** — a multilingual text tower trained to land in the
+same image space — and §9 of the specification allows lifting the boundary
+"only with numbers". These are the numbers.
+
+```console
+$ uv run python scripts/multilingual_benchmark.py --languages en,ru,de,fr,es
+```
+
+It needs a corpus in the store: the 500-picture demo sample, indexed with
+`clip-vit-l14`, is what the run below used (`make demo`, or `index-folder
+.data/demo/pictures --recursive`).
+
+### What it measures, and against what
+
+Ground truth is the corpus itself. Each picture of the demo sample carries
+COCO's own labels as tags, so a concept — `zebra`, `traffic light`, `teddy
+bear` — has a set of pictures that carry it, and a query naming that concept in
+some language either finds them or does not.
+
+- **recall@10**: of the pictures carrying the tag, how many reached the first
+  ten. Recall rather than precision, because precision@10 is capped at
+  `relevant/10` for a concept the corpus holds four pictures of — a perfect
+  answer would score 0.4 and read as a failure.
+- **agreement@10**: how much of the *English* page the same concept in another
+  language brings back. It is published without a bound: a different page of
+  the same quality is not a failure, and no threshold on it would have meant
+  anything before the first measurement.
+
+The concept set is chosen by rules that look at no language's results: a tag
+carried by 3 to 10 assets, at least 20 such concepts, and the English baseline
+itself clearing recall 0.5 — a set the service's own model cannot answer would
+measure the corpus rather than any encoder, and the run says so and stops.
+
+Ranking is **exact**, in memory. What the index gives up is the measurement
+above; mixing the two would leave a reader unable to tell which one moved.
+
+### What one run says
+
+Corpus: 500 assets with a `clip-vit-l14` vector. Concepts: 21 tags carried by
+3–10 assets each. Encoder `M-CLIP/XLM-Roberta-Large-Vit-L-14` at revision
+`40afa80a85e8efa990384a24bbe5a1f6f1cc81b5`, architecture config at
+`c23d21b0620b635a76227c604d44e43a9f0ee389`. A language is claimed at mean
+recall@10 ≥ 0.5 **and** ≥ 0.8 × the English baseline.
+
+| language | asked by | mean recall@10 | worst concept | mean agreement@10 | claimed |
+|---|---|---|---|---|---|
+| en | `clip-vit-l14` | 0.649 | apple 0.000 | 1.000 | baseline |
+| en | `mclip-xlmr-l14` | 0.683 | apple 0.000 | 0.857 | yes |
+| ru | `mclip-xlmr-l14` | 0.684 | apple 0.000 | 0.843 | yes |
+| de | `mclip-xlmr-l14` | 0.665 | apple 0.000 | 0.843 | yes |
+| fr | `mclip-xlmr-l14` | 0.683 | apple 0.000 | 0.871 | yes |
+| es | `mclip-xlmr-l14` | 0.659 | apple 0.000 | 0.857 | yes |
+
+The 21 concepts, with how many assets carry each tag: zebra 9, elephant 10,
+giraffe 5, sheep 4, cow 7, bicycle 9, airplane 5, stop-sign 3, fire-hydrant 8,
+suitcase 7, frisbee 7, snowboard 8, kite 8, wine-glass 6, banana 8, apple 3,
+orange 6, donut 6, book 10, vase 10, teddy-bear 6. The run prints them with the
+phrase used in each language, because a measurement whose inputs are hidden is
+an opinion.
+
+### Reading it
+
+**The four languages clear both bounds**, by a distance: every one is within
+three points of the English baseline, and three of them are above it.
+
+**The interesting row is the second one.** Asked in *English*, the encoder
+scores 0.683 against the baseline's 0.649 and agrees with it on 0.857 of the
+page — about as much as the other languages do. So the difference between the
+pages is not what a translation costs: it is that this is a **different text
+tower**, which answers slightly differently and, on this corpus and these
+concepts, slightly better. A reader who expected "English is the real one and
+the rest are approximations" gets a more interesting fact instead.
+
+**The worst concept is the same everywhere**: `apple`, at 0.000, in every
+language including the baseline. Three pictures carry that tag and no tower
+surfaces them, which says something about the label or the pictures rather than
+about any language.
+
+**What this does not say.** Nothing about the other 44 languages the encoder
+accepts — they are untested here. Nothing about queries that are not a concept
+name: a sentence, a mood, a proper noun. Nothing about a corpus other than this
+one; a claim about somebody's own pictures needs their own run of the same
+command. And nothing about how the *index* behaves for these queries, which is
+the measurement above.

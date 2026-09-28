@@ -174,7 +174,18 @@ no such state.
 ### 4. The boundary is lifted by a measurement, with two metrics and no new labels
 
 `scripts/multilingual_benchmark.py`, beside the two benchmarks change 14 left,
-against the demo corpus (which carries COCO's own labels as tags):
+against the demo corpus (which carries COCO's own labels as tags).
+
+It differs from those two in what it needs from the database, and therefore in
+how it keeps away from the service's tables. They *build* a corpus and indexes,
+so they work inside a throwaway schema behind `scripts/bench_schema.py`'s
+guard; this one only **reads** what is already stored, so it opens a read-only
+transaction instead — a stronger guarantee and a smaller mechanism, since a
+read-only transaction cannot write even by accident. It also ranks **exactly**,
+in memory: what is being measured is the encoder, and the index's approximation
+is change 14's subject, already published.
+
+The two metrics:
 
 - **recall@10 by tag** — the query names a concept (`zebra`, `traffic light`,
   `tennis racket`, …) in a language; a result is right when the asset carries

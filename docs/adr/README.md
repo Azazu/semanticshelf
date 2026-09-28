@@ -12,3 +12,4 @@ here.
 | [ADR-002](ADR-002-vector-index-family-and-parameters.md) | HNSW at `m = 16`, `ef_construction = 64` stays for every model, measured against IVFFlat: recall@10 1.000 at the shipped effort, and IVFFlat has no strict iterative order for a narrowed search |
 | [ADR-003](ADR-003-queue-in-postgresql.md) | The indexing queue is the `indexing_jobs` table claimed with `FOR UPDATE SKIP LOCKED`, owned by a lease whose expiry is the claim's token, and made repeat-safe by the upsert — no broker |
 | [ADR-004](ADR-004-claims-restricted-to-named-assets.md) | A claim may name the assets whose work it wants, so a runner that created work can finish it; every other claim is unchanged, and the queue stays first due, first served |
+| [ADR-005](ADR-005-multilingual-query-encoder.md) | A query encoder embeds a question into another model's space and stores nothing of its own; four languages claimed against the corpus's own labels, with both model revisions pinned |

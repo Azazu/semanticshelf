@@ -67,21 +67,23 @@
 
 ## 3. The measurement that lifts the boundary
 
-- [ ] 3.1 `scripts/multilingual_benchmark.py` (design decision 4): the concept
+- [x] 3.1 `scripts/multilingual_benchmark.py` (design decision 4): the concept
   set chosen by rules that look at no language's results — a tag carried by at
   least 3 and at most 10 assets, at least 20 such concepts, and the English
   baseline itself clearing mean recall@10 of 0.5 — with each concept printed
   beside the number of assets that carry its tag. Per language: mean recall@10,
   the worst concept, and mean agreement@10 with the same concept in English;
   the English CLIP text side as the baseline row; **both** pinned revisions in
-  the header; Markdown table on stdout. Reuses the benchmark guard of change 14
-  rather than touching the service's tables. Verify: the command runs end to end
+  the header; Markdown table on stdout. It reads the store in a **read-only
+  transaction** and ranks exactly in memory — it builds nothing, unlike the two
+  benchmarks of change 14 whose throwaway schema exists because they do, and
+  what it measures is the encoder rather than the index (design decision 4). Verify: the command runs end to end
   against the demo corpus and prints the table; unit tests for the metrics and
   for every selection rule on hand-made input — a tag with too few assets, one
   with too many, a set of fewer than 20 concepts, and a baseline below 0.5 —
   each of which makes the run report that it measured nothing rather than
   publish a number.
-- [ ] 3.2 Run it for Russian, German, French and Spanish and record the
+- [x] 3.2 Run it for Russian, German, French and Spanish and record the
   numbers. A language is **claimed** only if it clears **both** bounds: mean
   recall@10 at least 0.5 in absolute terms, and at least 0.8 × the English
   baseline's over the same concepts. Agreement@10 and the worst concept are
@@ -90,7 +92,7 @@
   revisions beside it, the per-concept relevant counts included, and every
   language that misses either bound present with its numbers and named as not
   supported.
-- [ ] 3.3 `docs/adr/ADR-005-multilingual-query-encoder.md`: why a query encoder
+- [x] 3.3 `docs/adr/ADR-005-multilingual-query-encoder.md`: why a query encoder
   rather than a second model key, **both** repository revisions the measurement
   was taken at, what the numbers decided, and what is left unmeasured. Verify:
   the ADR index (`docs/adr/README.md`) carries its row; the numbers and both
