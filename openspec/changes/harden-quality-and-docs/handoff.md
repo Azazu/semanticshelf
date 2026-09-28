@@ -52,13 +52,14 @@ seventeen planted failures of §6.5.
 
 ## Next step
 
-The user pushed `b17653e` and reported CI green on it, so every task in
-`tasks.md` is closed with its evidence. The commit that records that touches
-`tasks.md` and this file only.
+Every task in `tasks.md` is closed with its evidence. CI is green on `b17653e`,
+the last commit that changed anything CI reads; since then the branch differs
+only in `review.md`, `handoff.md` and `tasks.md` — the three files
+`scripts/workflow-verify.sh merge` allows to differ from a reviewed commit, and
+the only three a gate's own record-keeping can touch.
 
-1. The user pushes again, so the green run is on the head the gates read.
-2. `scripts/gate-run.sh harden-quality-and-docs 1 confirm 1` — the fourth
-   confirmation of Gate 1 round 1, now that nothing waits on evidence.
+1. The user pushes the current head (markdown only, so the run stays green).
+2. `scripts/gate-run.sh harden-quality-and-docs 1 confirm 1`.
 3. `/gate-review harden-quality-and-docs 2 confirm 1`, then `/git:merge`.
 
 ## Blockers

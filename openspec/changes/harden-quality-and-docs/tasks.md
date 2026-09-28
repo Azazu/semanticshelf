@@ -125,10 +125,18 @@
   packages, and both images built.
 - [x] 5.3 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
   `scripts/pregate-verify.sh gate2 harden-quality-and-docs` passing. Verify: the
-  verifier's output is recorded in the handoff; the user pushed `b17653e` and
-  reported CI green on it (2026-09-28), and the only commit after it — the one
-  that records this — touches `tasks.md` and `handoff.md`, which is what the
-  freshness rule allows and what the second push re-runs CI over.
+  verifier's output is recorded in the handoff; the branch is pushed and CI is
+  green on the last commit that changed anything CI reads — `b17653e`, reported
+  green on 2026-09-28 — and everything committed since differs only in
+  `review.md`, `handoff.md` and `tasks.md` (`git diff --name-only b17653e..HEAD`
+  prints those three and nothing else). That is the invariant the workflow
+  enforces mechanically before a merge: `scripts/workflow-verify.sh merge`
+  allows exactly `PROTOCOL_FILES='review.md handoff.md tasks.md'` to differ from
+  the reviewed commit. A literal "green on this exact head" is unreachable by
+  construction, because every gate run commits `review.md` and moves the head
+  after CI ran — which is why the rule is written against what CI can see
+  (raised four times at Gate 1 before the condition, rather than the evidence,
+  was recognised as the wrong one; the user arbitrated the rewording).
 
 ## 6. Gate 2 round 1 — four majors, all accepted
 
