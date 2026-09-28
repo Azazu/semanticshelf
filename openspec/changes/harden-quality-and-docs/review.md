@@ -128,3 +128,17 @@ confirmations, waives the verdict rather than the work.
 | 2 | confirmed — `app/core/openapi.py` restores declared examples after FastAPI encodes the document, and the test validates examples taken from the published document without stripping nulls. The published jobs example contains both `lease_expires_at` and `last_error` as null; `IndexingJobList.model_validate` accepts it. All nine published examples validate against their response models. |
 | 3 | confirmed — The router guard now rejects `ast.Import` of `sqlalchemy` or its submodules, including aliases, while the existing name allowlist handles `ast.ImportFrom`. The walker self-test covers the new form, and `tasks.md` records failing runs for planted whole-package and submodule imports. |
 | 4 | confirmed — NFR-SEC-6, the deployment delta, proposal, design, `make audit`, CI comments and command reference now state the same policy: any known advisory fails unless an individual advisory is explicitly ignored until fixed. The installed `uv audit --help` confirms `--locked` and `--ignore-until-fixed`; `tasks.md` records exit 1 and four named advisories from a disposable lock with vulnerable dependencies. |
+
+## Confirmation 2 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** 59738869dc639821f97fd91a651a3a4a9509ea9e
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The proposal and roadmap registers declare `high`; the design includes the high-tier applicability table and the tasks record failing inputs. Gate 1's last decision is the user's waiver at `cfb8cae`, so its required disposition is recorded. |
+| 2 | confirmed — The OpenAPI correction restores declared examples after FastAPI encoding. On this head, the generated jobs example contains `lease_expires_at` and `last_error` as null in both items and passes `IndexingJobList.model_validate`; the test validates the published example directly. |
+| 3 | confirmed — The router guard rejects whole-package and submodule `sqlalchemy` imports through `ast.Import`, including aliases, while its existing allowlist covers `ast.ImportFrom`. All 10 focused layering tests pass; `tasks.md` records failing runs for planted imports of both forms. |
+| 4 | confirmed — NFR-SEC-6, the deployment delta, proposal, design, Makefile, CI comments and command reference agree that any known advisory fails unless individually ignored until fixed. The installed `uv audit --help` lists `--locked` and `--ignore-until-fixed`; `tasks.md` records a failing audit against a disposable vulnerable lock. |
