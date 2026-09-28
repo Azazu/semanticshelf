@@ -1,7 +1,7 @@
 # Handoff — stretch-style-search
 
 **Updated:** 2026-09-28 · claude
-**State:** proposing
+**State:** awaiting-gate-1
 **Branch:** change/stretch-style-search
 
 ## Done this session
@@ -12,21 +12,33 @@
 - `openspec/ROADMAP.md` already carries this as stretch row 18, and
   `docs/explanation/requirements.md` §9 as the same row — left as they are.
 
+- The four artifacts are written, and the three questions this handoff opened
+  with are answered in them — two by a probe run before a word was written.
+- **The candidate exists and loads**: `tomg-group-umd/CSD-ViT-L` (CC-BY-4.0,
+  declared). Its `config.json` is `{"model_type": "custom"}` and the file is a
+  *training* checkpoint in OpenAI CLIP's module layout, so `transformers`
+  cannot build it; `open_clip`'s ViT-L-14 visual tower takes the weights with
+  nothing missing and nothing unexpected once CLIP's own projection is removed.
+  `weights_only=True` refuses the file until four inert types are allowlisted
+  (a numpy scalar under its legacy module path, two numpy types and
+  `argparse.Namespace`) — the design refuses `weights_only=False` outright.
+- **It answers something DINOv2 does not.** Four photographs under six looks:
+  CSD leans toward style at 0.92 (same look 0.507 against same picture 0.551),
+  DINOv2 at 0.145 (0.104 against 0.718).
+- **The scope is reshaped, deliberately.** The roadmap's row 18 says "a third
+  key with its own index"; this change **measures and decides**, and shipping
+  the key — migration, index, re-index, `model=` on the picture searches — is a
+  follow-up proposed only if ADR-006 says yes. The user chose that shape when
+  the change was started; the proposal states it and the specs carry the rule
+  that produced it.
+- **Risk-Tier: high** — a new dependency, a model download, and a decision that
+  governs a later migration.
+
 ## Next step
 
-`/opsx:propose stretch-style-search` — a style embedding as a **third storage
-key**, with its own width, its own CHECK and its own partial index, reachable
-through `model=` on the picture searches.
-
-This one is the opposite shape to change 17, and the proposal has to say so:
-an encoder answered in a space that already existed and stored nothing, while
-a style model has a space of its own. That means a migration, an index, a
-re-index of the corpus and a second vector per asset — every mechanism ADR-001
-and ADR-002 built, used for the first time by a key that is not CLIP or
-DINOv2. Three questions the proposal owes an answer to before anything is
-built: which checkpoint (and what "style" means for it), what evidence would
-show it ranks by style rather than by subject where DINOv2 already ranks by
-appearance, and whether it earns its width in this project at all.
+`/gate-review stretch-style-search 1` — Gate 1 on the artifacts.
+`scripts/pregate-verify.sh gate1 stretch-style-search` passes (15 tasks, tier
+declared, applicability table present, links resolve).
 
 ## Blockers
 
