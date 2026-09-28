@@ -91,9 +91,10 @@
   language that misses either bound present with its numbers and named as not
   supported.
 - [ ] 3.3 `docs/adr/ADR-005-multilingual-query-encoder.md`: why a query encoder
-  rather than a second model key, what the numbers decided, and what is left
-  unmeasured. Verify: the ADR index (`docs/adr/README.md`) carries its row; the
-  numbers in it match `docs/how-to/benchmarks.md` exactly.
+  rather than a second model key, **both** repository revisions the measurement
+  was taken at, what the numbers decided, and what is left unmeasured. Verify:
+  the ADR index (`docs/adr/README.md`) carries its row; the numbers and both
+  revisions in it match `docs/how-to/benchmarks.md` exactly.
 
 ## 4. Saying what is now true
 
@@ -104,8 +105,9 @@
   last edit.
 - [ ] 4.2 `docs/how-to/models.md`: the encoder beside the two models — what it
   is, what it costs on disk (2.24 GB), that it is fetched only when enabled,
-  that it is pinned to one revision and why, that the checkpoint is read with no
-  pickle executed, and the licence question stated as open (design decision 5). Verify: re-read whole;
+  **both** pinned revisions and why an encoder is the pair of them (design
+  decision 2), that the checkpoint is read with no pickle executed, and the
+  licence question stated as open (design decision 5). Verify: re-read whole;
   the warming command appears in the exact form it is run
   (`uv run semanticshelf models warm` on the host, `make stack-warm` in the
   stack), and both were run for this encoder.
@@ -126,7 +128,8 @@
 
 - [ ] 5.1 A demonstrated failing input for every new or changed check (high
   tier): the encoder table's two guards, the two settings refusals, the
-  checkpoint width check, the pinned-revision check, the truncation flag, the
+  checkpoint width check, the pinned-revision check for both repositories, the
+  truncation flag, the
   503 for an unknown encoder, the 422 for a picture query, the two benchmark
   metrics and each of the four concept-selection rules. Verify: one table, one
   row per check, each a run with that one edit and the file restored

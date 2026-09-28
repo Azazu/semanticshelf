@@ -235,7 +235,7 @@ is published beside the mean, and is not bounded.
 
 *What this guarantees:* the claim "these four languages work" has a command
 behind it that anyone can re-run, against a concept set whose composition the
-same command prints, at a revision it names. *What it does not:* it says
+same command prints, at the two revisions it names. *What it does not:* it says
 nothing about the other 44 languages the encoder accepts (the docs name them as
 unmeasured), nothing about queries longer or vaguer than a concept name, and
 nothing about a corpus other than the demo one — a claim about somebody's own
