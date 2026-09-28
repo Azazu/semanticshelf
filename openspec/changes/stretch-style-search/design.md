@@ -213,7 +213,7 @@ and the record of that is one of the more useful things in this repository.
   spec's own wording ("how a picture looks"), and the corpus is printed with
   its looks so a reader sees exactly what was measured.
 - **A new dependency for one command** → its own group, out of the image, MIT,
-  maintained (2.32.0, April 2025), and justified against the hand-written
+  maintained (3.3.0, February 2026), and justified against the hand-written
   alternative in the proposal.
 - **A training checkpoint with pickled objects** → a four-entry allowlist of
   inert types, never `weights_only=False`, with the reason recorded and a test

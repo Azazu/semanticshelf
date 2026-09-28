@@ -56,7 +56,12 @@ def test_the_service_environment_is_the_locked_one_without_the_extras(
     for line in sync:
         assert "--locked" in line, line
         assert "--no-dev" in line, line
-    assert "--group ui" not in stages["builder"]
+    # No group at all, named rather than listed: the service image carries the
+    # runtime dependencies and nothing else, and a group added to the project
+    # later must not be able to reach it by not being on a list here. `style`
+    # is the one that made this general — `open_clip_torch` pulls `torchvision`
+    # and `timm` for a benchmark the service never runs.
+    assert "--group" not in stages["builder"], stages["builder"]
 
 
 def test_the_project_is_reinstalled_rather_than_taken_from_the_cache(

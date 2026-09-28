@@ -17,7 +17,7 @@
 
 ## 2. The measurement
 
-- [ ] 2.1 `pyproject.toml`: `open_clip_torch` in a dependency **group of its
+- [x] 2.1 `pyproject.toml`: `open_clip_torch` in a dependency **group of its
   own** (`style`), never in the runtime group, and `uv.lock` updated with
   `uv add --group style open_clip_torch`. Verify: `make lock-check` green;
   `tests/unit/test_image_definition.py` still proves the service image does not

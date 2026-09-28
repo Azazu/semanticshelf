@@ -101,7 +101,7 @@ None.
   vector, no setting the API reads — the candidate is loaded by a benchmark,
   not by `create_app`. `EMBEDDING_MODELS`, the CHECK and the indexes stay as
   they are.
-- **Dependencies:** `open_clip_torch` (MIT, 2.32.0, April 2025), and with it
+- **Dependencies:** `open_clip_torch` (MIT, 3.3.0, February 2026), and with it
   `torchvision` and `timm`. Justified rather than assumed: the checkpoint is in
   OpenAI-CLIP's own module layout (`backbone.transformer.resblocks…`), which
   `transformers` cannot build; open_clip builds exactly that tower and the
