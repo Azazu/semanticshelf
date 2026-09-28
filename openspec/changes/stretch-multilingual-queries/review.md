@@ -25,3 +25,16 @@
 | 1 | changes-requested — The new baseline guard, absolute recall floor and per-concept relevant-asset counts address the trivial-pass case in `design.md` and `tasks.md`. The same measurement is still specified inconsistently: `proposal.md` promises precision@k, while the design and tasks require recall@10; `design.md` requires at least 30 concepts, while task 3.1 permits a report with 20. Align these claims so the promised benchmark and its minimum sample are unambiguous. |
 | 2 | changes-requested — The M-CLIP checkpoint and tokenizer are assigned an immutable revision, and task 3.2 records it with the results. But decision 2 also constructs the transformer from the config of the separate `xlm-roberta-large` repository without specifying an immutable revision for that fetch. Pin or vendor that config too, and record the complete set of revisions used for the measurement; otherwise a fresh deployment can still load different model assets under the same encoder key. |
 | 3 | confirmed — Decision 2 and task 1.3a require per-input truncation reporting at the model context limit. The planned real-checkpoint test covers an ordinary query and an over-context query in one batch, and an API test checks propagation to `query_truncated`. |
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** ae629d8c67a9779fb703cf485681d17176e53be1
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — `proposal.md`, design decision 4 and tasks 3.1–3.2 now consistently specify recall@10 over at least 20 eligible concepts, an English baseline floor, an absolute language floor, a relative language bound and per-concept relevant-asset counts. |
+| 2 | changes-requested — Design decision 2 and tasks 1.3 and 3.1–3.2 pin and report both repositories' revisions, but task 4.2 still requires `docs/how-to/models.md` to say the encoder is pinned to **one** revision. That would publish an incomplete description of the measured and deployed encoder, contrary to decision 2's explicit requirement that the models how-to name both revisions. Update task 4.2 to require both repository revisions; make task 3.3 explicitly require both revisions in ADR-005 as decision 2 promises. |
+| 3 | confirmed — The truncation requirement and its real-checkpoint and API verification tasks remain in place; this diff does not weaken them. |
