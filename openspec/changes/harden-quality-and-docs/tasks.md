@@ -25,7 +25,8 @@
   Verify: `make audit` passes locally and its output is recorded (no known
   vulnerabilities in 91 packages); `make help` and `docs/reference/commands.md`
   list it; the workflow parses and the "Audit the locked dependencies" step is
-  green — the user pushed `b17653e` and reported the run green (2026-09-28).
+  green — the user pushed `b17653e`, then `60dbb53`, and reported both runs
+  green (2026-09-28).
 - [x] 1.4 The audit fails when there is something to fail on. Verified against a
   throwaway project in the scratchpad (never this repository's lock) pinned to
   `requests==2.19.1`: the same command exits **1** and names what it found —
@@ -126,17 +127,16 @@
 - [x] 5.3 Hand over for the push with `handoff.md` at `awaiting-gate-2` and
   `scripts/pregate-verify.sh gate2 harden-quality-and-docs` passing. Verify: the
   verifier's output is recorded in the handoff; the branch is pushed and CI is
-  green on the last commit that changed anything CI reads — `b17653e`, reported
-  green on 2026-09-28 — and everything committed since differs only in
-  `review.md`, `handoff.md` and `tasks.md` (`git diff --name-only b17653e..HEAD`
-  prints those three and nothing else). That is the invariant the workflow
-  enforces mechanically before a merge: `scripts/workflow-verify.sh merge`
-  allows exactly `PROTOCOL_FILES='review.md handoff.md tasks.md'` to differ from
-  the reviewed commit. A literal "green on this exact head" is unreachable by
-  construction, because every gate run commits `review.md` and moves the head
-  after CI ran — which is why the rule is written against what CI can see
-  (raised four times at Gate 1 before the condition, rather than the evidence,
-  was recognised as the wrong one; the user arbitrated the rewording).
+  green on it. Reported green by the user on 2026-09-28: `b17653e`, the last
+  commit that changed anything but the protocol files, and `60dbb53` after it.
+  Between such a report and the gate that reads it, the branch can differ only
+  in `review.md`, `handoff.md` and `tasks.md` — the gate's own record-keeping
+  and this one — which is exactly the `PROTOCOL_FILES='review.md handoff.md
+  tasks.md'` list `scripts/workflow-verify.sh merge` allows to differ from a
+  reviewed commit, and `git diff --name-only b17653e..HEAD` prints those three
+  and nothing else. Each such commit is pushed and reported in turn; a literal
+  "green on the head a reviewer is reading" cannot be recorded inside the run
+  that produces that head.
 
 ## 6. Gate 2 round 1 — four majors, all accepted
 
@@ -217,21 +217,31 @@
   reaches the document and why the correction exists, and the Migration Plan
   says what a reader will notice. Verify: both documents re-read whole; the
   delta spec's guarantee and the mechanism now name each other.
-- [x] 7.2 Finding 2: three tasks were checked on evidence that does not exist
-  yet. 1.3 and 5.3 are open again — they close on a green CI run for the head
-  Gate 2 reviews, and the branch has moved under two review rounds since the
-  last green one. 3.2 stays checked with its evidence named: the user reported
-  the diagram renders on the pushed page (`bc06c2b`) and `README.md` has not
-  changed since. Verify: every unchecked task names what closes it, and nothing
-  checked claims evidence that does not exist — see 7.3, which is the same rule
-  applied once more.
+- [x] 7.2 Finding 2: three tasks were checked on evidence that did not exist
+  yet. 1.3 and 5.3 were reopened until a green CI run existed for this branch's
+  head; they are checked again above, against the runs of `b17653e` and
+  `60dbb53` the user reported green on 2026-09-28. 3.2 kept its check with its
+  evidence named: the user reported the diagram renders on the pushed page
+  (`bc06c2b`) and `README.md` has not changed since. Verify: nothing checked
+  claims evidence that does not exist, and every claim of a run names the commit
+  it was reported for.
 - [x] 7.3 Confirmation 2 found the rule's last hiding place: 5.1 claimed
-  "every task above is checked" while 1.3 and 5.3 were open. It is open too now,
-  and closes with them. The same pass removed two records that had started to
-  drift: §1.2 and §2.2 each carried their own copy of a plant table with the
+  "every task above is checked" while 1.3 and 5.3 were open. It was reopened
+  with them and is checked again now that they are. The same pass removed two
+  records that had started to drift: §1.2 and §2.2 each carried their own copy of a plant table with the
   counts of the day they were run, and both now point at §6.5, the one table
   that covers every check this change adds. §5.2's numbers were re-measured
   after the Gate 2 fixes touched application code (690 unit/api, 293
   integration, both images rebuilt). Verify: the user arbitrated this third
   confirmation, as AGENTS.md requires after two failed ones; `rg -n "passed"`
   over `tasks.md` finds counts only in §5.2 and §6.5.
+- [x] 7.4 Confirmations 4 and 5 were the same finding again, and the condition
+  rather than the evidence was what kept failing: 5.3 demanded a green run on
+  "this exact head" while every gate run commits `review.md` and moves the head
+  after CI has run. The user arbitrated the rewording; 5.3 now names the commits
+  whose runs were reported green and the `PROTOCOL_FILES` rule that bounds what
+  may differ after one. The narrative of §7.2 and §7.3 was left speaking in the
+  present about tasks that had since closed, which is the same defect this
+  change has been catching all along — both are in the past tense now. Verify:
+  no task in this file describes itself or another as still waiting, and every
+  task is checked.
