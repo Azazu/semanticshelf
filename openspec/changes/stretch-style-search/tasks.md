@@ -45,12 +45,15 @@
   or to report `undefined` rather than to divide: no triples at all, an empty
   pair set, a zero denominator and a negative denominator.
 - [ ] 2.4 The bound of design decision 2 as code, not as prose: a candidate
-  clears it only when its preference is above 0.5 **and** at least
+  clears it only when its preference is **strictly greater** than
   `incumbent + (1 - incumbent) / 2`, where `incumbent` is the highest preference
-  among the keys the service already stores. Verify: unit tests on hand-made
-  numbers — a candidate above 0.5 but short of the headroom, one that clears the
-  headroom but sits below 0.5, one that clears both, and the boundary values
-  themselves (exactly 0.5, exactly the headroom).
+  among the keys the service already stores. One condition, because the bound is
+  `(1 + incumbent) / 2` and a preference lies in [0, 1], so clearing it already
+  implies preferring the look. Verify: unit tests on hand-made numbers — a
+  candidate short of the bound, one exactly on it (refused, the comparison is
+  strict), one above it; the incumbent taken from the **highest** of several,
+  not the first or the last; and the degenerate incumbent of 0, where the bound
+  is exactly 0.5 and a candidate of 0.5 is still refused.
 - [ ] 2.5 `scripts/style_benchmark.py` runs the candidate and **every key the
   service stores image vectors under** — `clip-vit-l14` and `dinov2-large`, read
   from `app.domain`, not from a list written out here, so a key added later
@@ -100,7 +103,7 @@
   tier): each look's determinism, the blank-look refusal, the two corpus bounds,
   the allowlist, the missing-tensor refusal, the width check, the incumbents
   being derived from `app.domain`, the preference's degenerate corpora, the
-  ratio's non-positive denominator, and both halves of the bound. Verify: one
+  ratio's non-positive denominator, and the bound's strict comparison. Verify: one
   table, one row per check, each a run with that one edit and the file restored
   afterwards.
 - [ ] 5.2 `openspec validate stretch-style-search --strict` passes and every

@@ -39,10 +39,19 @@ fixed, and finding 1 turned out to reach further than it was written.
   prescribed order, and the order is now in task 2.2 and in the design.
 - Tasks grew from 15 to 16: the bound is its own task with its own tests.
 
+**Confirmation 1** confirmed findings 1 and 3 and returned finding 2: task 2.4
+asked for a test that cannot exist. The bound `incumbent + (1 - incumbent) / 2`
+is `(1 + incumbent) / 2`, which is never below 0.5, so no candidate can clear it
+while scoring under 0.5 — the second condition was redundant and its test
+impossible. The bound is now **one strict comparison**, the design says why that
+subsumes the indifference floor, and task 2.4's cases are the ones that exist:
+short of the bound, exactly on it (refused), above it, the incumbent taken from
+the highest of several, and the degenerate incumbent of 0.
+
 ## Next step
 
-`scripts/gate-run.sh stretch-style-search 1 confirm 1` — confirmation of round
-1. `scripts/pregate-verify.sh gate1 stretch-style-search` passes (16 tasks, tier
+`scripts/gate-run.sh stretch-style-search 1 confirm 1` — second confirmation of
+round 1. `scripts/pregate-verify.sh gate1 stretch-style-search` passes (16 tasks, tier
 declared, applicability table present, links resolve) and
 `openspec validate stretch-style-search --strict` is clean.
 

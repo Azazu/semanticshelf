@@ -124,23 +124,31 @@ so it is never negative, never has a zero denominator, and is unchanged by any
 monotone rescaling of a model's similarities — none of the three defects above
 can arise in it. 0.5 is indifference; `dinov2-large` sits at 0.003.
 
-**The bound, fixed here and before the full run.** A candidate earns a key only
-when both hold against the **best** of the keys the service already stores:
+**The bound, fixed here and before the full run.** One condition, against the
+**best** of the keys the service already stores: the candidate closes more than
+half the remaining distance to a perfect score,
 
-1. its preference is **above 0.5** — it must actually prefer the look, because a
-   model that still ranks the subject first is answering the question the two
-   installed keys already answer;
-2. it closes **half the remaining distance to a perfect score**:
-   `candidate ≥ incumbent + (1 − incumbent) / 2`.
+```text
+candidate > incumbent + (1 − incumbent) / 2
+```
 
-Neither number is read off the probe. The first is the metric's own point of
-indifference. The second is the only scale-free way to say "decisively better"
-about a proportion: a multiplicative rule is meaningless where `3 × 0.4` exceeds
-1, and a fixed additive margin is easy against a weak incumbent and impossible
-against a strong one, while half the remaining headroom costs the same effort
-wherever the incumbent stands. On the probe's four pictures that bound is 0.510
-and the candidate reaches 0.450 — close enough that the full run genuinely
-decides, which is the shape a measurement should have.
+Its shape, not its value, is what was chosen: half the remaining headroom is the
+only scale-free way to say "decisively better" about a proportion. A
+multiplicative rule is meaningless where `3 × 0.4` exceeds 1; a fixed additive
+margin is easy against a weak incumbent and unreachable against a strong one;
+half the headroom costs the same effort wherever the incumbent stands.
+
+It also subsumes the indifference floor, which is why there is no second
+condition. The right-hand side is `(1 + incumbent) / 2`, and a preference lies
+in [0, 1], so the bound is never below 0.5: a candidate that clears it has
+already been shown to prefer the look rather than the subject. The comparison is
+**strict** for the one point where that would otherwise be tight — a candidate at
+exactly 0.5 against an incumbent at exactly 0 — and because a tie does not buy a
+migration.
+
+On the probe's four pictures the bound is 0.510 and the candidate reaches
+0.450 — close enough that the full run genuinely decides, which is the shape a
+measurement should have.
 
 The ratio is published **beside** the preference, per model, as a diagnostic,
 with `undefined` printed in place of a value whenever its denominator is not
