@@ -1,7 +1,7 @@
 # Handoff — stretch-multilingual-queries
 
 **Updated:** 2026-09-28 · claude
-**State:** awaiting-gate-2
+**State:** ready-to-merge
 **Branch:** change/stretch-multilingual-queries
 
 ## Done this session
@@ -68,15 +68,13 @@ at runtime can check; and the endpoint still described itself as English-only
 with scores comparable within a model. Twenty-two plants now, twenty-two
 failures.
 
+**Gate 1** confirmed at `0d4115d`, **Gate 2** confirmed at `a2732c3` — all
+three findings of each round.
+
 ## Next step
 
-The user pushes `change/stretch-multilingual-queries` and watches CI, then
-`/gate-review stretch-multilingual-queries 2 confirm 2`.
-
-Two things a reviewer should know where to find. The encoder is **off by
-default**, so CI downloads nothing and the default build is unchanged in every
-respect. The corpus behind the published numbers is the 500-picture demo sample
-indexed with `clip-vit-l14`, and the how-to names the command that produces it.
+`/git:merge stretch-multilingual-queries`, then `/opsx:archive`. The change
+carries two spec deltas (`text-search`, `embedding-models`) for the sync.
 
 ## Blockers
 
