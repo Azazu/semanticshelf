@@ -105,6 +105,7 @@ class Corpus:
     models in memory at once.
     """
 
+    root: Path
     paths: tuple[Path, ...]
     looks: tuple[str, ...]
 
@@ -114,11 +115,16 @@ class Corpus:
         return len(self.paths) * len(self.looks)
 
 
+#: What counts as a photograph here. The demo corpus stores each picture in a
+#: directory of its own beside a sidecar, so the walk is recursive.
+SUFFIXES: Final = frozenset({".jpg", ".jpeg"})
+
+
 def photographs(folder: Path) -> tuple[Path, ...]:
-    """Every picture of a folder, in a fixed order so a re-run measures the
-    same corpus."""
-    found = [path for path in sorted(folder.iterdir()) if path.suffix.lower() in {".jpg", ".jpeg"}]
-    return tuple(found)
+    """Every picture under a folder, in a fixed order so a re-run measures the
+    same corpus. `rglob` does not promise an order, so the result is sorted."""
+    found = [path for path in folder.rglob("*") if path.suffix.lower() in SUFFIXES]
+    return tuple(sorted(found))
 
 
 def corpus_of(folder: Path, *, limit: int | None = None) -> Corpus:
@@ -126,7 +132,7 @@ def corpus_of(folder: Path, *, limit: int | None = None) -> Corpus:
     paths = photographs(folder)
     if limit is not None:
         paths = paths[:limit]
-    corpus = Corpus(paths=paths, looks=tuple(LOOKS))
+    corpus = Corpus(root=folder, paths=paths, looks=tuple(LOOKS))
     check_size(corpus)
     return corpus
 

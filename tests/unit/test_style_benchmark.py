@@ -1,0 +1,219 @@
+"""The arithmetic ADR-006 rests on, and every value it refuses to divide by.
+
+`scripts/style_benchmark.py` decides whether this project writes a migration
+for a third model key, so the parts of it that are not a model are checked here
+on hand-made vectors: what the deciding preference means, what the diagnostic
+ratio means and when it has no value, and the bound — including the boundary it
+sits exactly on.
+"""
+
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from app.domain import EMBEDDING_MODELS
+from tests.scripts import script_module
+
+benchmark = script_module("style_benchmark")
+Label = script_module("style_corpus").Label
+
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "style_benchmark.py"
+
+
+def corpus(pictures: int, looks: int) -> list[object]:
+    """Labels for a `pictures × looks` corpus, in the order the stream makes."""
+    names = ["plain", "grayscale", "posterised", "edges", "painterly", "sepia"][:looks]
+    return [Label(picture=p, look=look) for p in range(pictures) for look in names]
+
+
+def directions(labels: list[object], axis: str, width: int = 8) -> np.ndarray:
+    """Unit vectors that depend on one side of a label and nothing else.
+
+    `axis="look"` builds a model that sees only the look: two images sharing a
+    look are the same vector, and one photograph under two looks is orthogonal
+    to itself. `axis="picture"` is its mirror.
+    """
+    keys = sorted({getattr(label, axis) for label in labels})
+    rows = np.zeros((len(labels), max(width, len(keys))), dtype=np.float32)
+    for index, label in enumerate(labels):
+        rows[index, keys.index(getattr(label, axis))] = 1.0
+    return rows
+
+
+# --- the deciding number -------------------------------------------------------
+
+
+def test_a_model_that_sees_only_the_look_prefers_it_every_time() -> None:
+    labels = corpus(pictures=4, looks=3)
+
+    assert benchmark.preference(directions(labels, "look"), labels) == 1.0
+
+
+def test_a_model_that_sees_only_the_subject_never_prefers_the_look() -> None:
+    labels = corpus(pictures=4, looks=3)
+
+    assert benchmark.preference(directions(labels, "picture"), labels) == 0.0
+
+
+def test_a_model_that_cannot_tell_them_apart_sits_exactly_at_indifference() -> None:
+    """Every comparison is a tie, and a tie counts a half — the alternative is
+    to call it a win for one side, which would be an opinion."""
+    labels = corpus(pictures=4, looks=3)
+    identical = np.tile(np.array([[1.0, 0.0, 0.0]], dtype=np.float32), (len(labels), 1))
+
+    assert benchmark.preference(identical, labels) == 0.5
+
+
+def test_the_per_look_breakdown_restricts_the_anchors_to_that_look() -> None:
+    """One look carries the average and the other works against it.
+
+    Every `plain` image is the same vector, so its look-mates sit at 1 while
+    its own photograph under the other look sits at 0.9 — the look wins from a
+    `plain` anchor. Seen from a `grayscale` anchor the same two numbers are
+    0.81 and 0.9, and the look loses. One corpus, one model, two rows that
+    disagree: which is what a breakdown is for.
+    """
+    labels = corpus(pictures=3, looks=2)
+    rows = np.zeros((len(labels), 8), dtype=np.float32)
+    for index, label in enumerate(labels):
+        if label.look == "plain":
+            rows[index, 0] = 1.0
+        else:
+            rows[index, 0] = 0.9
+            rows[index, 1 + label.picture] = float(np.sqrt(1 - 0.81))
+
+    assert benchmark.preference(rows, labels, look="plain") == 1.0
+    assert benchmark.preference(rows, labels, look="grayscale") == 0.0
+    assert benchmark.preference(rows, labels) == 0.5
+
+
+def test_a_corpus_of_one_look_forms_no_triple_and_is_refused() -> None:
+    """No photograph under a second look, so there is nothing to compare a
+    look-mate against; a number computed from nothing must not be printed."""
+    labels = corpus(pictures=6, looks=1)
+
+    with pytest.raises(benchmark.NoTriplesError):
+        benchmark.preference(directions(labels, "picture"), labels)
+
+
+def test_a_corpus_of_one_photograph_forms_no_triple_and_is_refused() -> None:
+    labels = corpus(pictures=1, looks=6)
+
+    with pytest.raises(benchmark.NoTriplesError):
+        benchmark.preference(directions(labels, "look"), labels)
+
+
+def test_the_number_of_triples_is_what_the_corpus_shape_says() -> None:
+    """Every image is an anchor, with `pictures - 1` look-mates and
+    `looks - 1` picture-mates."""
+    labels = corpus(pictures=4, looks=3)
+
+    assert benchmark.count_triples(labels) == 4 * 3 * (4 - 1) * (3 - 1)
+
+
+# --- the diagnostic, and where it has no value ---------------------------------
+
+
+def test_the_two_averages_are_the_two_sides_of_the_comparison() -> None:
+    labels = corpus(pictures=3, looks=2)
+
+    measured = benchmark.averages(directions(labels, "look"), labels)
+
+    assert measured.same_look == pytest.approx(1.0)
+    assert measured.same_picture == pytest.approx(0.0)
+    assert (measured.look_pairs, measured.picture_pairs) == (6, 3)
+
+
+def test_a_side_with_no_pairs_at_all_has_no_average() -> None:
+    labels = corpus(pictures=1, looks=4)
+
+    measured = benchmark.averages(directions(labels, "look"), labels)
+
+    assert measured.same_look is None
+    assert measured.look_pairs == 0
+
+
+def test_a_zero_denominator_is_undefined_rather_than_a_division() -> None:
+    measured = benchmark.Averages(same_look=0.4, same_picture=0.0, look_pairs=6, picture_pairs=3)
+
+    assert measured.ratio is None
+
+
+def test_a_negative_denominator_is_undefined_rather_than_a_reversed_ordering() -> None:
+    """Through a negative denominator the ratio changes sign, so a model that
+    ranks the subject first can outscore one that ranks the look first."""
+    measured = benchmark.Averages(same_look=0.4, same_picture=-0.2, look_pairs=6, picture_pairs=3)
+
+    assert measured.ratio is None
+
+
+def test_a_missing_average_leaves_the_ratio_undefined() -> None:
+    assert benchmark.Averages(0.4, None, 6, 0).ratio is None
+    assert benchmark.Averages(None, 0.4, 0, 3).ratio is None
+
+
+def test_a_positive_denominator_is_the_plain_ratio() -> None:
+    assert benchmark.Averages(0.4, 0.8, 6, 3).ratio == pytest.approx(0.5)
+
+
+def test_undefined_is_printed_as_a_word_not_as_a_number() -> None:
+    assert benchmark.shown(None) == "undefined"
+    assert benchmark.shown(0.4567) == "0.457"
+
+
+# --- the bound -----------------------------------------------------------------
+
+
+def test_the_bound_is_half_the_distance_the_incumbent_still_has_to_go() -> None:
+    assert benchmark.bound([0.0]) == 0.5
+    assert benchmark.bound([0.2]) == pytest.approx(0.6)
+    assert benchmark.bound([0.9]) == pytest.approx(0.95)
+
+
+def test_the_bound_is_taken_against_the_best_incumbent_not_the_first() -> None:
+    """A candidate that beats one stored key and duplicates another has not
+    answered the question the measurement asks."""
+    assert benchmark.bound([0.02, 0.60, 0.11]) == pytest.approx(0.8)
+
+
+def test_a_candidate_short_of_the_bound_does_not_clear_it() -> None:
+    assert benchmark.clears(0.79, [0.60]) is False
+
+
+def test_a_candidate_exactly_on_the_bound_does_not_clear_it() -> None:
+    """Strict: a tie does not buy a migration."""
+    assert benchmark.clears(0.8, [0.60]) is False
+
+
+def test_a_candidate_above_the_bound_clears_it() -> None:
+    assert benchmark.clears(0.81, [0.60]) is True
+
+
+def test_against_an_incumbent_at_zero_the_bound_is_indifference_itself() -> None:
+    """The one point where the bound would coincide with 0.5, which is why the
+    comparison is strict and why there is no second condition."""
+    assert benchmark.bound([0.0]) == 0.5
+    assert benchmark.clears(0.5, [0.0]) is False
+    assert benchmark.clears(0.51, [0.0]) is True
+
+
+def test_a_margin_over_nothing_is_refused() -> None:
+    with pytest.raises(ValueError, match="margin"):
+        benchmark.bound([])
+
+
+# --- what gets measured --------------------------------------------------------
+
+
+def test_the_measured_keys_are_the_ones_the_domain_declares() -> None:
+    assert benchmark.incumbents() == tuple(sorted(EMBEDDING_MODELS))
+
+
+def test_no_model_key_is_written_out_in_the_command() -> None:
+    """The point of reading them from the domain: a key added to
+    `EMBEDDING_MODELS` later appears in this measurement without anybody
+    remembering to add it here."""
+    source = SCRIPT.read_text(encoding="utf-8")
+
+    assert [key for key in EMBEDDING_MODELS if key in source] == []

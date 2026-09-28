@@ -33,7 +33,7 @@
   768, unit rows, a batch keeping its order, and the refusal when a tensor is
   missing; a unit test that the allowlist is exactly those four globals and
   that `weights_only=False` appears nowhere in the repository.
-- [ ] 2.3 The two statistics of design decision 2. **Deciding:** the rank
+- [x] 2.3 The two statistics of design decision 2. **Deciding:** the rank
   preference — over every triple (anchor, a different picture under the anchor's
   look, the anchor's picture under another look), the fraction where the
   look-mate scores above the picture-mate, a tie counting a half.
@@ -44,7 +44,7 @@
   (0.0), an exact tie (0.5), and the degenerate corpora, each watched to refuse
   or to report `undefined` rather than to divide: no triples at all, an empty
   pair set, a zero denominator and a negative denominator.
-- [ ] 2.4 The bound of design decision 2 as code, not as prose: a candidate
+- [x] 2.4 The bound of design decision 2 as code, not as prose: a candidate
   clears it only when its preference is **strictly greater** than
   `incumbent + (1 - incumbent) / 2`, where `incumbent` is the highest preference
   among the keys the service already stores. One condition, because the bound is
@@ -54,7 +54,7 @@
   strict), one above it; the incumbent taken from the **highest** of several,
   not the first or the last; and the degenerate incumbent of 0, where the bound
   is exactly 0.5 and a candidate of 0.5 is still refused.
-- [ ] 2.5 `scripts/style_benchmark.py` runs the candidate and **every key the
+- [x] 2.5 `scripts/style_benchmark.py` runs the candidate and **every key the
   service stores image vectors under** — `clip-vit-l14` and `dinov2-large`, read
   from `app.domain`, not from a list written out here, so a key added later
   cannot be forgotten — over the built corpus, and prints a Markdown table: the

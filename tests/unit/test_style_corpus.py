@@ -106,6 +106,7 @@ def test_a_gradient_is_refused_under_no_look() -> None:
 
 def test_too_few_photographs_is_refused(tmp_path: Path) -> None:
     small = corpus.Corpus(
+        root=tmp_path,
         paths=tuple(tmp_path / f"{n}.jpg" for n in range(corpus.MIN_PICTURES - 1)),
         looks=tuple(corpus.LOOKS),
     )
@@ -116,6 +117,7 @@ def test_too_few_photographs_is_refused(tmp_path: Path) -> None:
 
 def test_exactly_the_minimum_number_of_photographs_is_measured(tmp_path: Path) -> None:
     enough = corpus.Corpus(
+        root=tmp_path,
         paths=tuple(tmp_path / f"{n}.jpg" for n in range(corpus.MIN_PICTURES)),
         looks=tuple(corpus.LOOKS),
     )
@@ -125,6 +127,7 @@ def test_exactly_the_minimum_number_of_photographs_is_measured(tmp_path: Path) -
 
 def test_too_few_looks_is_refused(tmp_path: Path) -> None:
     narrow = corpus.Corpus(
+        root=tmp_path,
         paths=tuple(tmp_path / f"{n}.jpg" for n in range(corpus.MIN_PICTURES)),
         looks=tuple(corpus.LOOKS)[: corpus.MIN_LOOKS - 1],
     )
@@ -149,6 +152,18 @@ def test_the_corpus_is_read_in_a_fixed_order(tmp_path: Path) -> None:
     assert [path.name for path in corpus.photographs(tmp_path)] == ["a.jpg", "b.jpg", "c.jpg"]
 
 
+def test_a_picture_in_a_directory_of_its_own_is_found(tmp_path: Path) -> None:
+    """The demo corpus stores each photograph beside its sidecar in a directory
+    named after it, so a walk that read one level would measure nothing."""
+    for name in ("b", "a"):
+        shard = tmp_path / name
+        shard.mkdir()
+        photograph(size=(8, 8)).save(shard / f"{name}.jpg")
+        (shard / f"{name}.json").write_text("{}", encoding="utf-8")
+
+    assert [path.name for path in corpus.photographs(tmp_path)] == ["a.jpg", "b.jpg"]
+
+
 def test_only_pictures_are_read(tmp_path: Path) -> None:
     photograph(size=(8, 8)).save(tmp_path / "a.jpg")
     (tmp_path / "notes.txt").write_text("not a photograph", encoding="utf-8")
@@ -159,7 +174,9 @@ def test_only_pictures_are_read(tmp_path: Path) -> None:
 def test_every_look_of_every_photograph_is_streamed_with_its_label(tmp_path: Path) -> None:
     for name in ("a.jpg", "b.jpg"):
         photograph(size=(16, 16)).save(tmp_path / name)
-    plan = corpus.Corpus(paths=corpus.photographs(tmp_path), looks=("plain", "grayscale"))
+    plan = corpus.Corpus(
+        root=tmp_path, paths=corpus.photographs(tmp_path), looks=("plain", "grayscale")
+    )
 
     labels = [label for label, _ in corpus.images(plan)]
 
@@ -174,7 +191,9 @@ def test_every_look_of_every_photograph_is_streamed_with_its_label(tmp_path: Pat
 def test_what_the_corpus_holds_is_reported_after_the_refusals(tmp_path: Path) -> None:
     for name in ("a.jpg", "b.jpg"):
         photograph(size=(16, 16)).save(tmp_path / name)
-    plan = corpus.Corpus(paths=corpus.photographs(tmp_path), looks=("plain", "grayscale"))
+    plan = corpus.Corpus(
+        root=tmp_path, paths=corpus.photographs(tmp_path), looks=("plain", "grayscale")
+    )
 
     pictures, looks = corpus.present([label for label, _ in corpus.images(plan)])
 
@@ -184,7 +203,7 @@ def test_what_the_corpus_holds_is_reported_after_the_refusals(tmp_path: Path) ->
 def test_a_batch_keeps_the_order_and_the_last_short_one(tmp_path: Path) -> None:
     for name in ("a.jpg", "b.jpg", "c.jpg"):
         photograph(size=(8, 8)).save(tmp_path / name)
-    plan = corpus.Corpus(paths=corpus.photographs(tmp_path), looks=("plain",))
+    plan = corpus.Corpus(root=tmp_path, paths=corpus.photographs(tmp_path), looks=("plain",))
 
     batches = [labels for labels, _ in corpus.batched(corpus.images(plan), 2)]
 
