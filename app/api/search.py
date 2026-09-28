@@ -89,8 +89,10 @@ TAGS_ANY_DESCRIPTION = "Rank only assets carrying at least one of these tags."
 
 MODEL_DESCRIPTION = (
     "Which model answers. It must be one this build runs — otherwise 503 — and one that can "
-    "take this kind of query — otherwise 422. Scores of different models are never comparable, "
-    "and the query is always embedded by the model whose vectors are searched."
+    "take this kind of query — otherwise 422. Scores of different models are never comparable. "
+    "A text search may also name a **query encoder**, which embeds the question into another "
+    "model's space and ranks the vectors stored there: the answer then names both, and a score "
+    "is comparable only within that pair."
 )
 
 
@@ -114,6 +116,7 @@ def _rendered(page: ServicePage, *, limit: int, offset: int) -> SearchPage:
         offset=offset,
         has_more=page.has_more,
         model=page.model,
+        encoder=page.encoder,
         query_truncated=page.query_truncated,
         scan_limited=page.scan_limited,
     )

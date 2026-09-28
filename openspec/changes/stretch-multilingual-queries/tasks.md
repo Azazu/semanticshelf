@@ -46,7 +46,7 @@
 
 ## 2. Asking for it
 
-- [ ] 2.1 `app/services/search.py` and `app/api/search.py`: `model=` resolves to
+- [x] 2.1 `app/services/search.py` and `app/api/search.py`: `model=` resolves to
   either a storage model or a query encoder; an encoder embeds the query and
   the search ranks the vectors of the space it declares (delta spec,
   `text-search`). A named encoder this build does not run is 503; an encoder
@@ -54,13 +54,13 @@
   can take. Verify: api tests with the fake for each path — resolved encoder,
   unknown encoder, encoder asked for a picture query, and the default unchanged
   when nothing is named.
-- [ ] 2.2 `app/schemas/search.py`: the answer names the pair — the storage model
+- [x] 2.2 `app/schemas/search.py`: the answer names the pair — the storage model
   whose vectors were ranked and, when it is not that model's own text side, the
   encoder that embedded the query. The OpenAPI example of `/search/text` shows
   both (FR-OPS-4, and the published document carries the example verbatim).
   Verify: api test that the field appears exactly when an encoder was used, and
   `tests/api/test_openapi_examples.py` still passes with the example updated.
-- [ ] 2.3 Nothing is written under an encoder's name: no queue row, no
+- [x] 2.3 Nothing is written under an encoder's name: no queue row, no
   embedding, no appearance in `/stats` or in an asset's `index_status` (delta
   spec, `embedding-models`). Verify: an integration test that runs a search
   through the encoder and asserts the tables and the counts are as they were.
