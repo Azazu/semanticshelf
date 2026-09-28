@@ -67,23 +67,23 @@
 - [ ] 2.6 The instalments of design decision 6: `--only <model>` measures one
   model and stops, and `--cache <directory>` stores what a run computed and
   reuses it when a later run asks for the same thing. A cached file carries a
-  fingerprint over everything that can change a vector — the corpus root, **each
-  photograph's content**, the looks, the labels, and **each model's observed
-  identity**: `CHECKPOINT@REVISION` plus the `open_clip` version for the
-  candidate, and the configured checkpoint name plus the commit hash the local
-  model cache resolved it to for an incumbent, whose key alone says nothing
-  about which weights answered. A file whose fingerprint does not match is
-  recomputed rather than read, and a model whose identity cannot be resolved
-  disables the cache for that model. The write is to a temporary name in the
-  same directory, then a rename. Verify: unit tests, each watched to refuse — a
-  cache is not read when a photograph's bytes changed, when one is added or
-  removed, when the set of looks changed, when the candidate's pinned revision
-  changed, when the `open_clip` version changed, when **an incumbent's
-  configured checkpoint name changed**, and when **the commit hash that name
-  resolves to changed**; an unresolvable identity disables the cache rather than
-  reading it; a round trip returns the same vectors and the same labels; a run
-  with no `--cache` creates no file; and the write is shown to be a rename of a
-  temporary file rather than a write in place.
+  fingerprint over the corpus side — the corpus root, **each photograph's
+  content**, the looks and the labels — and is accepted on the model side only
+  after the run **re-embeds the first few images with the model it loaded and
+  matches them against the cached rows** within a stated tolerance, because a
+  model key here names a setting rather than a checkpoint (design decision 6).
+  A file that fails either is recomputed and replaced, and the run says which
+  model it recomputed and why. The write is to a temporary name in the same
+  directory, then a rename. Verify: unit tests, each watched to refuse — the
+  corpus fingerprint rejects a cache when a photograph's bytes changed, when one
+  is added or removed, and when the set of looks or the labels changed; the
+  behavioural check rejects a cache whose rows a stand-in model no longer
+  reproduces, accepts one perturbed only within the tolerance, and rejects one
+  perturbed just beyond it; a round trip returns the same vectors and the same
+  labels; a run with no `--cache` creates no file; and the write is shown to be
+  a rename of a temporary file rather than a write in place. Plus a `models`
+  -suite check (real weights, never in CI) that a cache written by one run is
+  accepted by the next.
 
 ## 3. The decision
 

@@ -82,21 +82,30 @@ Two rows of the applicability table changed with it — "crash around an externa
 effect" now has a second effect to answer for, and "concurrent writers" is no
 longer `n/a`.
 
-**Round 2 returned one major finding, and it was the right one to find.** The
-fingerprint named "the model", but only the candidate is pinned here:
-`clip-vit-l14` and `dinov2-large` load a checkpoint *name* that is a setting,
-with no revision, and the processor comes from that same repository. A cache
-keyed on the model key would have served vectors from different weights under
-the same name. Fixed: the fingerprint carries what a run can observe about the
-weights it actually read — `CHECKPOINT@REVISION` plus the `open_clip` version
-for the candidate, the configured name plus the commit hash the local model
-cache resolved it to for an incumbent — and an identity it cannot resolve
-disables the cache for that model rather than guessing.
+**Round 2 returned one major finding, and the first answer to it was wrong in
+the same way.** The fingerprint named "the model", but only the candidate is
+pinned here: `clip-vit-l14` and `dinov2-large` load a checkpoint *name* that is
+a setting, with no revision. The first fix added the name and a commit hash
+resolved from the local cache; the confirmation pointed out that each adapter
+resolves the weights and the processor in two separate calls, that a later
+lookup can report a snapshot neither of them read, and that the processor's
+behaviour depends on the installed `transformers` too. Both are true, and they
+are the same defect: a list of names and versions is always one entry short.
+
+So the model side is no longer described — it is **checked**. A run that wants
+to read a cache re-embeds the corpus's first few images with the model it
+loaded and compares them with the cached rows. They match exactly when the
+loaded model is the same function from picture to vector as the one that filled
+the file, which is the only property the reuse depends on. A cache is then a
+saving of the embedding, not of the loading.
 
 ## Next step
 
-`scripts/gate-run.sh stretch-style-search 1 confirm 2` — confirmation of round
-2, then task 2.6 and the run.
+`scripts/gate-run.sh stretch-style-search 1 confirm 2` — second confirmation of
+round 2, then task 2.6 and the run. Per AGENTS.md this is the last confirmation
+attempt on this finding: if it fails again the cache is dropped and the change
+goes back to the shape Gate 1 already approved, with the measurement run in one
+sitting.
 
 **Then blocked on one run** (below). When its output exists: fill ADR-006's Decision
 and Consequences and set its status, add "What one run says" and "Reading it" to

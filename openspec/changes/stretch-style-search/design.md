@@ -233,24 +233,33 @@ the model's identity. A file whose fingerprint does not match is not read — it
 is recomputed and replaced. Nothing about a cached file is trusted except after
 that comparison.
 
-**A model's identity is not its key.** Only the candidate is pinned by this
-repository; `clip-vit-l14` and `dinov2-large` load a checkpoint *name* that is a
-setting, with no revision, so the same key can mean different weights on two
-machines or on the same machine a month apart — and the processor that resizes
-and normalises a picture comes from that same repository. What goes into the
-fingerprint is therefore what the run can observe about the weights it actually
-read:
+**The model side is checked by behaviour, not by metadata.** Naming the model
+is not enough and cannot be made enough here. Only the candidate is pinned by
+this repository; `clip-vit-l14` and `dinov2-large` load a checkpoint *name* that
+is a setting, with no revision, and each adapter resolves the weights and the
+processor in two separate calls, so the same key can mean different weights on
+two machines, on the same machine a month apart, or even between those two
+calls. The preprocessing depends on the installed `transformers` — and, for the
+candidate, on the installed `open_clip` — as much as on the repository. A
+fingerprint over names and versions would be a list of the ways this can go
+wrong, always one entry short.
 
-- for the candidate, `CHECKPOINT@REVISION` — pinned here — **and the
-  `open_clip` version**, because its preprocessing comes from the package
-  rather than from the checkpoint;
-- for an incumbent, the configured checkpoint name **and the commit hash the
-  local model cache resolved that name to**, which is the snapshot
-  `from_pretrained` read and which carries the processor with it.
+So the cache does not describe the model. It **re-embeds the corpus's first few
+images with the model this run loaded and compares them with the rows the cached
+file holds**. They match, to a tight tolerance, exactly when the loaded model is
+the same function from picture to vector as the one that filled the cache —
+which is the only property the reuse depends on. Whatever changed the weights,
+the processor, the package that supplies it or the configured name changes those
+rows, and no enumeration has to be kept up to date.
 
-If a model's identity cannot be resolved, the cache is not used for that model:
-it recomputes and says so. Fail-closed, because the alternative is a number
-whose provenance nobody can reconstruct.
+The tolerance is there because the arithmetic, not the model, varies: a
+different thread count sums a reduction in a different order. It is far below
+the distance between two checkpoints and far above that noise.
+
+A cache is therefore a saving of the **embedding**, not of the loading: a run
+that reads one still builds the model, and spends a few seconds on the check
+instead of minutes on six hundred pictures. If the check fails the file is
+recomputed and replaced, and the run says which model it recomputed and why.
 
 **Writes are atomic.** Written to a temporary name in the same directory and
 renamed, so a crash leaves either the previous file or none, never half of one.
@@ -285,14 +294,14 @@ that computes everything.
 - **The answer may be "no key"**, after the work of measuring → that is the
   outcome this change is shaped to allow, and the requirement it adds makes it
   the normal one rather than a failure.
-- **A cache could publish a number nobody measured** → the fingerprint covers
-  every input that can change a vector: each photograph's content, the looks and
-  labels, and each model's observed identity — the pinned revision and the
-  `open_clip` version for the candidate, the configured name and the resolved
-  commit hash for an incumbent, whose key alone says nothing about which weights
-  answered. A file that does not match is recomputed rather than read, an
-  identity that cannot be resolved disables the cache for that model, and the
-  tests for all of it are tests of the mismatch, not of the hit.
+- **A cache could publish a number nobody measured** → the corpus side is a
+  fingerprint over each photograph's content, the looks and the labels; the
+  model side is a behavioural check, because a model key here names a setting
+  rather than a checkpoint. *What it does not guarantee:* two genuinely
+  different models that agreed on the checked images to within the tolerance
+  would pass. That is vanishingly unlikely between checkpoints, and the
+  alternative — a list of names and versions — was demonstrably one entry short
+  twice over. The tests are tests of the mismatch, not of the hit.
 
 ## Migration Plan
 
