@@ -12,7 +12,12 @@ the same reason it would be refused in production.
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from app.domain import IMPLEMENTED_MODELS, dimension_of, modality_of
+from app.domain import (
+    IMPLEMENTED_MODELS,
+    IMPLEMENTED_QUERY_ENCODERS,
+    dimension_of,
+    modality_of,
+)
 from app.ml import registry
 from app.ml.fake import FakeEmbedder
 
@@ -32,7 +37,11 @@ def fake_models() -> Iterator[None]:
     """
     registry.clear()
     original = dict(registry.FACTORIES)
-    for key in IMPLEMENTED_MODELS:
+    # Encoders too: one of them is gigabytes of weights for a query, and a
+    # test that names one must no more load it than a test that uploads a
+    # picture loads CLIP. A fake encoder embeds into the fake space of the
+    # model it answers in, which is exactly what its real counterpart claims.
+    for key in IMPLEMENTED_MODELS | IMPLEMENTED_QUERY_ENCODERS:
         registry.FACTORIES[key] = lambda _settings, key=key: fake_for(key)
     try:
         yield

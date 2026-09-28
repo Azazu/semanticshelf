@@ -11,7 +11,14 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-from app.domain import CLIP_VIT_L14, IMPLEMENTED_MODELS, INLINE_RUNNER, IndexingRunner
+from app.domain import (
+    CLIP_VIT_L14,
+    IMPLEMENTED_MODELS,
+    IMPLEMENTED_QUERY_ENCODERS,
+    INLINE_RUNNER,
+    QUERY_ENCODERS,
+    IndexingRunner,
+)
 
 ASYNCPG_SCHEME = "postgresql+asyncpg://"
 
@@ -20,6 +27,16 @@ LogLevel = Literal["debug", "info", "warning", "error"]
 DEFAULT_MODEL_CACHE = Path(".data/models")
 DEFAULT_CLIP_CHECKPOINT = "openai/clip-vit-large-patch14"
 DEFAULT_DINOV2_CHECKPOINT = "facebook/dinov2-large"
+DEFAULT_MCLIP_CHECKPOINT = "M-CLIP/XLM-Roberta-Large-Vit-L-14"
+#: Pinned, unlike the two above, and for a reason the others do not have:
+#: the published measurement of ADR-005 is evidence about *these* bytes. A
+#: branch name would let a deployment answer differently from the run the
+#: documentation quotes, under the same key and with nothing to notice it by.
+DEFAULT_MCLIP_REVISION = "40afa80a85e8efa990384a24bbe5a1f6f1cc81b5"
+#: The architecture the checkpoint's weights are poured into comes from a
+#: second repository, named by the checkpoint's own config, and it is pinned
+#: for the same reason: a config that changes builds a different model.
+DEFAULT_MCLIP_BASE_REVISION = "c23d21b0620b635a76227c604d44e43a9f0ee389"
 DEFAULT_MEDIA_ROOT = Path(".data/media")
 MIB = 1024 * 1024
 
@@ -61,6 +78,17 @@ class Settings(BaseSettings):
     #: mirror or compatible fine-tune is fine, a different width is refused at
     #: load rather than stored.
     dinov2_model_name: str = DEFAULT_DINOV2_CHECKPOINT
+    #: Which query encoders this build runs. Empty by default: an encoder is
+    #: gigabytes of weights for a question most deployments do not ask, and
+    #: enabling one must be a decision rather than an inheritance.
+    enabled_query_encoders: Annotated[tuple[str, ...], NoDecode] = ()
+    #: The checkpoint behind the `mclip-xlmr-l14` key, and the two revisions it
+    #: is read at (the second is the base architecture's config). Substituting
+    #: a mirror is allowed under the same width rule as the models above; moving
+    #: a revision means the published numbers are about something else.
+    mclip_model_name: str = DEFAULT_MCLIP_CHECKPOINT
+    mclip_revision: str = DEFAULT_MCLIP_REVISION
+    mclip_base_revision: str = DEFAULT_MCLIP_BASE_REVISION
     #: 0 leaves torch its own default of one thread per physical core.
     torch_num_threads: int = Field(default=0, ge=0)
     embed_batch_size: int = Field(default=8, gt=0)
@@ -131,7 +159,7 @@ class Settings(BaseSettings):
     def _normalise_log_level(cls, value: object) -> object:
         return value.strip().lower() if isinstance(value, str) else value
 
-    @field_validator("enabled_models", "model_warmup", mode="before")
+    @field_validator("enabled_models", "model_warmup", "enabled_query_encoders", mode="before")
     @classmethod
     def _split_comma_separated(cls, value: object) -> object:
         """`ENABLED_MODELS=clip-vit-l14,dinov2-large` rather than JSON.
@@ -166,6 +194,28 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"MODEL_WARMUP names models that are not enabled: {', '.join(not_enabled)}"
             )
+        unknown_encoders = [
+            key for key in self.enabled_query_encoders if key not in IMPLEMENTED_QUERY_ENCODERS
+        ]
+        if unknown_encoders:
+            raise ValueError(
+                "ENABLED_QUERY_ENCODERS names encoders this build does not implement: "
+                f"{', '.join(unknown_encoders)}; "
+                f"implemented: {', '.join(sorted(IMPLEMENTED_QUERY_ENCODERS)) or 'none'}"
+            )
+        # An encoder answers in another model's space, so without that model
+        # there is nothing for its vectors to be compared with: a search would
+        # return an empty page and look like a corpus problem.
+        spaceless = [
+            f"{key} (needs {QUERY_ENCODERS[key]})"
+            for key in self.enabled_query_encoders
+            if QUERY_ENCODERS[key] not in self.enabled_models
+        ]
+        if spaceless:
+            raise ValueError(
+                "ENABLED_QUERY_ENCODERS names encoders whose model is not enabled: "
+                f"{', '.join(spaceless)}"
+            )
         return self
 
 
@@ -173,6 +223,9 @@ __all__ = [
     "CLIP_VIT_L14",
     "DEFAULT_CLIP_CHECKPOINT",
     "DEFAULT_DINOV2_CHECKPOINT",
+    "DEFAULT_MCLIP_BASE_REVISION",
+    "DEFAULT_MCLIP_CHECKPOINT",
+    "DEFAULT_MCLIP_REVISION",
     "DEFAULT_MODEL_CACHE",
     "LogLevel",
     "Settings",

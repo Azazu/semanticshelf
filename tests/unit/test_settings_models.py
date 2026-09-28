@@ -2,6 +2,7 @@
 the environment, and the guard that keeps a configuration from naming a model
 this build cannot run."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -9,7 +10,13 @@ from pydantic import ValidationError
 
 from app.core import settings as settings_module
 from app.core.settings import Settings
-from app.domain import CLIP_VIT_L14, DINOV2_LARGE, IMPLEMENTED_MODELS
+from app.domain import (
+    CLIP_VIT_L14,
+    DINOV2_LARGE,
+    IMPLEMENTED_MODELS,
+    MCLIP_XLMR_L14,
+    QUERY_ENCODERS,
+)
 
 VALID_URL = "postgresql+asyncpg://localhost/semanticshelf"
 
@@ -134,3 +141,53 @@ def test_the_same_forms_are_read_from_a_dotenv_file(
 
     assert s.enabled_models == (CLIP_VIT_L14,)
     assert s.model_warmup == ()
+
+
+# --- query encoders -----------------------------------------------------------
+
+
+def test_no_encoder_is_enabled_by_default() -> None:
+    # Unlike the models: an encoder is gigabytes of weights for a question most
+    # deployments never ask, so enabling one is a decision somebody took.
+    assert settings().enabled_query_encoders == ()
+
+
+def test_an_encoder_is_enabled_beside_the_model_it_answers_in() -> None:
+    s = settings(enabled_query_encoders=(MCLIP_XLMR_L14,))
+
+    assert s.enabled_query_encoders == (MCLIP_XLMR_L14,)
+    assert QUERY_ENCODERS[MCLIP_XLMR_L14] in s.enabled_models
+
+
+def test_an_encoder_this_build_does_not_implement_is_refused() -> None:
+    with pytest.raises(ValidationError) as refusal:
+        settings(enabled_query_encoders=("mclip-of-the-future",))
+
+    assert "does not implement" in str(refusal.value)
+    assert "mclip-of-the-future" in str(refusal.value)
+
+
+def test_an_encoder_whose_space_is_not_enabled_is_refused() -> None:
+    # Its vectors would have nothing to be compared with, and a search would
+    # answer an empty page as if the corpus were empty.
+    with pytest.raises(ValidationError) as refusal:
+        settings(enabled_query_encoders=(MCLIP_XLMR_L14,), enabled_models=(DINOV2_LARGE,))
+
+    message = str(refusal.value)
+    assert MCLIP_XLMR_L14 in message and CLIP_VIT_L14 in message
+
+
+def test_the_encoder_list_is_written_the_same_way_as_the_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    s = environment_settings(monkeypatch, ENABLED_QUERY_ENCODERS=MCLIP_XLMR_L14)
+
+    assert s.enabled_query_encoders == (MCLIP_XLMR_L14,)
+
+
+def test_the_pinned_revisions_are_commits_rather_than_branches() -> None:
+    # A branch moves, and the numbers ADR-005 publishes are about these bytes.
+    s = settings()
+
+    for revision in (s.mclip_revision, s.mclip_base_revision):
+        assert re.fullmatch(r"[0-9a-f]{40}", revision), revision

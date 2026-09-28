@@ -46,5 +46,11 @@ def assert_batch_keeps_order(embedder: Embedder, texts: Sequence[str]) -> None:
 
 
 def assert_empty_batch_is_empty(embedder: Embedder) -> None:
+    """For an embedder with an image side; a text-only one has the next helper."""
     result = embedder.embed_images([])
+    assert_result_shape(result, count=0, dim=embedder.dim)
+
+
+def assert_empty_text_batch_is_empty(embedder: Embedder) -> None:
+    result = embedder.embed_text([])
     assert_result_shape(result, count=0, dim=embedder.dim)

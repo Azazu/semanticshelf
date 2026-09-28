@@ -5,7 +5,12 @@ import threading
 import pytest
 
 from app.core.settings import Settings
-from app.domain import CLIP_VIT_L14, IMPLEMENTED_MODELS, UnknownModelError
+from app.domain import (
+    CLIP_VIT_L14,
+    IMPLEMENTED_MODELS,
+    IMPLEMENTED_QUERY_ENCODERS,
+    UnknownModelError,
+)
 from app.ml import registry
 from app.ml.base import Embedder
 from app.ml.fake import FakeEmbedder
@@ -53,8 +58,10 @@ def factory(monkeypatch: pytest.MonkeyPatch) -> CountingFactory:
 
 def test_the_table_of_factories_matches_what_the_build_declares() -> None:
     # Two tables state the same fact — the settings guard reads one, the
-    # registry the other. They drift the moment nobody compares them.
-    assert frozenset(registry.FACTORIES) == IMPLEMENTED_MODELS
+    # registry the other. They drift the moment nobody compares them. Query
+    # encoders are in the factory table too: they are loaded the same way and
+    # declared separately only because nothing is ever stored under their keys.
+    assert frozenset(registry.FACTORIES) == IMPLEMENTED_MODELS | IMPLEMENTED_QUERY_ENCODERS
 
 
 def test_nothing_is_loaded_until_a_key_is_asked_for(

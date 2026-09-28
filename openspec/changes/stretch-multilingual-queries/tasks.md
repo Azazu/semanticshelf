@@ -2,19 +2,19 @@
 
 ## 1. The encoder, as a thing the application knows about
 
-- [ ] 1.1 `app/domain.py`: `QUERY_ENCODERS` — encoder key → the storage key
+- [x] 1.1 `app/domain.py`: `QUERY_ENCODERS` — encoder key → the storage key
   whose space it answers in — with `mclip-xlmr-l14 → clip-vit-l14`, its
   modality (text only) and its width taken from the storage model's entry
   rather than restated (design decision 1). Verify: unit tests that every
   encoder key is absent from `EMBEDDING_MODELS`, that every target is a key of
   `EMBEDDING_MODELS`, and that an entry pointing at an unknown storage key
   fails the check — demonstrated by adding one.
-- [ ] 1.2 `app/core/settings.py`: `ENABLED_QUERY_ENCODERS`, empty by default, a
+- [x] 1.2 `app/core/settings.py`: `ENABLED_QUERY_ENCODERS`, empty by default, a
   build that names an unimplemented encoder refuses to start, and an encoder
   whose storage model is not enabled refuses to start naming both (delta spec,
   `embedding-models`). Verify: settings tests for the three cases — accepted,
   unknown key, target not enabled.
-- [ ] 1.3 `app/ml/mclip.py`: the adapter. **Two pinned revisions** (design
+- [x] 1.3 `app/ml/mclip.py`: the adapter. **Two pinned revisions** (design
   decision 2 — a branch is mutable, and the numbers must be about the assets a
   deployment loads): the M-CLIP config, checkpoint and tokenizer at
   `40afa80a85e8efa990384a24bbe5a1f6f1cc81b5`, and the
@@ -29,7 +29,7 @@
   images; a unit test that every revision the adapter passes is one of those two
   constants and not a branch name; the width check demonstrated by pointing the
   key at a checkpoint of another width and watching the load fail.
-- [ ] 1.3a A query longer than the encoder's context is cut **and says so**:
+- [x] 1.3a A query longer than the encoder's context is cut **and says so**:
   the adapter tokenizes with truncation at the model's maximum and returns one
   `truncated` flag per input, which is what the API answers as
   `query_truncated` (`embedding-models`, "Text longer than the model's context
@@ -37,7 +37,7 @@
   inputs in one batch — an ordinary query whose flag is false and one past the
   context whose flag is true — and an api test through the fake that the flag
   reaches `query_truncated` in the response.
-- [ ] 1.4 `app/ml/registry.py` and `app/ml/fake.py`: the encoder is loaded
+- [x] 1.4 `app/ml/registry.py` and `app/ml/fake.py`: the encoder is loaded
   lazily and cached per process like every model, and the fake stands in for it
   in every test that is not about the weights — a deterministic text-only
   embedder whose vectors live in the fake `clip-vit-l14` space. Verify: unit

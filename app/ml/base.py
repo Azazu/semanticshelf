@@ -22,6 +22,15 @@ class TextNotSupportedError(RuntimeError):
     """Text was asked of a model that has no text tower."""
 
 
+class ImagesNotSupportedError(RuntimeError):
+    """The mirror of the above: a text-only tower has no image side to ask.
+
+    A query encoder is the first embedder of that shape. The router refuses a
+    picture query for it before anything is loaded, so this is the second line:
+    an adapter says what it is rather than returning a vector from nowhere.
+    """
+
+
 class ZeroVectorError(ValueError):
     """A vector of length zero cannot be normalised, and must not become `nan`."""
 
