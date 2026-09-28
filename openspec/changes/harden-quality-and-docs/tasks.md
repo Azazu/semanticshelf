@@ -245,3 +245,23 @@
   change has been catching all along — both are in the past tense now. Verify:
   no task in this file describes itself or another as still waiting, and every
   task is checked.
+
+## 8. The red CI run after Gate 2
+
+- [x] 8.1 The integration suite went red on the pushed branch, in a test this
+  change never touched: `test_only_an_asset_with_neither_a_vector_nor_work_is_queued`
+  expected three queued jobs in arrival order and got the first two swapped.
+  The cause is a tie, not a regression — `created_at` defaults to `now()`,
+  which in PostgreSQL is the instant the **transaction** began, so rows written
+  in one transaction share it and `ORDER BY created_at` decides nothing. The
+  two pre-existing jobs are now seeded with distinct `created_at` values, so
+  the order the test asserts is a fact about the data rather than about the
+  heap. Verify: the suite passes (293) and the ordering is total by
+  construction, which is the argument — a local re-run proves little about a
+  tie that resolved one way here and another in CI.
+- [x] 8.2 The same tie, swept for rather than patched where it bit: `rg -n
+  "ORDER BY created_at"` over `tests/` found two more helpers ordering assets
+  written by one import — `test_folder_import.py` and `test_demo_corpus.py`,
+  the second with an order-dependent assertion on filenames. Both order by
+  `original_filename, id` now, which is the order those tests actually mean.
+  Verify: the three hits are the whole set; the integration suite passes.

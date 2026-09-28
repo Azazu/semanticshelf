@@ -1,7 +1,7 @@
 # Handoff — harden-quality-and-docs
 
 **Updated:** 2026-09-28 · claude
-**State:** ready-to-merge
+**State:** awaiting-gate-2
 **Branch:** change/harden-quality-and-docs
 
 ## Done this session
@@ -64,7 +64,15 @@ was confirmed throughout, and what remained of finding 2 was a condition no
 record can satisfy, since the evidence that CI is green on a commit can only be
 written in a later one. **Gate 2** — confirmed at `53f841a`, all four findings.
 
-Next: `/git:merge harden-quality-and-docs`, then `/opsx:archive`.
+Then CI went red on the pushed branch, in a test this change never touched:
+three integration helpers ordered rows by `created_at`, which is the same
+instant for everything written in one transaction, so two of them asserted an
+order the heap decided (§8 of `tasks.md`). All three order by something total
+now. That is code outside the protocol files, so the Gate 2 decision it was
+confirmed under is stale.
+
+Next: the user pushes; `scripts/gate-run.sh harden-quality-and-docs 2 confirm 1`
+on the green head; then `/git:merge` and `/opsx:archive`.
 
 ## Blockers
 
