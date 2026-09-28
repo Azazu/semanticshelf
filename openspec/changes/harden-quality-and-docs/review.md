@@ -114,3 +114,17 @@ the user on 2026-09-28), §7.2 and §7.3 rewritten in the past tense, and the
 duplicated task lists removed from `handoff.md` and §1.2/§2.2 so that one
 authority states each fact. The user, as final arbiter after six
 confirmations, waives the verdict rather than the work.
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** 53f841af8542c0950de16584b6f661137d74d9cb
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The proposal and both roadmap registers now assign `high` to the mandatory CI audit. The design has the high-tier applicability table and `tasks.md` records failing inputs for the added checks. Gate 1 was run on the revised artifacts and its last decision is the user's waiver at `cfb8cae`; the required Gate 1 disposition is recorded. |
+| 2 | confirmed — `app/core/openapi.py` restores declared examples after FastAPI encodes the document, and the test validates examples taken from the published document without stripping nulls. The published jobs example contains both `lease_expires_at` and `last_error` as null; `IndexingJobList.model_validate` accepts it. All nine published examples validate against their response models. |
+| 3 | confirmed — The router guard now rejects `ast.Import` of `sqlalchemy` or its submodules, including aliases, while the existing name allowlist handles `ast.ImportFrom`. The walker self-test covers the new form, and `tasks.md` records failing runs for planted whole-package and submodule imports. |
+| 4 | confirmed — NFR-SEC-6, the deployment delta, proposal, design, `make audit`, CI comments and command reference now state the same policy: any known advisory fails unless an individual advisory is explicitly ignored until fixed. The installed `uv audit --help` confirms `--locked` and `--ignore-until-fixed`; `tasks.md` records exit 1 and four named advisories from a disposable lock with vulnerable dependencies. |
