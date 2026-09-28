@@ -83,10 +83,17 @@ with would otherwise vanish from the example beneath a schema that requires it.
 Nothing is left in the plan. What follows is the stretch list, or whatever the
 next need turns out to be.
 
+**Stretch 17 is done.** `stretch-multilingual-queries` added a query encoder: a
+multilingual text tower that embeds a question into `clip-vit-l14`'s own space,
+so Russian, German, French and Spanish are answered from the vectors already
+stored — no migration, no second index, no re-indexing. It owns no rows at all,
+it is off unless a build enables it, and the four languages are claimed because
+they were measured against the corpus's own labels
+([ADR-005](../docs/adr/ADR-005-multilingual-query-encoder.md)).
+
 ## Stretch
 
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
-| 17 | `stretch-multilingual-queries` | multilingual text encoder behind the protocol, measured against English CLIP | **high** (a model download is egress; the search endpoint widens) |
 | 18 | `stretch-style-search` | style embedding model as a third key with its own index | medium |
 | 19 | `stretch-rag-captions` | generated captions/tags per image via a vision-language model; egress policy ADR | high |
