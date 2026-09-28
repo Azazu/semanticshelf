@@ -1,7 +1,7 @@
 # Handoff — harden-quality-and-docs
 
 **Updated:** 2026-09-28 · claude
-**State:** awaiting-gate-2
+**State:** ready-to-merge
 **Branch:** change/harden-quality-and-docs
 
 ## Done this session
@@ -71,8 +71,9 @@ order the heap decided (§8 of `tasks.md`). All three order by something total
 now. That is code outside the protocol files, so the Gate 2 decision it was
 confirmed under is stale.
 
-Next: the user pushes; `scripts/gate-run.sh harden-quality-and-docs 2 confirm 1`
-on the green head; then `/git:merge` and `/opsx:archive`.
+Gate 2 was confirmed again on that fix (`5973886`).
+
+Next: `/git:merge harden-quality-and-docs`, then `/opsx:archive`.
 
 ## Blockers
 
