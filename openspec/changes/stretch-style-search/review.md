@@ -12,3 +12,16 @@
 | 1 | major | `specs/embedding-models/spec.md:28-32`; `tasks.md:41-44` | The new requirement permits a key only after its margin is measured against every existing key, but the benchmark and decision tasks compare CSD only with `dinov2-large`. `clip-vit-l14` is also a stored image-vector key in `app/domain.py`. Measure it under the same question or narrow the requirement and justify why that key is excluded; otherwise the planned ADR cannot establish the scenario it is meant to satisfy. | fixed |
 | 2 | major | `design.md:94-112`; `tasks.md:35-40` | Leaning is a ratio of cosine-similarity means, which can be zero or negative even when both pair sets are nonempty. A zero denominator makes the decision undefined; a negative denominator can reverse the ordering, and a nonpositive incumbent makes the 3× bound vacuous. Define the metric and decision for these cases before the full run, then add tests for those values. | fixed |
 | 3 | minor | `design.md:60`; `tasks.md:5-11` | The applicability table says a blank image produced by a look is embedded like any other image, while task 1.1 requires refusing that look. Choose one corpus rule and make the design and verification task agree. | fixed |
+
+## Confirmation 1 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-28
+**Reviewed-Commit:** 9d111cf929641dd0e4a139a6129652eab62c38d4
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the benchmark and decision tasks now measure `clip-vit-l14` and `dinov2-large`, derive the stored image keys from `app.domain`, and record every incumbent in the ADR. |
+| 2 | changes-requested — the deciding rank preference and diagnostic ratio handle the zero and negative denominator cases, but task 2.4 requires a test where a candidate clears the headroom bound while scoring below 0.5. This is impossible: preference scores lie in [0, 1], so every incumbent is at least 0 and `incumbent + (1 - incumbent) / 2` is at least 0.5. Replace that test with a feasible boundary case; as written, the Gate 1 implementation plan cannot be completed. |
+| 3 | confirmed — the design and task 1.1 now both refuse a constant picture for that photograph. |
