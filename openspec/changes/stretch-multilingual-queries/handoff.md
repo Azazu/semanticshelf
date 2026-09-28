@@ -1,7 +1,7 @@
 # Handoff — stretch-multilingual-queries
 
 **Updated:** 2026-09-28 · claude
-**State:** proposing
+**State:** awaiting-gate-1
 **Branch:** change/stretch-multilingual-queries
 
 ## Done this session
@@ -24,11 +24,23 @@
   repository ships, and the change widens what the search endpoint accepts.
   Gate 1 is required before implementation.
 
+- **Gate 1 round 1 — three majors, all accepted.** The acceptance bound was
+  only relative, so a zero English baseline would have let an encoder that finds
+  nothing pass: it is now two conditions (absolute mean recall@10 ≥ 0.5 and
+  ≥ 0.8 × the English baseline), over a concept set chosen by rules that look at
+  no language's results, with the relevant-asset counts printed per concept. The
+  adapter read the mutable `main` revision while the numbers were to be evidence
+  about the key: all three files are pinned to
+  `40afa80a85e8efa990384a24bbe5a1f6f1cc81b5`, which the benchmark prints and the
+  ADR records. And the truncation flag `EmbeddingResult.truncated` — which the
+  API answers as `query_truncated` — was missing from the adapter's task; it has
+  its own task and a two-input test now.
+
 ## Next step
 
-`/gate-review stretch-multilingual-queries 1` — Gate 1 on the artifacts.
-`scripts/pregate-verify.sh gate1 stretch-multilingual-queries` passes (19
-tasks, tier declared, applicability table present, links resolve).
+`scripts/gate-run.sh stretch-multilingual-queries 1 confirm 1` — the
+confirmation of round 1. `scripts/pregate-verify.sh gate1
+stretch-multilingual-queries` passes (20 tasks).
 
 ## Blockers
 

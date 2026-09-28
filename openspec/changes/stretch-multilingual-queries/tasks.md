@@ -14,16 +14,27 @@
   whose storage model is not enabled refuses to start naming both (delta spec,
   `embedding-models`). Verify: settings tests for the three cases — accepted,
   unknown key, target not enabled.
-- [ ] 1.3 `app/ml/mclip.py`: the adapter. Tokenizer and config from the Hub
-  cache, checkpoint from the **main** revision via
-  `torch.load(..., weights_only=True)`, transformer from
+- [ ] 1.3 `app/ml/mclip.py`: the adapter. Config, checkpoint and tokenizer all
+  at the **pinned revision** `40afa80a85e8efa990384a24bbe5a1f6f1cc81b5` (design
+  decision 2 — `main` is mutable, and the numbers must be about the weights a
+  deployment loads); the checkpoint read with
+  `torch.load(..., weights_only=True)`, the transformer from
   `AutoModel.from_config`, the linear head from `LinearTransformation.*`, mean
   pooling over the attention mask, then the shared normalisation and the
-  `ZeroVectorError` guard every embedder uses (design decision 2). It refuses
-  images, like any text-only model. Verify: a `models`-suite test (real
-  checkpoint, never in CI) asserting width 768, unit norm, a batch keeping its
-  order, and the refusal of images; the width check demonstrated by pointing
-  the key at `xlm-roberta-large` and watching the load fail.
+  `ZeroVectorError` guard every embedder uses. It refuses images, like any
+  text-only model. Verify: a `models`-suite test (real checkpoint, never in CI)
+  asserting width 768, unit norm, a batch keeping its order, and the refusal of
+  images; a unit test that the revision the adapter passes is that constant and
+  not a branch name; the width check demonstrated by pointing the key at
+  `xlm-roberta-large` and watching the load fail.
+- [ ] 1.3a A query longer than the encoder's context is cut **and says so**:
+  the adapter tokenizes with truncation at the model's maximum and returns one
+  `truncated` flag per input, which is what the API answers as
+  `query_truncated` (`embedding-models`, "Text longer than the model's context
+  is truncated and the caller is told"). Verify: a `models`-suite test with two
+  inputs in one batch — an ordinary query whose flag is false and one past the
+  context whose flag is true — and an api test through the fake that the flag
+  reaches `query_truncated` in the response.
 - [ ] 1.4 `app/ml/registry.py` and `app/ml/fake.py`: the encoder is loaded
   lazily and cached per process like every model, and the fake stands in for it
   in every test that is not about the weights — a deterministic text-only
@@ -54,21 +65,29 @@
 
 ## 3. The measurement that lifts the boundary
 
-- [ ] 3.1 `scripts/multilingual_benchmark.py` (design decision 4): concepts
-  drawn from the corpus's own most frequent tags and printed with the results;
-  per language, mean precision@10 by tag and mean agreement@10 with the same
-  concept in English; the English CLIP text side as the baseline row; Markdown
-  table on stdout. Reuses the benchmark guard of change 14 rather than touching
-  the service's tables. Verify: the command runs end to end against the demo
-  corpus and prints a table; unit tests for the two metrics on hand-made input,
-  including the empty-input and no-tagged-asset cases.
-- [ ] 3.2 Run it for Russian, German, French and Spanish over at least 30
-  concepts and record the numbers. A language is **claimed** only if its mean
-  precision@10 is at least 0.8 × the English baseline's; agreement@10 is
+- [ ] 3.1 `scripts/multilingual_benchmark.py` (design decision 4): the concept
+  set chosen by rules that look at no language's results — a tag carried by at
+  least 3 and at most 10 assets, at least 20 such concepts, and the English
+  baseline itself clearing mean recall@10 of 0.5 — with each concept printed
+  beside the number of assets that carry its tag. Per language: mean recall@10,
+  the worst concept, and mean agreement@10 with the same concept in English;
+  the English CLIP text side as the baseline row; the pinned model revision in
+  the header; Markdown table on stdout. Reuses the benchmark guard of change 14
+  rather than touching the service's tables. Verify: the command runs end to end
+  against the demo corpus and prints the table; unit tests for the metrics and
+  for every selection rule on hand-made input — a tag with too few assets, one
+  with too many, a set of fewer than 20 concepts, and a baseline below 0.5 —
+  each of which makes the run report that it measured nothing rather than
+  publish a number.
+- [ ] 3.2 Run it for Russian, German, French and Spanish and record the
+  numbers. A language is **claimed** only if it clears **both** bounds: mean
+  recall@10 at least 0.5 in absolute terms, and at least 0.8 × the English
+  baseline's over the same concepts. Agreement@10 and the worst concept are
   published without a bound. Verify: the table is in
-  `docs/how-to/benchmarks.md` with the exact command above it, and every
-  language that misses the bound is in the table with its number and named as
-  not supported.
+  `docs/how-to/benchmarks.md` with the exact command above it, the pinned
+  revision beside it, the per-concept relevant counts included, and every
+  language that misses either bound present with its numbers and named as not
+  supported.
 - [ ] 3.3 `docs/adr/ADR-005-multilingual-query-encoder.md`: why a query encoder
   rather than a second model key, what the numbers decided, and what is left
   unmeasured. Verify: the ADR index (`docs/adr/README.md`) carries its row; the
@@ -83,9 +102,11 @@
   last edit.
 - [ ] 4.2 `docs/how-to/models.md`: the encoder beside the two models — what it
   is, what it costs on disk (2.24 GB), that it is fetched only when enabled,
-  that the checkpoint is read from the main revision with no pickle executed,
-  and the licence question stated as open (design decision 5). Verify: re-read
-  whole; `make models warm` documented in the form it is actually run.
+  that it is pinned to one revision and why, that the checkpoint is read with no
+  pickle executed, and the licence question stated as open (design decision 5). Verify: re-read whole;
+  the warming command appears in the exact form it is run
+  (`uv run semanticshelf models warm` on the host, `make stack-warm` in the
+  stack), and both were run for this encoder.
 - [ ] 4.3 `docs/explanation/requirements.md`: FR-TXT-5 amended in place — the
   English-only limit becomes English plus the measured languages, naming this
   change and ADR-005; §7 row 17 and `openspec/ROADMAP.md` carry the tier this
@@ -103,9 +124,11 @@
 
 - [ ] 5.1 A demonstrated failing input for every new or changed check (high
   tier): the encoder table's two guards, the two settings refusals, the
-  checkpoint width check, the 503 for an unknown encoder, the 422 for a picture
-  query, and the two benchmark metrics. Verify: one table, one row per check,
-  each a run with that one edit and the file restored afterwards.
+  checkpoint width check, the pinned-revision check, the truncation flag, the
+  503 for an unknown encoder, the 422 for a picture query, the two benchmark
+  metrics and each of the four concept-selection rules. Verify: one table, one
+  row per check, each a run with that one edit and the file restored
+  afterwards.
 - [ ] 5.2 `openspec validate stretch-multilingual-queries --strict` passes and
   every task above is checked with its evidence. Verify: the command's output
   is recorded.
