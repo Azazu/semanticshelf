@@ -66,12 +66,12 @@
   is clean afterwards).
 ## 3. The decision
 
-- [ ] 3.1 Run it over at least 100 photographs of the demo corpus and record
+- [x] 3.1 Run it over at least 100 photographs of the demo corpus and record
   the numbers for all three models. The bound is fixed in design decision 2 and
   is read on the rank preference only. Verify: the table is in
   `docs/how-to/benchmarks.md` under the exact command that produced it, with the
   corpus, the bound and the revision named.
-- [ ] 3.2 `docs/adr/ADR-006-style-as-a-third-key.md`: the numbers for the
+- [x] 3.2 `docs/adr/ADR-006-style-as-a-third-key.md`: the numbers for the
   candidate and for every stored key, the corpus and its looks, the bound, **the
   disagreement between the two statistics and what the diagnostic one would have
   decided**, and the decision — **including "no key" as a decision of the same
@@ -85,13 +85,13 @@
 
 ## 4. The rule this change followed
 
-- [ ] 4.1 The `embedding-models` delta lands as written: a key earns its place
+- [x] 4.1 The `embedding-models` delta lands as written: a key earns its place
   by a published, re-runnable measurement against **every** key of its kind, with
   a bound fixed beforehand and read on a number a model's own similarity scale
   cannot move, and "not added" is an outcome of the same standing. Verify:
   `openspec validate --strict`; the ADR and the how-to are the evidence its four
   scenarios describe, the scale scenario included.
-- [ ] 4.2 `docs/how-to/benchmarks.md` gains the fourth section with the command
+- [x] 4.2 `docs/how-to/benchmarks.md` gains the fourth section with the command
   in its exact form, what the rank preference means, why the ratio sits beside it
   and decides nothing, and what the measurement does **not** say. Verify: re-read whole after the last edit; every command in it
   was run.

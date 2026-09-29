@@ -549,3 +549,73 @@ not two — the right-hand side is `(1 + incumbent) / 2` and a preference lies i
 
 The measured keys are read from `app.domain`, not written out in the command, so
 a key added to `EMBEDDING_MODELS` later cannot be left out of the comparison.
+
+
+### What one run says
+
+Corpus: 100 photographs of the demo sample under six looks — 600 images, none
+refused as one colour, 297 000 triples, 29 700 pairs sharing a look and 1 500
+sharing a picture. Candidate `tomg-group-umd/CSD-ViT-L` at revision
+`5bc26a6fb0487f3f00a2a7313135103a005b1b67`. Run with the
+`TORCH_NUM_THREADS=4 nice -n 19` prefix above, which took about seventeen
+minutes; the thread count changes the order a reduction is summed in and so the
+last digit, never the ranking.
+
+| model | prefers the look | same look, diff. picture | same picture, diff. look | ratio |
+|---|---|---|---|---|
+| `csd-vit-l` (candidate) | **0.395** | 0.477 | 0.552 | 0.865 |
+| `clip-vit-l14` | 0.033 | 0.570 | 0.830 | 0.686 |
+| `dinov2-large` | 0.012 | 0.055 | 0.739 | 0.074 |
+
+The bound is `(1 + 0.033) / 2 = 0.516`. The candidate reaches 0.395, so **no
+third key was added** ([ADR-006](../adr/ADR-006-style-as-a-third-key.md)).
+
+Per look, with the anchors restricted to that look:
+
+| look | `csd-vit-l` | `clip-vit-l14` | `dinov2-large` |
+|---|---|---|---|
+| plain | 0.045 | 0.006 | 0.003 |
+| grayscale | 0.097 | 0.003 | 0.002 |
+| posterised | 0.161 | 0.004 | 0.002 |
+| edges | **0.981** | 0.135 | 0.058 |
+| painterly | 0.595 | 0.043 | 0.004 |
+| sepia | 0.493 | 0.004 | 0.002 |
+
+### Reading it
+
+**A style descriptor is not an expensive synonym.** The worry that started this
+measurement was that a third key would return what `dinov2-large` already
+returns. It would not: the candidate separates manner from subject about twelve
+times better than the best key the service stores.
+
+**It still does not prefer the look.** 0.5 is indifference, and 0.395 is below
+it — shown a photograph, the candidate more often ranks the same *subject* above
+the same *manner*. A key is bought to answer "find me pictures that look like
+this one", and on this corpus none of the three models answers that question;
+one is merely much closer than the others. Twelve times a number close to zero
+is still close to zero, which is why the bound is about the distance left to a
+perfect score rather than a multiple of the incumbent. A "three times the
+incumbent" rule would have set the bar at 0.099 and admitted the candidate, and
+that is published here so a reader can disagree with the bound instead of with
+the arithmetic.
+
+**Most of the advantage is one filter.** `edges` throws away colour and texture
+entirely and the candidate is almost perfect on it (0.981). `plain` — the
+untouched photograph, which is what a real style search would run against — is
+0.045. The average reads stronger than what stands behind it, and this is why
+the breakdown is published beside it rather than underneath.
+
+**The ratio is wrong on this table in both directions**, which is the clearest
+argument for the number that decides. It puts `clip-vit-l14` at 0.686 against
+the candidate's 0.865 — "nearly caught up" — where the ranking says 0.033 against
+0.395. And it puts `clip-vit-l14` at nine times `dinov2-large` where the ranking
+says three. CLIP's similarities sit in a narrow high band, which lifts both of
+its means together and says nothing about the order results come back in.
+
+**What this does not say.** Nothing about artistic style: the looks are filters,
+not painters, and the `plain` row is the measure of how far they generalise.
+Nothing about a corpus other than this one — a claim about somebody's own
+pictures needs their own run of the same command. Nothing about a style model
+other than this candidate. And nothing about whether a style vector is useful
+for something that is not a ranking, which would be a different question with a
+different bound.

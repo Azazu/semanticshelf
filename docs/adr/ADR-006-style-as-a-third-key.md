@@ -1,13 +1,8 @@
 # ADR-006: a model key earns its place by measurement, and this is the style candidate's
 
-**Date:** 2026-09-28
-**Status:** proposed
+**Date:** 2026-09-29
+**Status:** accepted
 **Related:** ADR-001 (one space per model key; vectors of different models never compared); ADR-002 (an index family decided by measurement, and the precedent for deciding to change nothing); `embedding-models` — "A model key earns its place by measurement"; authored by the OpenSpec change `stretch-style-search`
-
-> **This record is incomplete.** The numbers, the decision it reads off them,
-> and the status above land when the published command has been run over the
-> corpus it names. Everything below this line was fixed **before** the run, so
-> that the bound could not be fitted to the table.
 
 ## Context
 
@@ -79,7 +74,76 @@ key whose value nobody measured.
 
 ## Decision
 
-*Pending the run: the numbers, and what they decided.*
+**No third key.** The candidate does not clear the bound, so `EMBEDDING_MODELS`,
+the CHECK and the indexes stay as they are, and roadmap row 18a — the migration,
+the index, the re-index and `model=` on the picture searches — is not proposed.
+
+The run: 100 photographs of the demo corpus under six looks, 600 images, none
+refused as one colour, 297 000 triples. Candidate at
+`5bc26a6fb0487f3f00a2a7313135103a005b1b67`.
+
+```console
+$ uv run --group style python scripts/style_benchmark.py --pictures 100
+```
+
+| model | prefers the look | same look, diff. picture | same picture, diff. look | ratio |
+|---|---|---|---|---|
+| `csd-vit-l` (candidate) | **0.395** | 0.477 | 0.552 | 0.865 |
+| `clip-vit-l14` | 0.033 | 0.570 | 0.830 | 0.686 |
+| `dinov2-large` | 0.012 | 0.055 | 0.739 | 0.074 |
+
+The bound, fixed before the run, is `(1 + 0.033) / 2 = 0.516`. The candidate
+reaches 0.395.
+
+**What the numbers do say, and it is not nothing.** A style descriptor is not an
+expensive synonym for what is already installed: on the question this corpus
+asks, CSD separates *how a picture looks* from *what is in it* about **twelve
+times** better than the best key the service stores. The worry that started this
+change — that a third key would return what `dinov2-large` already returns — is
+answered, and answered no.
+
+**What they do not say is that it prefers the look.** 0.5 is indifference, and
+0.395 is below it: shown a photograph, the candidate still ranks the same
+*subject* above the same *manner* more often than not. A key is bought to answer
+"find me pictures that look like this one", and on this corpus none of the three
+models answers that question — one of them is merely much closer than the others.
+
+**A different bound would have decided differently, and here is which.** A
+multiplicative rule — the shape this change first proposed, "at least three times
+the incumbent" — sets the bar at `3 x 0.033 = 0.099` and admits the candidate
+comfortably. It is published here because a reader is entitled to disagree with
+the bound rather than with the arithmetic. The reason it was not used is that
+twelve times a number close to zero is still close to zero, and a proportion has
+a meaning a ratio does not: the question is not "better than the incumbent" but
+"does it prefer the look", and 0.395 does not.
+
+**Most of the candidate's advantage comes from one filter, and that matters.**
+
+| look | `csd-vit-l` | `clip-vit-l14` | `dinov2-large` |
+|---|---|---|---|
+| plain | 0.045 | 0.006 | 0.003 |
+| grayscale | 0.097 | 0.003 | 0.002 |
+| posterised | 0.161 | 0.004 | 0.002 |
+| edges | **0.981** | 0.135 | 0.058 |
+| painterly | 0.595 | 0.043 | 0.004 |
+| sepia | 0.493 | 0.004 | 0.002 |
+
+`edges` throws away colour and texture entirely, and on that the candidate is
+almost perfect. `plain` is the untouched photograph — the case a real style
+search would actually run against — and there it scores 0.045. The average of
+0.395 reads stronger than what stands behind it, and a decision taken on the
+average alone would have been taken on `edges`.
+
+**The statistic was itself a finding.** The ratio of averages, which this change
+proposed first and the Gate 1 reviewer sent back, is wrong on this table in both
+directions. It puts `clip-vit-l14` at 0.686 against the candidate's 0.865 —
+"nearly caught up" — where the ranking says 0.033 against 0.395, a factor of
+twelve. And it puts `clip-vit-l14` at nine times `dinov2-large` (0.686 against
+0.074) where the ranking says 0.033 against 0.012. CLIP's similarities sit in a
+narrow high band, which lifts both of its means together and tells a ratio
+nothing about the order results come back in. Under the ratio *and* the original
+3x rule the answer would also have been "no key" — but for a false reason, and a
+different set of incumbents could as easily have flipped it to a false "yes".
 
 ## Alternatives considered
 
@@ -103,7 +167,40 @@ answers anything new.
 
 ## Consequences
 
-*Pending the decision above.*
+**Nothing in the service changes.** No migration, no CHECK value, no index, no
+re-index, no `model=` on the picture searches, no vector, no setting. The two
+stored keys and their indexes are exactly what they were.
+
+**The question is cheap to ask again.** `scripts/style_benchmark.py`, its corpus
+builder and the `style` dependency group stay in the repository, and the command
+is published in `docs/how-to/benchmarks.md`. A second candidate, or this one on a
+corpus of real artworks, is one command rather than a change — which is the
+difference between a decision that can be revisited and one that cannot.
+
+**The rule outlives the candidate.** `embedding-models` now carries "a model key
+earns its place by measurement": against every key of its kind, with a bound
+fixed before the numbers are seen, read on a number a model's own similarity
+scale cannot move. The next candidate is held to it, and this record is the
+worked example of what clearing it would have looked like.
+
+**What would change this answer.** A corpus of actual paintings rather than
+filtered photographs — the looks here are filters, and the `plain` row is the
+warning about how far they generalise. A candidate that prefers the look rather
+than merely preferring it more than the incumbents do. Or a use for a style
+vector that does not need it to win a ranking, which would be a different
+question with a different bound.
+
+**Accepted cost.** Three model passes over six hundred images — about seventeen
+minutes on a laptop at four threads — to decide not to build something. That is
+the cheap half of the trade: the migration, the index, the re-index of every
+asset and a third job per upload are what was not spent.
+
+**A defect found on the way.** The reviewer's objection to caching vectors
+between runs could not be answered, because `clip-vit-l14` and `dinov2-large`
+load a checkpoint *name* with no pinned revision and resolve their weights and
+their processor separately — so a stored vector cannot be reproduced from its
+model key alone. ADR-005 pinned the query encoder's revision for exactly this
+reason; these two were never pinned. Recorded as roadmap row 20.
 
 ## Supersedes
 
