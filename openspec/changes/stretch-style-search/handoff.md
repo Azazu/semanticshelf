@@ -1,7 +1,7 @@
 # Handoff — stretch-style-search
 
 **Updated:** 2026-09-28 · claude
-**State:** awaiting-gate-2
+**State:** ready-to-merge
 **Branch:** change/stretch-style-search
 
 ## Done this session
@@ -209,15 +209,15 @@ pregate-verify: gate2 stretch-style-search — all checks passed (0 warning(s))
 
 ## Next step
 
-The user pushes `change/stretch-style-search` and reports the CI run; then
-**Finding 3 has failed two confirmations, so AGENTS.md stops the loop and the
-user arbitrates.** What is left of it is one sentence, already corrected: the
-applicability table's retry row conditioned exact reproduction on "the same
-machine", and machine identity freezes neither a configured checkpoint name nor
-the revision it resolves to. The row now conditions reproduction on the same
-weights and the same preprocessing, and says the command establishes that on no
-machine. Nothing is contested — the choice is whether to spend a third
-confirmation on it or to waive the gate verdict.
+**Gate 2 is passed** — confirmation 3 on `f8c3c0d` confirms all three findings.
+
+Finding 3 took three confirmations because each one found a further place where
+the same claim survived: first the spec scenario, then the cache scan presented
+as provenance, then the applicability table conditioning exact reproduction on
+"the same machine". Fix the claim, not the line — the rule AGENTS.md already
+carries, demonstrated three times inside one finding.
+
+The user merges: `/git:merge stretch-style-search`.
 
 ## Blockers
 
