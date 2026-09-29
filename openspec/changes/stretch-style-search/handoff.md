@@ -152,7 +152,9 @@ bytes, `7a0f6d0a346953a3` for the published run. The checkpoint table is printed
 under a caveat that it is diagnostic only and that matching rows establish
 neither matching inputs nor matching numbers, a test asserts that caveat, the
 spec claims reproducibility only for what this repository pins, and the
-applicability table's retry row is qualified to one machine.
+applicability table's retry row conditions reproduction on the same weights and
+the same preprocessing — not on the same machine, which freezes nothing, since
+those two keys resolve their name afresh on every load.
 
 ## What CI runs, run locally (task 5.3)
 
@@ -208,8 +210,14 @@ pregate-verify: gate2 stretch-style-search — all checks passed (0 warning(s))
 ## Next step
 
 The user pushes `change/stretch-style-search` and reports the CI run; then
-`scripts/gate-run.sh stretch-style-search 2 confirm 1` — the second
-confirmation of round 1.
+**Finding 3 has failed two confirmations, so AGENTS.md stops the loop and the
+user arbitrates.** What is left of it is one sentence, already corrected: the
+applicability table's retry row conditioned exact reproduction on "the same
+machine", and machine identity freezes neither a configured checkpoint name nor
+the revision it resolves to. The row now conditions reproduction on the same
+weights and the same preprocessing, and says the command establishes that on no
+machine. Nothing is contested — the choice is whether to spend a third
+confirmation on it or to waive the gate verdict.
 
 ## Blockers
 
