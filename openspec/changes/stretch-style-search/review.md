@@ -91,3 +91,23 @@
 - Corpus-bound reproduction used in-memory PIL images and a patched image reader; no corpus files or model downloads were created.
 - Architecture checked against [upstream CSD's constructor](https://raw.githubusercontent.com/learn2phoenix/CSD/main/CSD/model.py), [OpenAI CLIP's residual block](https://raw.githubusercontent.com/openai/CLIP/main/clip/model.py), [OpenCLIP 3.3.0's ViT-L-14 configuration](https://raw.githubusercontent.com/mlfoundations/open_clip/v3.3.0/src/open_clip/model_configs/ViT-L-14.json), and [its vision-tower activation selection](https://raw.githubusercontent.com/mlfoundations/open_clip/v3.3.0/src/open_clip/model.py).
 - The real-weight benchmark and models suite were not rerun: the current environment has no `open_clip` installation. The reported measurement's numerical change after correcting the activation is therefore not quantified here.
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-29
+**Reviewed-Commit:** a34d6dfafea4f5f34f61104af059c8e67fd81bb2
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the adapter selects `ViT-L-14-quickgelu` and checks the constructed residual MLP activation before loading tensors. The installed OpenCLIP configuration enables QuickGELU and its tower builder uses that flag. Regression tests cover the selected variant and rejection of GELU. ADR-006 and the how-to record the corrected measurement (candidate preference 0.282, edges 0.898) and retain the no-third-key decision. |
+| 2 | changes-requested — the surviving-label bounds fix the nonempty undersized corpus, but a wholly rejected corpus still crashes before reaching them: `embed()` calls `np.concatenate(rows)` with an empty list. Calling `main()` with twenty in-memory uniform photographs reproduces `ValueError: need at least one array to concatenate`, rather than the promised clean refusal. Handle the empty stream before concatenation and test the command path through embedding and validation; the new direct `check_present([])` test cannot exercise this failure. |
+| 3 | changes-requested — the revised scenario still promises that the record identifies whether runs used the same corpus and checkpoints, and design decision 6/how-to still claim readers can see which input differed. `checkpoints()` only scans the cache's current `main` refs after inference; it does not identify the weights or processor actually loaded by the two separate, unpinned `from_pretrained()` calls. A processor loaded from revision A and weights loaded from B can be reported as B, indistinguishably from a run loading both from B; `unresolved` likewise cannot establish identity. Either capture effective model and processor identities, or complete the permitted narrowing: describe the cache scan as diagnostic only and explicitly state that matching report entries do not establish matching inputs or numbers. Reconcile the remaining exact-reproduction claim in the design applicability table and add a regression test for the chosen behavior. |
+
+### Confirmation evidence
+
+- Scope: only the diff from `e9ea55c722323ad869f19d8b4448476e26129e78` to the reviewed commit and the call paths/artifacts implicated by findings 1–3.
+- Targeted checks: 86 passed via `PYTHONDONTWRITEBYTECODE=1 PYTEST_ADDOPTS='-p no:cacheprovider tests/unit/test_style_benchmark.py tests/unit/test_style_corpus.py tests/unit/test_style_candidate.py tests/unit/test_image_definition.py' make test RUN='.venv/bin/python -B -m'`.
+- Empty-corpus reproduction patched the image reader, candidate loader, settings and corpus planner in memory, then called the actual `main()`/`embed()` path; no images or model weights were written or downloaded.
+- Architecture verified against the installed OpenCLIP quickgelu configuration and vision-tower builder. The real-weight benchmark and models suite were not rerun during this confirmation; the numerical rerun is recorded in the updated ADR and handoff.
