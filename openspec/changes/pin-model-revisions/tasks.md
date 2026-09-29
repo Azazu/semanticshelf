@@ -23,12 +23,13 @@
   that the service starts, and that the statement is made; and that the
   combination of a substituted name **with** a configured revision passes it
   through unchanged.
-- [ ] 1.4 `app/ml/clip.py` and `app/ml/dinov2.py`: the revision is resolved once
-  per `load` and passed to **every** `from_pretrained` call — the processor and
-  the model alike (design decision 2). Verify: unit tests that record the two
-  calls a stand-in receives and assert both carry the same revision, without
-  loading any weights; and that neither adapter calls `from_pretrained` without
-  one.
+- [ ] 1.4 `app/ml/clip.py` and `app/ml/dinov2.py`: when a load has a revision it
+  is resolved once per `load` and passed to **every** `from_pretrained` call —
+  the processor and the model alike (design decision 2). Verify: unit tests that
+  record the two calls a stand-in receives and assert both carry the same
+  revision, without loading any weights; and, for the unpinned case of task 1.3,
+  that **neither** call carries a revision — so the two paths are asserted
+  separately rather than one rule being stated over both.
 - [ ] 1.5 The real checkpoints still load and still answer. Verify: the
   `models`-suite tests for CLIP and DINOv2 pass unchanged against the pinned
   revisions (real weights, never in CI), including the width check and the
@@ -36,10 +37,11 @@
 
 ## 2. The decision, and the documents that carry it
 
-- [ ] 2.1 The `embedding-models` delta lands as written: a checkpoint is loaded
-  at a revision rather than at a name, one revision per load for every artefact
-  of it, and a substituted name needs a revision of its own. Verify:
-  `openspec validate --strict`; each of its three scenarios has a test.
+- [ ] 2.1 The `embedding-models` delta lands as written: a configured revision
+  is an immutable commit, one revision per load for every artefact of a load
+  that has one, and a substituted name inherits none — it loads unpinned and
+  says so. Verify: `openspec validate --strict`; each of its four scenarios has
+  a test, the unpinned one for both adapters.
 - [ ] 2.2 `docs/adr/ADR-007-pinned-checkpoint-revisions.md`: why the revision is
   configuration rather than a constant (and why that differs from ADR-005, so
   the asymmetry is not read as an inconsistency), what one revision per load

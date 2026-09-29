@@ -40,7 +40,7 @@ model key names a moving target — and it fixes it where the target moves.
 |---|---|
 | Crash around an external effect | The only external effect is the checkpoint download, and it is unchanged except that it now names a commit. A failed download leaves the adapter unbuilt, exactly as before, and nothing has been stored. |
 | Empty, zero and null inputs | An empty revision is the absence of a value, not a revision, and configuration refuses it rather than passing it to the hub. So are a branch, a tag and an abbreviated hash: all of them resolve at load time, which is the defect. What is *not* refused is the absence of a revision for a substituted checkpoint name — that configuration worked before and keeps working, unpinned and said to be. |
-| Idempotent retries | Loading is already idempotent per process (the registry caches the built embedder), and a revision does not change that. A retried load reads the same commit. |
+| Idempotent retries | Loading is already idempotent per process (the registry caches the built embedder), and a revision does not change that. A retried **pinned** load reads the same commit; a retried unpinned load is as repeatable as it is today, which is the case decision 1 deliberately leaves untouched. |
 | Authorization boundary | n/a — no endpoint gains or loses a caller. |
 | Concurrent writers | n/a — nothing is written. |
 | Money and rounding | n/a. |
@@ -103,16 +103,25 @@ a load to be slow or to fail.
 for the substitution requirement above — and ADR-007 records the asymmetry, so
 the next reader does not read it as an inconsistency.
 
-### 2. One revision per load, for every artefact of it
+### 2. One revision per load — when the load has one
 
 Both adapters read two things: a processor and a model. Today each is resolved
 on its own, and between them a repository can move. The revision is resolved
 once at the top of `load` and passed to every read, which closes the gap by
 construction rather than by timing.
 
-*What this guarantees:* the preprocessing and the weights are from one snapshot.
-*What it does not:* it says nothing about a checkpoint whose own files are
-inconsistent, which is the hub's problem and not observable here.
+**The guarantee is scoped to loads that have a revision**, which is every load
+of a checkpoint left at its default name and every load an operator pinned. The
+one case decision 1 leaves unpinned — a substituted name with no revision —
+passes no revision to either call and therefore keeps exactly the behaviour it
+has today, including this gap. Scoping it is not a weakening of the rule: it is
+the rule stated where it holds, so that a reader cannot take it for a promise
+about a load that was deliberately left alone.
+
+*What this guarantees:* for a pinned load, the preprocessing and the weights are
+from one snapshot. *What it does not:* it says nothing about an unpinned load,
+and nothing about a checkpoint whose own files are inconsistent, which is the
+hub's problem and not observable here.
 
 ### 3. What this change refuses to do, and why that is a decision
 

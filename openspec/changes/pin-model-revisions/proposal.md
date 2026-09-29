@@ -36,9 +36,11 @@ and the repository is inconsistent with its own precedent.
   verified against the hub: `32bd64288804d66eefd0ccbe215aa642df71cc41` for
   `openai/clip-vit-large-patch14` and `47b73eefe95e8d44ec3623f8890bd894b6ea2d6c`
   for `facebook/dinov2-large`.
-- **One revision per load, for every artefact of it.** Resolved once and passed
-  to both `from_pretrained` calls, so the weights and the processor cannot come
-  from different snapshots.
+- **One revision per load, for every artefact of it** — for every load that has
+  a revision. Resolved once and passed to both `from_pretrained` calls, so the
+  weights and the processor cannot come from different snapshots. A load left
+  unpinned by the rule below passes no revision to either call and keeps today's
+  behaviour, gap included.
 - **A revision has to be a commit.** The hub accepts a branch or a tag wherever
   it accepts a commit, so `CLIP_REVISION=main` would look pinned and pin
   nothing. Configuration requires a full 40-character hexadecimal commit and
@@ -60,9 +62,10 @@ None.
 
 ### Modified Capabilities
 
-- `embedding-models`: a checkpoint is loaded at a pinned revision, one revision
-  for the weights and the processor alike, and a substituted name needs a
-  revision of its own.
+- `embedding-models`: a checkpoint is loaded at an immutable commit, one
+  revision for the weights and the processor alike wherever a load has one, and
+  a substituted name inherits no revision — it loads unpinned, as it does today,
+  and says so.
 
 ## Impact
 

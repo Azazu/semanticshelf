@@ -53,11 +53,17 @@ So the change fixes the **cause** and leaves the consequence alone:
   mirror can be substituted, and a constant would either forbid that or be
   ignored by it. ADR-007 records the asymmetry with ADR-005 so it is not read as
   an inconsistency.
-- **The two settings are bound** — a substituted name with the default revision
-  is refused at startup, because a commit belongs to a repository; so is an
-  empty revision, which would mean "whatever `main` is".
-- **One revision per load**, passed to the processor and the weights alike. That
-  hole is what change 18's Gate 2 reviewer named twice.
+- **A configured revision must be an immutable commit** — a branch, a tag, an
+  abbreviated hash or an empty value is refused at startup by setting name,
+  because each of them resolves at load time, which is the defect itself. That
+  refusal breaks nothing: the setting did not exist before. *(This supersedes
+  the first draft's rule that a substituted name with the default revision is
+  refused — see the Gate 1 section below.)*
+- **One revision per load**, passed to the processor and the weights alike —
+  for every load that has a revision. That hole is what change 18's Gate 2
+  reviewer named twice. A load left unpinned by the rule below keeps today's
+  behaviour, gap included, and the artifacts say so rather than promising over
+  it.
 - **Nothing observable changes.** No migration, no schema, no endpoint, no
   probe, no write path, no command, no stored vector. The defaults are the
   commits the local cache already resolved, so not a byte is downloaded here.
@@ -94,6 +100,21 @@ as an oversight.
 The tasks gained the verification the reviewer asked for, including a settings
 test for the pre-upgrade shape of a substituted deployment, which must start
 rather than refuse.
+
+**Confirmation 1 confirmed finding 1 and returned finding 2**, and it was right
+to: the rule had changed and six siblings still carried the old one. Task 1.4
+demanded that no adapter ever call `from_pretrained` without a revision, while
+task 1.3 required exactly that for the unpinned case; the delta's default-revision
+scenario covered "no revision configured", which includes the substituted name it
+elsewhere leaves unpinned; the same-snapshot scenario and design decision 2
+promised snapshot identity unconditionally; the proposal's Capabilities and task
+2.1 still said a substituted name needs a revision of its own; and this handoff
+still presented the startup refusal as a decision.
+
+All of them now scope the guarantee to a load that **has** a revision, and name
+the unpinned load as the case that keeps today's behaviour — including its gap.
+Fix the claim, not the line: the rule was right after the first fix and the
+artifacts were not.
 
 ## Next step
 
