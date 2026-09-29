@@ -131,3 +131,24 @@
 - Targeted checks: 88 passed via `PYTHONDONTWRITEBYTECODE=1 PYTEST_ADDOPTS='-p no:cacheprovider tests/unit/test_style_benchmark.py tests/unit/test_style_corpus.py tests/unit/test_style_candidate.py tests/unit/test_image_definition.py' make test RUN='.venv/bin/python -B -m'`.
 - Architecture checked against the installed OpenCLIP configuration and activation selection; the real-weight benchmark and models suite were not rerun. Numerical rerun evidence remains the updated ADR and handoff.
 - Finding 3 has now failed two confirmations. Per AGENTS.md, stop the confirmation loop and seek user arbitration or split/reduce the change before proceeding.
+
+## Confirmation 3 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-29
+**Reviewed-Commit:** f8c3c0df0d9a9c7f2c96ed07595498f318ed0a52
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the adapter selects `ViT-L-14-quickgelu` and checks the constructed activation before loading tensors. The installed OpenCLIP configuration enables QuickGELU and its vision-tower builder honors that flag; regression tests cover the selected variant and rejection of GELU. ADR-006 and the how-to consistently record the corrected measurement (candidate preference 0.282, edges 0.898) and retain the no-third-key decision. |
+| 2 | confirmed — surviving-label validation refuses fewer than 20 photographs or 4 looks before scoring. `embed()` handles an entirely rejected stream before concatenation, allowing `main()` to return 2 with the specific all-rejected explanation. The command-path regression patches the actual imported corpus module and verifies that explanation; the targeted tests pass. |
+| 3 | confirmed — the remaining applicability-table claim now conditions reproduction on identical weights and preprocessing and explicitly says the command establishes that condition on no machine, including the same machine. Together with the narrowed spec, design decision 6, report caveat, ADR and how-to, this resolves the claimed guarantee without pretending that cache refs identify effective model/processor revisions. The report regression verifies that matching diagnostic rows establish neither matching inputs nor matching numbers. |
+
+### Confirmation evidence
+
+- This additional confirmation follows the user's explicit request after the two failed confirmations; it is not an automatic continuation of the executor's confirmation loop.
+- Scope: only the diff from `e9ea55c722323ad869f19d8b4448476e26129e78` to `f8c3c0df0d9a9c7f2c96ed07595498f318ed0a52` and the code paths/artifacts implicated by findings 1–3. No unrelated findings introduced.
+- Targeted checks: 88 passed via `PYTHONDONTWRITEBYTECODE=1 PYTEST_ADDOPTS='-p no:cacheprovider tests/unit/test_style_benchmark.py tests/unit/test_style_corpus.py tests/unit/test_style_candidate.py tests/unit/test_image_definition.py' make test RUN='.venv/bin/python -B -m'`.
+- Architecture checked against the installed OpenCLIP configuration and activation selection. The real-weight benchmark and models suite were not rerun during this confirmation; numerical rerun evidence is the updated ADR, how-to and handoff.
+- Repository search checked the corrected measurement values and reproduction claims; the old values remain only as an explicitly identified account of the incorrect architecture.
