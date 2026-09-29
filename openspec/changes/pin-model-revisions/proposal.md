@@ -39,9 +39,16 @@ and the repository is inconsistent with its own precedent.
 - **One revision per load, for every artefact of it.** Resolved once and passed
   to both `from_pretrained` calls, so the weights and the processor cannot come
   from different snapshots.
-- **A revision belongs to a repository.** Configuration refuses a checkpoint
-  name moved away from its default while its revision is left at the default,
-  because that default names a commit of the repository that was replaced.
+- **A revision has to be a commit.** The hub accepts a branch or a tag wherever
+  it accepts a commit, so `CLIP_REVISION=main` would look pinned and pin
+  nothing. Configuration requires a full 40-character hexadecimal commit and
+  refuses a branch, a tag, an abbreviated hash or an empty value, by name. The
+  setting did not exist before, so nothing that worked is refused.
+- **A revision belongs to the repository it is a commit of.** A checkpoint name
+  moved away from its default does **not** inherit the default revision: that
+  commit belongs to the repository that was replaced. Such a checkpoint is
+  loaded as it is loaded today — without a revision — and the service says so.
+  It is not refused: that configuration works now and keeps working.
 - **ADR-007** records why the revision is configuration rather than a constant,
   what this fixes and — as plainly — what it does not.
 
@@ -68,10 +75,12 @@ None.
 - **Unchanged, deliberately:** the database, every migration, the `embeddings`
   table and its constraint, the indexes, both search endpoints, the readiness
   probe's checks and payload, the indexing queue and its write path, the CLI's
-  existing commands, and every vector already stored. **No behaviour a user or
-  an operator can observe changes.** A deployment that upgrades keeps working
-  exactly as before; nothing goes not-ready, nothing re-indexes, nothing is
-  refused that was accepted yesterday.
+  existing commands, and every vector already stored. **Every configuration the
+  service accepts today it still accepts**, including a substituted checkpoint
+  name with no revision — that one loads unpinned, as it does now, and says so.
+  The only configurations refused are ones that could not exist before, because
+  the settings that express them are new. Nothing goes not-ready, nothing
+  re-indexes.
 - **Downloads:** none on a machine whose cache already holds those commits,
   which is the case here — the pinned defaults are the commits the local cache
   resolved. A machine that holds a different commit fetches the pinned one once.
@@ -94,6 +103,13 @@ None.
   already and stores no vector.
 - **No verification that a revision is what it claims.** A commit hash is
   checked by the hub; what this change fixes is that no commit was named at all.
+  Nor does it ask the hub whether a configured commit exists: that is a network
+  call on a path that must work from a warm cache.
+- **No pinning of a substituted checkpoint the operator has not pinned.** The
+  documentation asks for a revision beside a substituted name; if it is not
+  given, that checkpoint stays as unpinned as it is today. Refusing to start
+  instead was designed and dropped — it would refuse a configuration that works
+  now, which is the one thing this change may not do.
 - **No upgrade of either checkpoint.** The pinned defaults are the commits this
   repository already runs, so the weights that answer today are the weights that
   answer after the change.

@@ -67,6 +67,34 @@ So the change fixes the **cause** and leaves the consequence alone:
   dropped is recorded in the design and will be in ADR-007, so a later reader
   does not re-propose it blind.
 
+## Gate 1 round 1: two findings, both fixed
+
+**1. The pin would not have pinned (major).** `CLIP_REVISION=main` passed the
+validation as drafted — non-empty, name at its default — and the model hub takes
+a branch or a tag wherever it takes a commit. The same string handed to two
+calls resolves twice, so the defect would have survived, disguised as fixed.
+Configuration now requires a full 40-character hexadecimal commit and refuses a
+branch, a tag, an abbreviated hash, an empty value or whitespace, by setting
+name. That refusal breaks nothing: the setting did not exist before.
+
+**2. The compatibility promise contradicted the design (major).** A deployment
+that today sets only `CLIP_MODEL_NAME` starts; under the first draft it would
+have inherited the default revision and been refused. So "nothing is refused
+that was accepted yesterday" could not stand beside the rule as written.
+
+Resolved by the principle this change was reshaped around rather than by
+narrowing the promise: **a substituted name inherits no revision and is not
+refused.** It loads without one, exactly as it does today, and the service says
+it is unpinned. Refusing was designed and dropped, and so was resolving the
+current commit from the hub at load time — that one adds a network call to a
+path that must work from a warm cache, and its fallback is the unpinned load
+anyway. Both alternatives are recorded in the design so neither is re-proposed
+as an oversight.
+
+The tasks gained the verification the reviewer asked for, including a settings
+test for the pre-upgrade shape of a substituted deployment, which must start
+rather than refuse.
+
 ## Next step
 
 `/gate-review pin-model-revisions 1` — Gate 1 on the artifacts.

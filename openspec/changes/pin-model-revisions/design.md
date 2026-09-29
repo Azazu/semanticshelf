@@ -30,15 +30,16 @@ model key names a moving target — and it fixes it where the target moves.
 **Non-Goals** (beyond the proposal's)
 
 - No attempt to identify weights the service did not load itself.
-- No new failure mode. A change whose point is reproducibility must not make a
-  working deployment stop.
+- No new failure mode for any configuration that works today. A change whose
+  point is reproducibility must not make a working deployment stop — including
+  the deployment that substitutes a checkpoint, which §2.3 allows.
 
 ## Applicability (high tier)
 
 | Question | This change |
 |---|---|
 | Crash around an external effect | The only external effect is the checkpoint download, and it is unchanged except that it now names a commit. A failed download leaves the adapter unbuilt, exactly as before, and nothing has been stored. |
-| Empty, zero and null inputs | An empty revision setting is the absence of a value, not a revision: configuration refuses it rather than passing it to the hub, where an empty string would silently mean "whatever `main` is" — the defect this change exists to remove. |
+| Empty, zero and null inputs | An empty revision is the absence of a value, not a revision, and configuration refuses it rather than passing it to the hub. So are a branch, a tag and an abbreviated hash: all of them resolve at load time, which is the defect. What is *not* refused is the absence of a revision for a substituted checkpoint name — that configuration worked before and keeps working, unpinned and said to be. |
 | Idempotent retries | Loading is already idempotent per process (the registry caches the built embedder), and a revision does not change that. A retried load reads the same commit. |
 | Authorization boundary | n/a — no endpoint gains or loses a caller. |
 | Concurrent writers | n/a — nothing is written. |
@@ -59,16 +60,44 @@ So `CLIP_REVISION` and `DINOV2_REVISION` are settings, defaulting to the commits
 this repository verified. A deployment that configures nothing is reproducible;
 a deployment that substitutes a checkpoint says which commit of it.
 
-**And the two settings are bound together.** A revision is a commit *of a
-repository*. A name configured away from its default while the revision stays at
-the default names a commit of the repository that was replaced — which the hub
-will either refuse or, worse, resolve to something unrelated. Configuration
-refuses that combination at startup, naming the setting to fix. The same
-validation refuses an empty revision, which would mean "whatever `main` is".
+**A revision has to be a commit, and configuration checks that.** The model hub
+accepts a branch or a tag wherever it accepts a commit, so `CLIP_REVISION=main`
+would pass any check that only asks "is something set" and would leave the
+defect exactly where it was — worse, disguised as fixed. Configuration therefore
+requires a full 40-character hexadecimal commit and refuses anything else by
+name: a branch, a tag, an abbreviated hash, an empty value. This refusal breaks
+no existing deployment, because the setting did not exist until now.
 
-*What this guarantees:* a build states which weights it runs. *What it does not:*
-it does not verify that the commit is what it claims to be — the hub does that,
-and what this fixes is that no commit was named at all.
+**A revision belongs to the repository it is a commit of.** A name configured
+away from its default while no revision is configured with it must not inherit
+the default revision: that commit belongs to the repository that was replaced.
+The first draft refused such a configuration at startup. That is wrong here for
+the reason this whole change was reshaped: **the configuration was accepted
+yesterday, so refusing it today is a new failure mode**, and a refinement that
+stops a working system is not a refinement.
+
+So a substituted checkpoint with no revision of its own is loaded the way it was
+loaded before this rule — without a revision — and the service says so where an
+operator can see it. The default path, which is every deployment that does not
+substitute a checkpoint, is fully pinned.
+
+*What this guarantees:* a build states which weights it runs, or states that it
+cannot. *What it does not:* it does not verify that a commit is what it claims
+to be — the hub does that, and what this fixes is that no commit was named at
+all. It also leaves a substituted checkpoint unpinned unless its operator pins
+it, which the documentation asks them to do and ADR-007 records as the second
+thing this change does not fix.
+
+*Alternative considered:* refuse to start on a substituted name without a
+revision. Rejected above, and recorded here so it is not re-proposed as an
+oversight.
+
+*Alternative considered:* resolve the current commit from the hub at load time
+when none is configured, so every load is pinned to something. Rejected: it adds
+a network call to a path that must work from a warm cache with no network, and
+the fallback when that call fails is the unpinned load anyway — so it buys a
+guarantee that holds only when the network is up, in exchange for a new way for
+a load to be slow or to fail.
 
 *Alternative considered:* a constant beside the key, as ADR-005 has. Rejected
 for the substitution requirement above — and ADR-007 records the asymmetry, so

@@ -8,20 +8,28 @@
   time rather than copied from the proposal. Verify: unit tests that each
   default is a 40-character lowercase hex commit and that each setting is read
   from its documented environment name.
-- [ ] 1.2 The binding of design decision 1, as configuration validation: a
-  checkpoint name moved away from its default while its revision is left at the
-  default is refused at startup, by name; an empty revision is refused too,
-  because it would mean "whatever `main` is". Verify: unit tests, each watched
-  to refuse — a substituted CLIP name with the default revision, the same for
-  DINOv2, an empty revision, and the two legal combinations (both defaulted;
-  name and revision both configured).
-- [ ] 1.3 `app/ml/clip.py` and `app/ml/dinov2.py`: the revision is resolved once
+- [ ] 1.2 Configuration validation, design decision 1: a configured revision
+  must be a **full 40-character lowercase hexadecimal commit**, and anything
+  else is refused at startup by setting name. Verify: unit tests, each watched
+  to refuse, for both settings — `main`, a tag-shaped value, a 7-character
+  abbreviated hash, a 40-character value with a non-hex character, an empty
+  string, and whitespace; plus the values that must be accepted, the defaults
+  and another full commit.
+- [ ] 1.3 A substituted name does not inherit the default revision, and is not
+  refused either: when a checkpoint name is configured away from its default and
+  no revision is configured with it, that checkpoint loads **without** a
+  revision and the service states that it is unpinned, where an operator can see
+  it. Verify: unit tests that the adapter receives no revision in that case,
+  that the service starts, and that the statement is made; and that the
+  combination of a substituted name **with** a configured revision passes it
+  through unchanged.
+- [ ] 1.4 `app/ml/clip.py` and `app/ml/dinov2.py`: the revision is resolved once
   per `load` and passed to **every** `from_pretrained` call — the processor and
   the model alike (design decision 2). Verify: unit tests that record the two
   calls a stand-in receives and assert both carry the same revision, without
   loading any weights; and that neither adapter calls `from_pretrained` without
   one.
-- [ ] 1.4 The real checkpoints still load and still answer. Verify: the
+- [ ] 1.5 The real checkpoints still load and still answer. Verify: the
   `models`-suite tests for CLIP and DINOv2 pass unchanged against the pinned
   revisions (real weights, never in CI), including the width check and the
   conformance helpers they already use.
@@ -53,15 +61,18 @@
 ## 3. Closing the change
 
 - [ ] 3.1 A demonstrated failing input for every new or changed check (high
-  tier): each default's shape, the substituted-name rule, the empty-revision
-  rule, and the one-revision-per-load rule for each adapter. Verify: one table,
+  tier): each default's shape, each form of mutable or malformed revision the
+  validation refuses, the rule that a substituted name inherits no revision, and
+  the one-revision-per-load rule for each adapter. Verify: one table,
   one row per check, each a run with that one edit and the file restored
   afterwards.
-- [ ] 3.2 Nothing observable changed. Verify: the API and integration suites
-  pass unchanged — no test needed editing to accommodate this change — and the
-  readiness payload, the endpoints and the schema are untouched, which the
-  absence of a migration and of any diff under `alembic/`, `app/api/` and
-  `app/services/` shows.
+- [ ] 3.2 Every configuration the service accepts today it still accepts.
+  Verify: the API and integration suites pass unchanged — no test needed editing
+  to accommodate this change; the readiness payload, the endpoints and the
+  schema are untouched, which the absence of a migration and of any diff under
+  `alembic/`, `app/api/` and `app/services/` shows; and a settings test for the
+  pre-upgrade shape of a substituted deployment — a checkpoint name configured,
+  no revision — which must construct and start rather than refuse.
 - [ ] 3.3 `openspec validate pin-model-revisions --strict` passes and every task
   above is checked with its evidence.
 - [ ] 3.4 Run locally everything CI runs, in CI's own form:
