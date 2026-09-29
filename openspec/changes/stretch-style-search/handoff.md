@@ -1,7 +1,7 @@
 # Handoff — stretch-style-search
 
 **Updated:** 2026-09-28 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/stretch-style-search
 
 ## Done this session
@@ -112,7 +112,7 @@ implementation of tasks 1.1-2.5, 3.3 and 5.1.
 | `scripts/workflow_verify_test.sh` | **green** — 23 passed |
 | `make audit` | **green** — no known vulnerabilities in 97 packages |
 | `make image` | **green** — and the point of the group holds |
-| `FORCE_COLOR=1 CI=true make test-integration` | **not run** — see Blockers |
+| `FORCE_COLOR=1 CI=true make test-integration` | **green** — 296 passed, 1 skipped |
 
 **The image did not grow.** `semanticshelf:runtime` is **1.79 GB**, the same as
 the build of 2026-09-28 that predates the dependency, and the service image
@@ -124,35 +124,39 @@ $ docker run --rm --entrypoint sh semanticshelf:runtime \
 (nothing)
 ```
 
+**The integration database is a container of its own.** The suite reads
+`semanticshelf_it` on port 5434 from a standalone `pgvector/pgvector:pg16`
+container named `semanticshelf-it`, not the compose `db` service on 5433; it had
+stopped when the machine rebooted, and `docker start semanticshelf-it` was the
+whole fix. Nothing in the configuration needed changing.
+
 **One check failed first and was right to.** `make check` rejected
 `scripts/style_candidate.py`: its own docstring quoted the literal the sweep
 forbids. The sweep reads `git ls-files`, so the file passed while it was
 untracked and failed the moment it was committed — the guard working exactly as
 written. The docstring says the same thing without the literal.
 
+## The mechanical floor for Gate 2 (task 5.4)
+
+```console
+$ scripts/pregate-verify.sh gate2 stretch-style-search
+[OK]   git diff --check clean
+[OK]   openspec validate stretch-style-search --strict
+[OK]   risk tier declared: high
+[OK]   proposal.md has a Non-goals section
+[OK]   tasks.md has 16 task(s)
+[OK]   every task checked
+[OK]   checked-task referenced paths exist
+[OK]   markdown links resolve (11 changed .md files)
+[OK]   make check green
+pregate-verify: gate2 stretch-style-search — all checks passed (0 warning(s))
+```
+
 ## Next step
 
-The integration suite, once the local database configuration is reconciled
-(Blockers), then 5.2 and 5.4 and the hand-over for the push.
-
-**Then blocked on one run** (below). When its output exists: fill ADR-006's Decision
-and Consequences and set its status, add "What one run says" and "Reading it" to
-the how-to (tasks 3.1, 3.2, 4.1, 4.2), then 5.2, 5.3 and 5.4.
+The user pushes `change/stretch-style-search` and reports the CI run; then
+`/gate-review stretch-style-search 2` — Gate 2 on the code diff.
 
 ## Blockers
 
-**The integration suite cannot connect to the local database**, and the cause is
-in a file this agent may not read or edit.
-
-- the container `semanticshelf-db-1` was initialised with role and database
-  `semanticshelf` (from compose's `POSTGRES_USER` / `POSTGRES_DB`);
-- the application's `DATABASE_URL` names user **`postgres`**, which the server
-  answers with `FATAL: password authentication failed ... Role "postgres" does
-  not exist`;
-- the same `DATABASE_URL` names port **5434** while compose's default publishes
-  **5433**, so the two never even met until the container was republished on
-  5434 for this run.
-
-Nothing in this change touches the database, and every other check CI runs is
-green. The volume (`semanticshelf_pg_data`, created 2026-09-25, 65 MB) was left
-untouched.
+None.

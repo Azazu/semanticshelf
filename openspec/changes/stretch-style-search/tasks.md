@@ -105,9 +105,9 @@
   ratio's non-positive denominator, and the bound's strict comparison. Verify: one
   table, one row per check, each a run with that one edit and the file restored
   afterwards.
-- [ ] 5.2 `openspec validate stretch-style-search --strict` passes and every
+- [x] 5.2 `openspec validate stretch-style-search --strict` passes and every
   task above is checked with its evidence.
-- [ ] 5.3 Run locally everything CI runs, in CI's own form:
+- [x] 5.3 Run locally everything CI runs, in CI's own form:
   `FORCE_COLOR=1 CI=true make check`, `openspec validate --all --strict`,
   `sh -n scripts/*.sh`, every `scripts/*_test.sh`,
   `FORCE_COLOR=1 CI=true make test-integration` with the database up,
@@ -115,7 +115,7 @@
   adds a dependency and the point of the group is that the image does not grow.
   Verify: each command's result is recorded here, with the image's size beside
   the one before this change.
-- [ ] 5.4 Hand over for the push: `handoff.md` at `awaiting-gate-2`, the
+- [x] 5.4 Hand over for the push: `handoff.md` at `awaiting-gate-2`, the
   mechanical floor passing, and the branch ready. Verify:
   `scripts/pregate-verify.sh gate2 stretch-style-search` prints all checks
   passed and its output is recorded in the handoff. The green CI run is the
