@@ -5,10 +5,17 @@ before the first request.
 
 ## What this build runs
 
-| Key | Checkpoint | Width | Takes | Answers |
-|---|---|---|---|---|
-| `clip-vit-l14` | `openai/clip-vit-large-patch14` | 768 | text and pictures | what a picture is *about* |
-| `dinov2-large` | `facebook/dinov2-large` | 1024 | pictures | what a picture *looks like* |
+| Key | Checkpoint | Commit | Width | Takes | Answers |
+|---|---|---|---|---|---|
+| `clip-vit-l14` | `openai/clip-vit-large-patch14` | `32bd6428…` | 768 | text and pictures | what a picture is *about* |
+| `dinov2-large` | `facebook/dinov2-large` | `47b73eef…` | 1024 | pictures | what a picture *looks like* |
+
+**A key names a commit, not just a repository.** A checkpoint name points at
+whatever its repository holds today; a stored vector has to mean the same thing
+a year from now, so each key is read at a fixed commit
+([ADR-007](../adr/ADR-007-pinned-checkpoint-revisions.md)). The commits above
+are the defaults of `CLIP_REVISION` and `DINOV2_REVISION`, and nothing needs
+setting to get them.
 
 Both are enabled by default, so an upload is queued for both and either
 kind of search answers. DINOv2 has no text tower at all: asking it for
@@ -20,6 +27,35 @@ A deployment may run one model by naming it in `ENABLED_MODELS`. That
 halves what an upload costs and gives up the search the other one
 answers; the vectors already stored are not touched, and enabling the
 model again later is `semanticshelf index missing`.
+
+### Substituting a checkpoint
+
+`CLIP_MODEL_NAME` and `DINOV2_MODEL_NAME` take a mirror or a compatible
+fine-tune — same space, same width, which the width check enforces at load.
+**Set its commit with it.** A revision this repository ships is a commit of the
+repository it ships, so a substituted name inherits none of it: the checkpoint
+is then read the way every checkpoint was read before commits were pinned, and
+what it answers can change under you. The service starts either way and says
+which it did:
+
+```json
+{"event": "checkpoint is unpinned", "model": "clip-vit-l14", "checkpoint": "someone/clip-fine-tune"}
+```
+
+To pin it, give both:
+
+```console
+$ CLIP_MODEL_NAME=someone/clip-fine-tune \
+  CLIP_REVISION=<the full 40-character commit> uv run semanticshelf models warm
+```
+
+A branch or a tag will not do — `CLIP_REVISION=main` is refused at startup,
+because it resolves at load time and would read as pinned while pinning nothing.
+
+**Changing a commit means re-indexing.** Vectors already stored were built with
+the previous weights, and nothing records which; they are comparable with each
+other and not with what the new ones produce. ADR-007 says what that does and
+does not guarantee.
 
 ### And one query encoder
 
@@ -41,15 +77,17 @@ nothing to be compared with. Which languages are claimed, and on what evidence:
 
 Three things about this checkpoint are worth knowing before you enable it.
 
-- **It is pinned, by two revisions, and there is no setting to move them.**
-  One revision is the checkpoint with its config and tokenizer, the other the
-  `xlm-roberta-large` config the architecture is built from; both are constants
-  in `app/ml/mclip.py`. The two models *do* have a setting for their
-  checkpoint, because a mirror or a compatible fine-tune is your choice and the
-  width check keeps it honest. This key is different in kind: it claims to land
-  in another model's space, nothing at runtime can check that, and what backs
-  it is a measurement of these bytes. Other weights are another encoder, with a
-  key and numbers of their own.
+- **It is pinned by two revisions, and unlike the two models there is no setting
+  to move them.** One revision is the checkpoint with its config and splitter,
+  the other the `xlm-roberta-large` config the architecture is built from; both
+  are constants in `app/ml/mclip.py`. The two storage models have a setting for
+  their checkpoint *and* for its commit, because a mirror or a compatible
+  fine-tune is your choice and the width check keeps it honest. This key is
+  different in kind: it claims to land in another model's space, nothing at
+  runtime can check that, and what backs it is a measurement of these bytes.
+  Other weights are another encoder, with a key and numbers of their own — which
+  is why the commit is not yours to move here (ADR-005, and ADR-007 on why the
+  two differ).
 - **A checkpoint that does not fill the architecture is refused at load.** A
   tensor the model expects and the file does not carry would stay randomly
   initialised and answer anyway, at the right width; the adapter compares what

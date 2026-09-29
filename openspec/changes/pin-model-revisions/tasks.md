@@ -30,30 +30,30 @@
   revision, without loading any weights; and, for the unpinned case of task 1.3,
   that **neither** call carries a revision — so the two paths are asserted
   separately rather than one rule being stated over both.
-- [ ] 1.5 The real checkpoints still load and still answer. Verify: the
+- [x] 1.5 The real checkpoints still load and still answer. Verify: the
   `models`-suite tests for CLIP and DINOv2 pass unchanged against the pinned
   revisions (real weights, never in CI), including the width check and the
   conformance helpers they already use.
 
 ## 2. The decision, and the documents that carry it
 
-- [ ] 2.1 The `embedding-models` delta lands as written: a configured revision
+- [x] 2.1 The `embedding-models` delta lands as written: a configured revision
   is an immutable commit, one revision per load for every artefact of a load
   that has one, and a substituted name inherits none — it loads unpinned and
   says so. Verify: `openspec validate --strict`; each of its four scenarios has
   a test, the unpinned one for both adapters.
-- [ ] 2.2 `docs/adr/ADR-007-pinned-checkpoint-revisions.md`: why the revision is
+- [x] 2.2 `docs/adr/ADR-007-pinned-checkpoint-revisions.md`: why the revision is
   configuration rather than a constant (and why that differs from ADR-005, so
   the asymmetry is not read as an inconsistency), what one revision per load
   closes, and **what this change does not fix** — vectors stored before it have
   provenance nobody can reconstruct, and the repair is a re-index. It records
   the detection design that was dropped and why, so a later reader does not
   re-propose it blind. Verify: the ADR index carries its row.
-- [ ] 2.3 `docs/reference/settings.md` gains both settings with their defaults
+- [x] 2.3 `docs/reference/settings.md` gains both settings with their defaults
   and the rule that binds them to their names; `docs/how-to/models.md` says what
   to set when substituting a checkpoint. Verify: both re-read whole after the
   last edit; every command printed in the changed sections was run in that form.
-- [ ] 2.4 Sweep for the claim, not the line: `rg` the repository for the two
+- [x] 2.4 Sweep for the claim, not the line: `rg` the repository for the two
   checkpoint names and for `from_pretrained`, and reconcile every document that
   describes how a model is chosen or loaded — including `README.md` and
   `docs/explanation/requirements.md` §2.3 if it states the name is all that
