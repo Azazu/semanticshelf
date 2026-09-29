@@ -1,7 +1,7 @@
 # Handoff — stretch-style-search
 
 **Updated:** 2026-09-28 · claude
-**State:** awaiting-gate-1
+**State:** implementing
 **Branch:** change/stretch-style-search
 
 ## Done this session
@@ -12,7 +12,7 @@ measurement: `clip-vit-l14` is measured too, and the deciding statistic is a
 rank preference rather than a ratio of averages, because a ratio is moved by a
 model's own similarity scale.
 
-Implemented, 9 of 17 tasks:
+Implemented, 9 of 16 tasks:
 
 - **1.1, 1.2** `scripts/style_corpus.py` — six looks as pure functions of the
   bytes, the stream the benchmark walks, and the refusals: a corpus below 20
@@ -82,30 +82,29 @@ Two rows of the applicability table changed with it — "crash around an externa
 effect" now has a second effect to answer for, and "concurrent writers" is no
 longer `n/a`.
 
-**Round 2 returned one major finding, and the first answer to it was wrong in
-the same way.** The fingerprint named "the model", but only the candidate is
-pinned here: `clip-vit-l14` and `dinov2-large` load a checkpoint *name* that is
-a setting, with no revision. The first fix added the name and a commit hash
-resolved from the local cache; the confirmation pointed out that each adapter
-resolves the weights and the processor in two separate calls, that a later
-lookup can report a snapshot neither of them read, and that the processor's
-behaviour depends on the installed `transformers` too. Both are true, and they
-are the same defect: a list of names and versions is always one entry short.
+**Round 2's finding was withdrawn with the feature it objected to.** The cache
+had to prove that the vectors in a file came from the same weights the next run
+loads, and there is nothing here to prove it with: `clip-vit-l14` and
+`dinov2-large` load a checkpoint *name* that is a setting, with no revision, and
+each adapter resolves the weights and the processor in separate calls. A partial
+check proves only the part it checked; a full check is the measurement itself.
+Two confirmations failed on this, so under AGENTS.md the executor stopped and
+the user arbitrated: **drop the cache**, run the measurement in one sitting.
 
-So the model side is no longer described — it is **checked**. A run that wants
-to read a cache re-embeds the corpus's first few images with the model it
-loaded and compares them with the cached rows. They match exactly when the
-loaded model is the same function from picture to vector as the one that filled
-the file, which is the only property the reuse depends on. A cache is then a
-saving of the embedding, not of the loading.
+Design decision 6 and task 2.6 are removed, the two applicability rows are back
+to what Gate 1 round 1 confirmed, and the finding is `wont-fix` with that
+reason. The defect it exposed is real and outlives this change, so it is
+**roadmap row 20** (`pin-model-revisions`): ADR-005 pinned the query encoder's
+revision for exactly this reason and the two stored keys were never pinned, which
+means a stored vector cannot be reproduced from the key alone.
+
+The artifacts are now the shape Gate 1 confirmed at `eb3f588`, plus the
+implementation of tasks 1.1-2.5, 3.3 and 5.1.
 
 ## Next step
 
-`scripts/gate-run.sh stretch-style-search 1 confirm 2` — second confirmation of
-round 2, then task 2.6 and the run. Per AGENTS.md this is the last confirmation
-attempt on this finding: if it fails again the cache is dropped and the change
-goes back to the shape Gate 1 already approved, with the measurement run in one
-sitting.
+The measurement, in one sitting. Then ADR-006's decision, the how-to's results
+(tasks 3.1, 3.2, 4.1, 4.2), and 5.2-5.4.
 
 **Then blocked on one run** (below). When its output exists: fill ADR-006's Decision
 and Consequences and set its status, add "What one run says" and "Reading it" to
@@ -119,6 +118,5 @@ use. The command is
 `TORCH_NUM_THREADS=4 nice -n 19 uv run --group style python scripts/style_benchmark.py --pictures 100`
 and it prints its progress and the time remaining.
 
-Paying for it in instalments is what design decision 6 and task 2.6 add, and
-why this change is at Gate 1 again rather than implementing them on a chat
-agreement.
+Paying for it in instalments was tried and withdrawn — see the arbitration
+above.

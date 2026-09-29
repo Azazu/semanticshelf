@@ -61,12 +61,7 @@ words: a third key is worth a migration only if it answers something. So:
   question: the pictures are the ones already there and the looks are code),
   then reports, per model, how often it ranks a shared look above a shared
   subject — with the ratio of averages beside it as a diagnostic — over the
-  whole corpus rather than four pictures. Three model passes over a hundred
-  photographs is about twenty-five minutes of CPU, so the command can also be
-  paid for in instalments: `--only` measures one model, `--cache` keeps what a
-  run computed for a later one to assemble. Without `--cache` it writes nothing
-  anywhere, and a cached file is read only after a fingerprint over every input
-  that can change a vector matches.
+  whole corpus rather than four pictures.
 - The candidate is CSD ViT-L (`tomg-group-umd/CSD-ViT-L`, CC-BY-4.0), measured
   beside **every key the service stores image vectors under** — `clip-vit-l14`
   and `dinov2-large` — because a new key has to answer something neither of them
