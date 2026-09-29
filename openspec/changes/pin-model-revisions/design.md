@@ -8,47 +8,48 @@ current source:
 - `app/ml/clip.py` and `app/ml/dinov2.py` both call
   `from_pretrained(name, cache_dir=cache)` **twice** — once for the processor,
   once for the weights — with no `revision`.
-- `app/ml/mclip.py` passes `revision=REVISION` to every read it makes, a
-  repository constant, and ADR-005 says why. The precedent exists; these two
-  keys are the exception.
-- `app/services/readiness.py` compares the application's declarations with the
-  schema's. Nothing in it, or anywhere else, can see which weights answered.
+- `app/ml/mclip.py` passes `revision=REVISION` to every read it makes, and
+  ADR-005 says why. The precedent exists; these two keys are the exception.
+- The commits the local cache resolved for both names are the commits the hub's
+  `main` points at today: `32bd6428…` and `47b73eef…`. Pinning them changes
+  which weights answer on this machine not at all.
 
-The store holds vectors under both keys today, so this is not a rule for a
-future corpus: it is a rule that finds an existing one wanting.
+**This change is polish.** Everything the earlier changes built stays as it is
+and keeps behaving as it does: no migration, no schema, no endpoint, no probe,
+no write path, no stored vector, no command. What it fixes is one thing — that a
+model key names a moving target — and it fixes it where the target moves.
 
 ## Goals / Non-Goals
 
 **Goals**
 
-- A vector's key names one checkpoint, reproducibly, without giving up the
-  substitution the requirements allow.
-- A disagreement between the corpus and the configuration is loud, not silent.
-- An operator who knows what their corpus was built with can say so, without
-  re-indexing it.
+- A key names one checkpoint, reproducibly, without giving up the substitution
+  the requirements allow.
+- Nothing that worked yesterday behaves differently today.
 
 **Non-Goals** (beyond the proposal's)
 
 - No attempt to identify weights the service did not load itself.
-- No re-indexing, scheduled or automatic.
+- No new failure mode. A change whose point is reproducibility must not make a
+  working deployment stop.
 
 ## Applicability (high tier)
 
 | Question | This change |
 |---|---|
-| Empty, zero and null inputs | A store with no vectors has no records and the check passes on nothing. A key enabled but never written has no record, and the check ignores it: there is nothing whose provenance could disagree. A key whose vectors were all deleted keeps its record — harmless, because the check requires vectors to exist — and if the key is filled again under another revision the mismatch is real and `models record` is the answer. |
-| Crash around an external effect | The record is written in the transaction that stores the first vector, so a crash leaves neither the vector nor a record claiming it. The other external effect is the checkpoint download, which is unchanged except that it now names a commit. |
-| Concurrent writers | Two runners can store the first vector under a key at the same moment. The record is an insert that does nothing on conflict, so one of them wins and neither fails. If those runners are configured differently — a rolling deployment mid-change — the loser's own readiness check then reports the mismatch against the record that won, which is the detection working rather than a race to paper over. |
-| Idempotent retries | The queue is at-least-once (ADR-003) and an embedding write is an idempotent upsert. The record follows the same shape: insert if absent, never update, so a retried write cannot change what the corpus claims. |
+| Crash around an external effect | The only external effect is the checkpoint download, and it is unchanged except that it now names a commit. A failed download leaves the adapter unbuilt, exactly as before, and nothing has been stored. |
+| Empty, zero and null inputs | An empty revision setting is the absence of a value, not a revision: configuration refuses it rather than passing it to the hub, where an empty string would silently mean "whatever `main` is" — the defect this change exists to remove. |
+| Idempotent retries | Loading is already idempotent per process (the registry caches the built embedder), and a revision does not change that. A retried load reads the same commit. |
 | Authorization boundary | n/a — no endpoint gains or loses a caller. |
+| Concurrent writers | n/a — nothing is written. |
 | Money and rounding | n/a. |
-| Deletion and expiry | Deleting an asset deletes its embeddings and leaves the record, which the check ignores once the key holds nothing. No record expires: a corpus does not become unknown with age. |
+| Deletion and expiry | n/a — no record is created, so none can go stale. |
 
 ## Decisions
 
 ### 1. The revision is configuration with a verified default
 
-A constant would be simpler and it is what ADR-005 did for the query encoder.
+A constant would be simpler, and it is what ADR-005 did for the query encoder.
 It is wrong here, because §2.3 of the requirements deliberately made the
 checkpoint *name* a setting: a fine-tune or a mirror must be substitutable
 without a schema change, since it is the same space and the same width. A
@@ -61,12 +62,17 @@ a deployment that substitutes a checkpoint says which commit of it.
 **And the two settings are bound together.** A revision is a commit *of a
 repository*. A name configured away from its default while the revision stays at
 the default names a commit of the repository that was replaced — which the hub
-will either refuse or, worse, resolve to something unrelated. Settings
-validation refuses that combination at startup, naming the setting to fix.
+will either refuse or, worse, resolve to something unrelated. Configuration
+refuses that combination at startup, naming the setting to fix. The same
+validation refuses an empty revision, which would mean "whatever `main` is".
 
 *What this guarantees:* a build states which weights it runs. *What it does not:*
 it does not verify that the commit is what it claims to be — the hub does that,
 and what this fixes is that no commit was named at all.
+
+*Alternative considered:* a constant beside the key, as ADR-005 has. Rejected
+for the substitution requirement above — and ADR-007 records the asymmetry, so
+the next reader does not read it as an inconsistency.
 
 ### 2. One revision per load, for every artefact of it
 
@@ -79,83 +85,35 @@ construction rather than by timing.
 *What it does not:* it says nothing about a checkpoint whose own files are
 inconsistent, which is the hub's problem and not observable here.
 
-### 3. The record is per key, written with the first vector
+### 3. What this change refuses to do, and why that is a decision
 
-The store gains one row per model key: the key, the revision, and when it was
-recorded. Written in the transaction that stores the **first** vector under that
-key, and never updated afterwards.
+Recording per model key what a corpus's vectors were built with, and refusing
+readiness when that disagrees with the configuration, would turn a silent
+problem into a loud one. It was designed in full and dropped, for a reason worth
+writing down rather than leaving as an omission:
 
-*Why with the first vector rather than at load:* loading a model does not mean
-storing anything, and a process that warms a model and then fails would leave a
-claim about a corpus it never wrote.
+- it needs a migration and a table — the data model is part of what this project
+  shows, and ADR-001 gives an embedding's identity to the asset and the key;
+- it changes the embedding write path, which is the core of the indexing work;
+- it gives the readiness probe a new way to refuse traffic, and **an existing
+  deployment would go not-ready on upgrade** until its corpus was re-indexed or
+  vouched for.
 
-*Why never updated:* a record that followed the configuration would agree with
-it always, and detect nothing. It is a statement about what was stored, and what
-was stored does not change.
+That last one is disqualifying on its own for a change whose brief is polish: a
+refinement that makes a working system stop is not a refinement. So this change
+fixes the **cause** — a key that names a moving target — and leaves the
+**consequence** for vectors already stored to the tooling that can actually
+repair it, `models migrate`, which is its own wish and its own change.
 
-*Why per key rather than per vector:* ADR-001 gives an embedding's identity to
-the asset and the key. A revision column on `embeddings` would add a third
-component to that identity, touch every write path and every read that reasons
-about identity, and carry the same value on every row a key holds. The
-alternative was considered and refused; ADR-007 records it, because a later
-reader will ask.
-
-*What this guarantees:* a key's vectors are described by something written when
-they were written. *What it does not:* it cannot describe a corpus stored under
-two revisions before the record existed — that corpus is `unknown`, below.
-
-### 4. `unknown` is a stated absence, and it blocks
-
-A store that already holds vectors gets a record of `unknown` for each such key,
-written by the migration. Nothing can reconstruct what those vectors were built
-with, and a guess written into a provenance record is worse than no record.
-
-`unknown` equals no configured revision, so the readiness check fails on it. That
-is deliberate and it is the change's sharpest edge: **an existing deployment goes
-not-ready on upgrade** until its operator either re-indexes the corpus or records
-what it was built with. The proposal says so under Impact rather than leaving it
-to be discovered.
-
-*Alternative considered:* treat `unknown` as a warning that does not block.
-Rejected — `CheckResult` is a boolean by design, a warning channel would be new
-surface, and a warning nobody is forced to read is how this defect survived
-eighteen changes in the first place.
-
-### 5. The operator can say what the corpus was built with
-
-`semanticshelf models record <key> <revision>` writes the record for a key that
-has none or replaces `unknown`. It is the operator's declaration, and it is the
-only way to clear `unknown` short of re-indexing.
-
-It cannot overwrite a record that names a real revision: that would turn the
-detection off from the command line, which is the one thing the record exists to
-prevent. Clearing such a record means re-indexing, which is the honest cost.
-
-*What this guarantees:* a detection that can be cleared by someone who knows the
-answer. *What it does not:* it does not check the declaration. An operator who
-records the wrong commit has recorded the wrong commit; the record says who
-wrote it and when.
-
-## Risks / Trade-offs
-
-- **Every existing deployment goes not-ready on upgrade** → stated in the
-  proposal's Impact, in ADR-007 and in the how-to, with both remedies named in
-  the probe's own reason text. For this repository's own corpus the remedy is
-  `make demo`.
-- **A new table for one row per model** → small, and the alternative (a column
-  on `embeddings`) is the one ADR-001 forbids by giving identity to the key.
-- **The operator's declaration is unverified** → it is a declaration; it is
-  recorded with its timestamp, and it cannot overwrite a real record.
-- **The revision defaults could go stale** → they are the commits the repository
-  verified, and a checkpoint that moves does not change what a default names.
-  A later change that upgrades a model changes the default, which is a re-index
-  and a new record — exactly the event this change makes visible.
+*What this guarantees:* nothing observable changes. *What it does not:* vectors
+stored before this change still have provenance nobody can reconstruct. ADR-007
+states that in those words, because a record that quietly implies otherwise
+would be worse than the defect.
 
 ## Migration Plan
 
-One Alembic revision: create the table, then insert `unknown` for every model
-key that already has rows in `embeddings`. Downgrade drops the table; no vector
-is read, written or moved in either direction.
+None. No schema, no data, no setting whose absence changes behaviour: both new
+settings have defaults that are the commits already in use.
 
 ## Open Questions
 

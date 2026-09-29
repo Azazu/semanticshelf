@@ -2,11 +2,10 @@
 
 **Risk-Tier:** high
 
-Three triggers: the change **adds a migration** and a table, it changes how
-**model weights are downloaded** — network egress from a process this repository
-ships — and it gives the readiness probe a new way to refuse traffic, which is
-verifier-adjacent infrastructure. Gate 1 before implementation, a demonstrated
-failing input for every new check.
+One trigger, and it is on this project's own list: the change touches **model
+downloads** — how the weights a key names are fetched. Nothing else about it is
+large: no migration, no schema, no endpoint, no stored vector. Gate 1 before
+implementation, a demonstrated failing input for every new check.
 
 ## Why
 
@@ -17,15 +16,10 @@ vector came from. The key does not keep that promise.
 `clip-vit-l14` and `dinov2-large` load a checkpoint **name** that is a setting
 (`CLIP_MODEL_NAME`, `DINOV2_MODEL_NAME`) with **no revision**, and each adapter
 resolves its weights and its processor in two separate `from_pretrained` calls.
-So:
-
-- the same key can mean different weights on two machines, or on the same
-  machine a month apart, and **a stored vector cannot be reproduced from its
-  key**;
-- a corpus indexed across such a change ranks against itself, silently — no
-  width check sees it, because the width does not change;
-- the two calls can disagree with each other, pairing weights from one snapshot
-  with a processor from another.
+So the same key can mean different weights on two machines, or on the same
+machine a month apart, and the two calls can even disagree with each other —
+pairing weights from one snapshot with preprocessing from another. No width
+check sees it, because the width does not change.
 
 This is not hypothetical. Change 18's reviewers found it while trying to make a
 published measurement reproducible, and it forced three successive narrowings of
@@ -35,31 +29,21 @@ and the repository is inconsistent with its own precedent.
 
 ## What Changes
 
-**Pinned, and the disagreement made visible.**
+**The cause is fixed, and nothing else moves.**
 
 - **A revision beside every checkpoint name.** `CLIP_REVISION` and
-  `DINOV2_REVISION`, settings with defaults that are the commits this
-  repository verified. Resolved once per load and passed to **both**
-  `from_pretrained` calls, so weights and processor cannot come from different
-  snapshots. Configuration refuses a checkpoint name that is not the default
-  one without a revision to go with it: a commit belongs to a repository.
-- **The store records what its vectors were built with.** A new table, one row
-  per model key, written in the same transaction as the first embedding stored
-  under that key. Not per vector — that would make the revision part of an
-  embedding's identity, which ADR-001 reserves for the key.
-- **Readiness refuses when the corpus and the configuration disagree.** A fifth
-  check: for every enabled storage model whose vectors the store holds, the
-  recorded revision against the configured one. A mismatch is a 503 naming both
-  and the remedy, instead of a service that silently ranks incomparable vectors.
-- **A corpus from before this change is `unknown`, and says so.** The migration
-  records `unknown` for every key that already holds vectors, because nobody can
-  say what they were built with. `unknown` fails the check too — with its own
-  reason and its own two remedies.
-- **`semanticshelf models record <key> <revision>`** — the operator's
-  declaration, so `unknown` can be resolved by someone who knows the answer
-  rather than only by re-indexing the whole corpus.
-- **ADR-007** records why the revision is a setting rather than a constant, why
-  the record is per key rather than per vector, and why `unknown` blocks.
+  `DINOV2_REVISION`, settings with defaults that are the commits this repository
+  verified against the hub: `32bd64288804d66eefd0ccbe215aa642df71cc41` for
+  `openai/clip-vit-large-patch14` and `47b73eefe95e8d44ec3623f8890bd894b6ea2d6c`
+  for `facebook/dinov2-large`.
+- **One revision per load, for every artefact of it.** Resolved once and passed
+  to both `from_pretrained` calls, so the weights and the processor cannot come
+  from different snapshots.
+- **A revision belongs to a repository.** Configuration refuses a checkpoint
+  name moved away from its default while its revision is left at the default,
+  because that default names a commit of the repository that was replaced.
+- **ADR-007** records why the revision is configuration rather than a constant,
+  what this fixes and — as plainly — what it does not.
 
 ## Capabilities
 
@@ -72,44 +56,44 @@ None.
 - `embedding-models`: a checkpoint is loaded at a pinned revision, one revision
   for the weights and the processor alike, and a substituted name needs a
   revision of its own.
-- `embedding-storage`: the store records which revision each key's vectors were
-  built with, and that record is written with the first vector rather than
-  claimed afterwards.
-- `health-probes`: readiness gains a fifth check and refuses when the corpus's
-  provenance and the configuration disagree.
 
 ## Impact
 
-- **New:** an Alembic migration and a table; `app/repositories/` gains the
-  record; a readiness check; a CLI subcommand; `docs/adr/ADR-007-*.md`; unit,
-  integration and API tests.
-- **Changed:** `app/ml/clip.py`, `app/ml/dinov2.py` (the load path),
-  `app/core/settings.py` (two settings and their validation),
-  `app/services/readiness.py`, `app/services/indexing.py` or the embedding
-  repository (the write path), `openspec/specs/*` deltas,
-  `docs/reference/settings.md`, `docs/reference/commands.md`,
-  `docs/how-to/models.md`, `README.md` if it names the checks.
-- **Unchanged:** the vectors themselves, the `embeddings` table's columns, the
-  dimension constraint, the indexes, both search endpoints and the query
-  encoder — `mclip-xlmr-l14` is already pinned and stores nothing.
-- **Operational:** a deployment that upgrades **will** go not-ready until its
-  corpus's provenance is recorded or re-indexed. That is the point of the
-  change, and it is stated here rather than discovered.
+- **New:** `docs/adr/ADR-007-pinned-checkpoint-revisions.md`, unit tests for the
+  settings rule and for the one-revision-per-load rule, a `models`-suite test
+  that both adapters still load against the real checkpoints.
+- **Changed:** `app/core/settings.py` (two settings and their validation),
+  `app/ml/clip.py` and `app/ml/dinov2.py` (the load path),
+  `docs/reference/settings.md`, `docs/how-to/models.md`.
+- **Unchanged, deliberately:** the database, every migration, the `embeddings`
+  table and its constraint, the indexes, both search endpoints, the readiness
+  probe's checks and payload, the indexing queue and its write path, the CLI's
+  existing commands, and every vector already stored. **No behaviour a user or
+  an operator can observe changes.** A deployment that upgrades keeps working
+  exactly as before; nothing goes not-ready, nothing re-indexes, nothing is
+  refused that was accepted yesterday.
+- **Downloads:** none on a machine whose cache already holds those commits,
+  which is the case here — the pinned defaults are the commits the local cache
+  resolved. A machine that holds a different commit fetches the pinned one once.
 
 ## Non-goals
 
-- **No revision per vector.** A column on `embeddings` would make the revision
-  part of an embedding's identity, which ADR-001 gives to the key alone, and it
-  would touch every write path for a fact that is the same for every row a key
-  holds. Considered and refused; the record is per key.
+- **No detection of a corpus built with other weights.** The obvious next step —
+  recording per model key what its vectors were built with, and refusing
+  readiness when that disagrees with the configuration — was designed and
+  deliberately dropped. It needs a migration, a table, a change to the embedding
+  write path and a fifth readiness check, and it makes an existing deployment
+  go not-ready on upgrade until its corpus is re-indexed or vouched for. This
+  change fixes the **cause**; the consequence for vectors already stored is not
+  something it can repair, and ADR-007 says so instead of pretending.
 - **No re-indexing tooling.** `models migrate <old-key> <new-key>` is its own
-  wish in §9 of the requirements and its own change. This one detects; it does
-  not repair.
-- **No automatic re-index** on a mismatch. A service that quietly re-embeds a
-  corpus because a setting changed is worse than one that stops.
+  wish in §9 of the requirements and its own change.
+- **No revision per vector.** A column on `embeddings` would put the revision
+  into an embedding's identity, which ADR-001 gives to the asset and the key.
 - **No change to the query encoder.** `mclip-xlmr-l14` is pinned by constant
-  already and stores no vector, so there is nothing to record and nothing to
-  compare.
+  already and stores no vector.
 - **No verification that a revision is what it claims.** A commit hash is
-  checked by the hub, not here; what this change fixes is that no commit was
-  named at all.
+  checked by the hub; what this change fixes is that no commit was named at all.
+- **No upgrade of either checkpoint.** The pinned defaults are the commits this
+  repository already runs, so the weights that answer today are the weights that
+  answer after the change.

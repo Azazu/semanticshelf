@@ -32,36 +32,46 @@ Three consequences, in order of how much they matter:
    reason**, and these two keys were never pinned — so the repository is
    inconsistent with its own precedent.
 
-## What the proposal decided
+## What the proposal decided, after the user reshaped it
 
-- **Risk-Tier: high** — a migration, network egress from a process this
-  repository ships, and a new way for readiness to refuse traffic.
+The first draft detected as well as pinned: a table recording per model key what
+its vectors were built with, a fifth readiness check, a CLI escape hatch and a
+migration. The user's brief for this change is **polish** — everything the
+earlier changes built must keep working and keep its shape, because those are
+the project's substance and this is dressing on top. Measured against that, the
+first draft disqualified itself: it would have made an existing deployment go
+**not-ready on upgrade** until its corpus was re-indexed. A refinement that stops
+a working system is not a refinement.
+
+So the change fixes the **cause** and leaves the consequence alone:
+
+- **Risk-Tier: high**, and not out of caution — this project's own trigger list
+  names "model downloads and any network egress", and the change edits the call
+  that fetches weights. Everything else about it is small.
 - **The revision is configuration with a verified default**, not a constant:
-  §2.3 made the checkpoint *name* a setting on purpose, so a fine-tune or a
+  §2.3 made the checkpoint *name* a setting on purpose so a fine-tune or a
   mirror can be substituted, and a constant would either forbid that or be
-  ignored by it. The two settings are bound — a substituted name with the
-  default revision is refused at startup, because a commit belongs to a
-  repository.
-- **One revision per load**, passed to the processor and the weights alike, so
-  they cannot come from different snapshots. That hole is what the Gate 2
-  reviewer of change 18 named twice.
-- **The record is per key, not per vector** — you chose "pin and detect". A
-  column on `embeddings` would put the revision into an embedding's identity,
-  which ADR-001 gives to the asset and the key; the alternative is written down
-  in the design and will be in ADR-007, because a later reader will ask.
-- **`unknown` blocks.** A store that already holds vectors gets `unknown` for
-  those keys, and no configured revision equals it — so **an existing
-  deployment goes not-ready on upgrade**. That is the sharp edge of the shape
-  you picked, and it is stated in the proposal's Impact rather than left to be
-  discovered. For this repository's own corpus the remedy is `make demo`.
-- **`semanticshelf models record <key> <revision>`** is the way out that is not
-  a re-index: it clears `unknown`, and it refuses to overwrite a record naming a
-  real revision — turning the detection off from the command line is the one
-  thing the record exists to prevent.
+  ignored by it. ADR-007 records the asymmetry with ADR-005 so it is not read as
+  an inconsistency.
+- **The two settings are bound** — a substituted name with the default revision
+  is refused at startup, because a commit belongs to a repository; so is an
+  empty revision, which would mean "whatever `main` is".
+- **One revision per load**, passed to the processor and the weights alike. That
+  hole is what change 18's Gate 2 reviewer named twice.
+- **Nothing observable changes.** No migration, no schema, no endpoint, no
+  probe, no write path, no command, no stored vector. The defaults are the
+  commits the local cache already resolved, so not a byte is downloaded here.
+- **What it does not fix, stated rather than implied:** vectors stored before it
+  have provenance nobody can reconstruct. The repair is a re-index, which is the
+  `models migrate` wish and its own change. The detection design that was
+  dropped is recorded in the design and will be in ADR-007, so a later reader
+  does not re-propose it blind.
 
 ## Next step
 
 `/gate-review pin-model-revisions 1` — Gate 1 on the artifacts.
+`scripts/pregate-verify.sh gate1 pin-model-revisions` passes (13 tasks, tier
+declared, applicability table present, links resolve).
 
 ## Blockers
 
