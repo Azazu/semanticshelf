@@ -18,13 +18,13 @@ same call reports `proj` missing: "nothing missing" is a statement about a
 sequence, not about the weights alone.
 
 **The load is a security decision.** `weights_only=True` refuses this file,
-because it carries pickled objects beside the tensors. `weights_only=False` is
+because it carries pickled objects beside the tensors. Turning that flag off is
 not the answer — it would let any object in the file run code on load, which is
-the thing the flag exists to stop. What unblocks it is `allowlist()`: four
-named globals, each of which builds one value and runs nothing else. That does
-not
-make the weights trustworthy, which nothing can; it bounds what reading them
-can do.
+the thing the flag exists to stop, and a unit test sweeps every non-document
+file in the repository to keep anyone from reaching for it. What unblocks the
+load instead is `allowlist()`: four named globals, each of which builds one
+value and runs nothing else. That does not make the weights trustworthy, which
+nothing can; it bounds what reading them can do.
 
 This module lives under `scripts/` because nothing in the service loads it. If
 ADR-006 says the key is worth a migration, the change that ships it moves the

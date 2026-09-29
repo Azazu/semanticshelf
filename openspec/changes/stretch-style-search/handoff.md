@@ -101,10 +101,39 @@ means a stored vector cannot be reproduced from the key alone.
 The artifacts are now the shape Gate 1 confirmed at `eb3f588`, plus the
 implementation of tasks 1.1-2.5, 3.3 and 5.1.
 
+## What CI runs, run locally (task 5.3)
+
+| command | result |
+|---|---|
+| `FORCE_COLOR=1 CI=true make check` | **green** — 798 passed, 1 skipped |
+| `openspec validate --all --strict` | **green** — 17 passed, 0 failed |
+| `sh -n scripts/*.sh` | **green** — 7 files |
+| `scripts/gate_run_test.sh` | **green** — 77 passed |
+| `scripts/workflow_verify_test.sh` | **green** — 23 passed |
+| `make audit` | **green** — no known vulnerabilities in 97 packages |
+| `make image` | **green** — and the point of the group holds |
+| `FORCE_COLOR=1 CI=true make test-integration` | **not run** — see Blockers |
+
+**The image did not grow.** `semanticshelf:runtime` is **1.79 GB**, the same as
+the build of 2026-09-28 that predates the dependency, and the service image
+carries none of what the `style` group pulls in:
+
+```console
+$ docker run --rm --entrypoint sh semanticshelf:runtime \
+    -c 'ls /app/.venv/lib/python3.12/site-packages | grep -iE "^(open_clip|torchvision|timm)"'
+(nothing)
+```
+
+**One check failed first and was right to.** `make check` rejected
+`scripts/style_candidate.py`: its own docstring quoted the literal the sweep
+forbids. The sweep reads `git ls-files`, so the file passed while it was
+untracked and failed the moment it was committed — the guard working exactly as
+written. The docstring says the same thing without the literal.
+
 ## Next step
 
-The measurement, in one sitting. Then ADR-006's decision, the how-to's results
-(tasks 3.1, 3.2, 4.1, 4.2), and 5.2-5.4.
+The integration suite, once the local database configuration is reconciled
+(Blockers), then 5.2 and 5.4 and the hand-over for the push.
 
 **Then blocked on one run** (below). When its output exists: fill ADR-006's Decision
 and Consequences and set its status, add "What one run says" and "Reading it" to
@@ -112,11 +141,18 @@ the how-to (tasks 3.1, 3.2, 4.1, 4.2), then 5.2, 5.3 and 5.4.
 
 ## Blockers
 
-The published measurement needs 600 images through three ViT-L-scale models on
-a CPU — about 25 minutes at four threads, and the machine it would run on is in
-use. The command is
-`TORCH_NUM_THREADS=4 nice -n 19 uv run --group style python scripts/style_benchmark.py --pictures 100`
-and it prints its progress and the time remaining.
+**The integration suite cannot connect to the local database**, and the cause is
+in a file this agent may not read or edit.
 
-Paying for it in instalments was tried and withdrawn — see the arbitration
-above.
+- the container `semanticshelf-db-1` was initialised with role and database
+  `semanticshelf` (from compose's `POSTGRES_USER` / `POSTGRES_DB`);
+- the application's `DATABASE_URL` names user **`postgres`**, which the server
+  answers with `FATAL: password authentication failed ... Role "postgres" does
+  not exist`;
+- the same `DATABASE_URL` names port **5434** while compose's default publishes
+  **5433**, so the two never even met until the container was republished on
+  5434 for this run.
+
+Nothing in this change touches the database, and every other check CI runs is
+green. The volume (`semanticshelf_pg_data`, created 2026-09-25, 65 MB) was left
+untouched.
