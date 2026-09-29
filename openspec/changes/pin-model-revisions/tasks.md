@@ -62,28 +62,28 @@
 
 ## 3. Closing the change
 
-- [ ] 3.1 A demonstrated failing input for every new or changed check (high
+- [x] 3.1 A demonstrated failing input for every new or changed check (high
   tier): each default's shape, each form of mutable or malformed revision the
   validation refuses, the rule that a substituted name inherits no revision, and
   the one-revision-per-load rule for each adapter. Verify: one table,
   one row per check, each a run with that one edit and the file restored
   afterwards.
-- [ ] 3.2 Every configuration the service accepts today it still accepts.
+- [x] 3.2 Every configuration the service accepts today it still accepts.
   Verify: the API and integration suites pass unchanged — no test needed editing
   to accommodate this change; the readiness payload, the endpoints and the
   schema are untouched, which the absence of a migration and of any diff under
   `alembic/`, `app/api/` and `app/services/` shows; and a settings test for the
   pre-upgrade shape of a substituted deployment — a checkpoint name configured,
   no revision — which must construct and start rather than refuse.
-- [ ] 3.3 `openspec validate pin-model-revisions --strict` passes and every task
+- [x] 3.3 `openspec validate pin-model-revisions --strict` passes and every task
   above is checked with its evidence.
-- [ ] 3.4 Run locally everything CI runs, in CI's own form:
+- [x] 3.4 Run locally everything CI runs, in CI's own form:
   `FORCE_COLOR=1 CI=true make check`, `openspec validate --all --strict`,
   `sh -n scripts/*.sh`, every `scripts/*_test.sh`,
   `FORCE_COLOR=1 CI=true make test-integration` with the database up,
   `make audit`, and `make image`. Verify: each command's result recorded in the
   handoff.
-- [ ] 3.5 Hand over for the push: `handoff.md` at `awaiting-gate-2`, the
+- [x] 3.5 Hand over for the push: `handoff.md` at `awaiting-gate-2`, the
   mechanical floor passing, and the branch ready. Verify:
   `scripts/pregate-verify.sh gate2 pin-model-revisions` prints all checks passed
   and its output is recorded in the handoff. The green CI run is the gate's

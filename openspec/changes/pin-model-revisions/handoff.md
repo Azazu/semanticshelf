@@ -1,7 +1,7 @@
 # Handoff — pin-model-revisions
 
 **Updated:** 2026-09-29 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/pin-model-revisions
 
 ## Done this session
@@ -116,11 +116,79 @@ the unpinned load as the case that keeps today's behaviour — including its gap
 Fix the claim, not the line: the rule was right after the first fix and the
 artifacts were not.
 
+## Demonstrated failing inputs (high tier, task 3.1)
+
+Each guard removed on its own, the covering test run, the file restored.
+
+| check | file | test | with the guard removed |
+|---|---|---|---|
+| each default revision is a full commit | `app/core/settings.py` | `-k default_revision_is_a_full_commit` | FAILED |
+| a revision that is not a commit is refused | `app/core/settings.py` | `-k not_a_commit_is_refused` | FAILED |
+| a substituted name inherits no revision | `app/core/settings.py` | `-k inherits_no_revision` | FAILED |
+| an explicitly configured revision wins | `app/core/settings.py` | `-k whatever_the_name_says` | FAILED |
+| the text model hands one revision to both reads | `app/ml/clip.py` | `::test_a_pinned_load_hands_one_revision_to_both_reads` | FAILED |
+| the text model unpinned carries no revision | `app/ml/clip.py` | `::test_an_unpinned_load_hands_neither_read_a_revision` | FAILED |
+| the picture model hands one revision to both reads | `app/ml/dinov2.py` | `-k picture_model_pinned` | FAILED |
+| the picture model unpinned carries no revision | `app/ml/dinov2.py` | `-k picture_model_unpinned` | FAILED |
+| an unpinned load says so | `app/ml/base.py` | `-k unpinned_load_says_so` | FAILED |
+
+Two of these read `passed` on the first run, and the run was wrong rather than
+the guard: the `-k` expression for each CLIP case is a substring of the DINOv2
+test's name, so the plant in `clip.py` was checked by a test of `dinov2.py`.
+Re-run against exact node ids, both fail. A demonstration that selects the wrong
+test proves nothing, which is the point of doing them one at a time.
+
+## Nothing observable changed (task 3.2)
+
+```console
+$ git diff main --stat -- alembic app/api app/services ui
+(no output)
+```
+
+The whole diff against `main` is `app/core/settings.py`, the three `app/ml`
+modules, four documents, and **one new test file** — no existing test needed
+editing to accommodate the change, which is the evidence that no behaviour it
+covers moved.
+
+## What CI runs, run locally (task 3.4)
+
+| command | result |
+|---|---|
+| `FORCE_COLOR=1 CI=true make check` | **green** — 850 passed |
+| `openspec validate --all --strict` | **green** — 17 passed |
+| `sh -n scripts/*.sh` | **green** — 7 files |
+| `scripts/gate_run_test.sh` | **green** — 77 passed |
+| `scripts/workflow_verify_test.sh` | **green** — 23 passed |
+| `FORCE_COLOR=1 CI=true make test-integration` | **green** — 296 passed |
+| `make audit` | **green** — no known vulnerabilities in 97 packages |
+| `make image` | **green** — `semanticshelf:runtime` 1.79 GB, unchanged |
+| `uv run pytest -m models` (CLIP and DINOv2, real weights) | **green** — 14 passed at the pinned revisions |
+
+Both commands the how-to prints were run in that form: `models warm` loads at the
+pinned revisions, and `CLIP_REVISION=main` is refused at startup by name.
+
+## The mechanical floor for Gate 2 (task 3.5)
+
+```console
+$ scripts/pregate-verify.sh gate2 pin-model-revisions
+[OK]   git diff --check clean
+[OK]   openspec validate pin-model-revisions --strict
+[OK]   risk tier declared: high
+[OK]   proposal.md has a Non-goals section
+[OK]   tasks.md has 14 task(s)
+[OK]   every task checked
+[OK]   checked-task referenced paths exist
+[OK]   markdown links resolve (11 changed .md files)
+[OK]   make check green
+pregate-verify: gate2 pin-model-revisions — all checks passed (0 warning(s))
+```
+
 ## Next step
 
 **Gate 1 is passed** — confirmation 2 on `b633571` confirms both findings.
 
-`/opsx:apply pin-model-revisions` — implementation.
+The user pushes `change/pin-model-revisions` and reports the CI run; then
+`/gate-review pin-model-revisions 2` — Gate 2 on the code diff.
 `scripts/pregate-verify.sh gate1 pin-model-revisions` passes (13 tasks, tier
 declared, applicability table present, links resolve).
 
