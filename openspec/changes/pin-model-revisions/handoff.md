@@ -1,7 +1,7 @@
 # Handoff — pin-model-revisions
 
 **Updated:** 2026-09-29 · claude
-**State:** proposing
+**State:** awaiting-gate-1
 **Branch:** change/pin-model-revisions
 
 ## Done this session
@@ -32,23 +32,36 @@ Three consequences, in order of how much they matter:
    reason**, and these two keys were never pinned — so the repository is
    inconsistent with its own precedent.
 
+## What the proposal decided
+
+- **Risk-Tier: high** — a migration, network egress from a process this
+  repository ships, and a new way for readiness to refuse traffic.
+- **The revision is configuration with a verified default**, not a constant:
+  §2.3 made the checkpoint *name* a setting on purpose, so a fine-tune or a
+  mirror can be substituted, and a constant would either forbid that or be
+  ignored by it. The two settings are bound — a substituted name with the
+  default revision is refused at startup, because a commit belongs to a
+  repository.
+- **One revision per load**, passed to the processor and the weights alike, so
+  they cannot come from different snapshots. That hole is what the Gate 2
+  reviewer of change 18 named twice.
+- **The record is per key, not per vector** — you chose "pin and detect". A
+  column on `embeddings` would put the revision into an embedding's identity,
+  which ADR-001 gives to the asset and the key; the alternative is written down
+  in the design and will be in ADR-007, because a later reader will ask.
+- **`unknown` blocks.** A store that already holds vectors gets `unknown` for
+  those keys, and no configured revision equals it — so **an existing
+  deployment goes not-ready on upgrade**. That is the sharp edge of the shape
+  you picked, and it is stated in the proposal's Impact rather than left to be
+  discovered. For this repository's own corpus the remedy is `make demo`.
+- **`semanticshelf models record <key> <revision>`** is the way out that is not
+  a re-index: it clears `unknown`, and it refuses to overwrite a record naming a
+  real revision — turning the detection off from the command line is the one
+  thing the record exists to prevent.
+
 ## Next step
 
-`/opsx:propose pin-model-revisions`.
-
-Questions the proposal has to answer, none of them settled yet:
-
-- **What happens to vectors already stored** under an unpinned key? A pinned
-  revision may not be the one they were computed with, and nobody can tell.
-  Re-index, accept, or detect?
-- **Where does the revision live** — a repository constant beside the key, a
-  setting with a default, or both? A constant makes it reproducible and a
-  setting makes it substitutable, and the requirements already say a compatible
-  checkpoint must be substitutable without a schema change.
-- **Does readiness report it?** The probe compares the application's
-  declaration with the schema; it cannot currently see which weights answered.
-- **Risk tier.** Likely `high`: it touches model loading and the identity of
-  every stored vector, and the answer to the first question may be a re-index.
+`/gate-review pin-model-revisions 1` — Gate 1 on the artifacts.
 
 ## Blockers
 
