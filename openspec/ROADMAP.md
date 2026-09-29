@@ -96,6 +96,6 @@ they were measured against the corpus's own labels
 | # | Change id | Scope (summary) | Tier |
 |---|---|---|---|
 | 18 | `stretch-style-search` | does a style embedding answer something the stored keys do not? a built corpus, a published measurement, ADR-006 | **high** (a new dependency, a model download, and a decision that governs a later migration) |
-| 18a | `stretch-style-key` | the third key itself — dimension, CHECK value, index, re-index, `model=` on the picture searches — **proposed only if ADR-006 says yes** | high |
+| ~~18a~~ | ~~`stretch-style-key`~~ | the third key itself. **Closed unbuilt by [ADR-006](../docs/adr/ADR-006-style-as-a-third-key.md)**: the candidate reached 0.282 against a bound of 0.516, so the key was not earned. Re-opened only by a new candidate or a corpus of real artworks, measured by the same command | — |
 | 19 | `stretch-rag-captions` | generated captions/tags per image via a vision-language model; egress policy ADR | high |
 | 20 | `pin-model-revisions` | `clip-vit-l14` and `dinov2-large` load a checkpoint **name** with no revision, and each adapter resolves the weights and the processor in separate calls — so one key can mean different weights on two machines and a stored vector cannot be reproduced. ADR-005 pinned the encoder for exactly this reason; these two were never pinned. Found by change 18's Gate 1 reviewer | high |

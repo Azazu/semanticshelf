@@ -1,7 +1,7 @@
 # Handoff — stretch-style-search
 
 **Updated:** 2026-09-28 · claude
-**State:** ready-to-merge
+**State:** merged
 **Branch:** change/stretch-style-search
 
 ## Done this session
