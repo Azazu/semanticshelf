@@ -108,7 +108,9 @@ None.
   probe loaded the weights into it with **0 missing and 0 unexpected** tensors
   once CLIP's own projection is removed *before* the load — leave it attached
   and the report names it missing, which is why the order is in task 2.2 rather
-  than left to whoever writes the loader.
+  than left to whoever writes the loader. That report is evidence about
+  parameters and about nothing else: the tower must also be the `-quickgelu`
+  variant, which no tensor check can see, and the adapter asserts it.
   Writing that mapping by hand — splitting `in_proj_weight` into q, k and v and
   renaming every block — is the alternative, and it is more code to own than a
   maintained package. The dependency goes in a **group of its own**, so the

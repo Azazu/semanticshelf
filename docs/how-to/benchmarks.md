@@ -482,6 +482,16 @@ passes over several hundred pictures on a CPU take minutes per model. On a
 laptop that has other work to do, `TORCH_NUM_THREADS=4 nice -n 19` in front of
 it keeps the machine responsive at the cost of wall-clock time.
 
+**What it prints so a second run can be compared with this one.** A digest over
+the corpus's file names and bytes — "the first hundred pictures of a folder" is
+not something a reader can obtain, and the digest is what two runs compare to
+find out whether they measured the same pictures. And, for every checkpoint
+setting this build has, the configured name with the commit hash the local model
+cache resolved it to, or `unresolved`. Only the candidate is pinned by this
+repository: the two stored keys load a name a deployment configures, so their
+identity is **reported rather than claimed**, and the difference between two
+runs can be seen instead of assumed away.
+
 ### The corpus is built, not found
 
 A corpus of paintings would be the natural thing to measure on, and this project
@@ -552,6 +562,11 @@ a key added to `EMBEDDING_MODELS` later cannot be left out of the comparison.
 
 
 ### What one run says
+
+> **Withdrawn and being measured again.** The candidate's row came from a tower
+> built with the wrong activation — see
+> [ADR-006](../adr/ADR-006-style-as-a-third-key.md). The two incumbent rows are
+> unaffected.
 
 Corpus: 100 photographs of the demo sample under six looks — 600 images, none
 refused as one colour, 297 000 triples, 29 700 pairs sharing a look and 1 500

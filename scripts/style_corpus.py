@@ -208,3 +208,29 @@ def present(labels: Sequence[Label]) -> tuple[int, tuple[str, ...]]:
     pictures = {label.picture for label in labels}
     looks = sorted({label.look for label in labels}, key=tuple(LOOKS).index)
     return len(pictures), tuple(looks)
+
+
+def check_present(labels: Sequence[Label]) -> None:
+    """The same bounds, applied to what survived rather than to what was planned.
+
+    `check_size` reads the plan — the folder's photographs and the look names —
+    and a plan is not a corpus: a look that flattens a picture to one colour is
+    dropped, and enough of those turns twenty planned photographs into two. The
+    bound has to hold for the images that were actually embedded, or the command
+    publishes a number from a corpus its own rules forbid.
+    """
+    if not labels:
+        raise CorpusTooSmallError(
+            "every look of every photograph was refused as one colour: there is nothing to measure"
+        )
+    pictures, looks = present(labels)
+    if pictures < MIN_PICTURES:
+        raise CorpusTooSmallError(
+            f"{pictures} photographs survived the looks, and {MIN_PICTURES} are needed: "
+            "a corpus this small measures the photographs rather than the models"
+        )
+    if len(looks) < MIN_LOOKS:
+        raise CorpusTooSmallError(
+            f"{len(looks)} looks survived, and {MIN_LOOKS} are needed: with fewer, one filter "
+            "decides what style means"
+        )

@@ -39,6 +39,7 @@ It writes nothing, reads no database, and needs the `style` dependency group:
 """
 
 import argparse
+import hashlib
 import sys
 import time
 from collections.abc import Mapping, Sequence
@@ -262,12 +263,60 @@ def progress(model: str, done: int, total: int, elapsed: float) -> str:
     return line
 
 
+def corpus_digest(corpus: style_corpus.Corpus) -> str:
+    """A name for exactly these bytes.
+
+    "The first hundred pictures of a folder" is not a corpus anyone else can
+    obtain, and a reader who re-runs this command has no way to tell whether
+    the folder they pointed it at is the folder these numbers came from. The
+    digest is over the file names and their contents, so two runs agree on it
+    exactly when they measured the same pictures.
+    """
+    running = hashlib.sha256()
+    for path in corpus.paths:
+        running.update(path.name.encode("utf-8"))
+        running.update(path.read_bytes())
+    return running.hexdigest()[:16]
+
+
+def checkpoints(settings: Settings) -> list[tuple[str, str, str]]:
+    """Every checkpoint this build can load, and what it resolved to here.
+
+    Read from the settings fields rather than from a list, for the same reason
+    the measured keys are read from `app.domain`. Only the candidate is pinned
+    by this repository; the rest are names a deployment configures, so what is
+    printed for them is the snapshot the local model cache actually holds —
+    reported, never claimed to be fixed.
+    """
+    from huggingface_hub import scan_cache_dir
+
+    resolved: dict[str, str] = {}
+    try:
+        for repo in scan_cache_dir(settings.model_cache).repos:
+            for ref, revision in repo.refs.items():
+                if ref == "main":
+                    resolved[repo.repo_id] = revision.commit_hash
+    except Exception:  # noqa: BLE001 - provenance is reported, never relied upon
+        resolved = {}
+
+    rows = []
+    for field in sorted(f for f in type(settings).model_fields if f.endswith("_model_name")):
+        name = str(getattr(settings, field))
+        rows.append((field, name, resolved.get(name, "unresolved")))
+    return rows
+
+
 def shown(value: float | None) -> str:
     """A number, or the word for the absence of one."""
     return "undefined" if value is None else f"{value:.3f}"
 
 
-def report(corpus: style_corpus.Corpus, labels: Sequence[Label], rows: Sequence[Scored]) -> None:
+def report(
+    corpus: style_corpus.Corpus,
+    labels: Sequence[Label],
+    rows: Sequence[Scored],
+    settings: Settings,
+) -> None:
     """The published table. Everything a reader needs to disagree with it."""
     pictures, looks = style_corpus.present(labels)
     refused = corpus.size - len(labels)
@@ -277,7 +326,11 @@ def report(corpus: style_corpus.Corpus, labels: Sequence[Label], rows: Sequence[
     print(f"## Style, measured over {pictures} photographs × {len(looks)} looks\n")
     print(f"Corpus: `{corpus.root}`, looks {', '.join(looks)}.")
     print(f"{len(labels)} images, {refused} refused as one colour, {rows[0].triples} triples.")
-    print(f"Candidate: `{style_candidate.CHECKPOINT}` at `{style_candidate.REVISION}`.\n")
+    print(f"Corpus digest (names and bytes): `{corpus_digest(corpus)}`.")
+    print(
+        f"Candidate: `{style_candidate.CHECKPOINT}` at `{style_candidate.REVISION}`, "
+        f"tower `{style_candidate.TOWER}`.\n"
+    )
 
     print(
         "| model | prefers the look | same look, diff. picture | same picture, diff. look | ratio |"
@@ -309,6 +362,13 @@ def report(corpus: style_corpus.Corpus, labels: Sequence[Label], rows: Sequence[
     verdict = "clears the bound" if clears(candidate.preference, stored) else "does not clear it"
     print(f"Verdict: the candidate {verdict}.")
 
+    print("\nCheckpoints this run loaded. Only the candidate is pinned by this repository;")
+    print("the rest are configured names, and what is shown is the snapshot found here.\n")
+    print("| setting | checkpoint | resolved to |")
+    print("|---|---|---|")
+    for field, name, revision in checkpoints(settings):
+        print(f"| `{field}` | `{name}` | `{revision}` |")
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -333,6 +393,11 @@ def main() -> int:
     for model in (style_candidate.LABEL, *incumbents()):
         labels, vectors = embed(model, corpus, settings)
         if agreed is None:
+            try:
+                style_corpus.check_present(labels)
+            except style_corpus.CorpusTooSmallError as refusal:
+                print(f"nothing measured: {refusal}")
+                return 2
             agreed = labels
         elif labels != agreed:
             print("the corpus changed between models, which it cannot: nothing is reported")
@@ -340,7 +405,7 @@ def main() -> int:
         rows.append(score(model, vectors, labels))
 
     assert agreed is not None
-    report(corpus, agreed, rows)
+    report(corpus, agreed, rows, settings)
     return 0
 
 

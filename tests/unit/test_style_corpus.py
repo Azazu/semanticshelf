@@ -208,3 +208,42 @@ def test_a_batch_keeps_the_order_and_the_last_short_one(tmp_path: Path) -> None:
     batches = [labels for labels, _ in corpus.batched(corpus.images(plan), 2)]
 
     assert [[label.picture for label in labels] for labels in batches] == [[0, 1], [2]]
+
+
+# --- the bounds applied to what survived, not to what was planned --------------
+
+
+def test_a_corpus_whose_looks_were_refused_away_is_refused(tmp_path: Path) -> None:
+    """Twenty planned photographs are not twenty measured ones: a plan that
+    loses eighteen of them to the constant-picture rule leaves two, and a
+    number computed from two photographs is exactly what the bound forbids."""
+    labels = [corpus.Label(picture=n, look=look) for n in range(2) for look in corpus.LOOKS]
+
+    with pytest.raises(corpus.CorpusTooSmallError, match="survived"):
+        corpus.check_present(labels)
+
+
+def test_a_corpus_that_lost_its_looks_is_refused() -> None:
+    labels = [
+        corpus.Label(picture=n, look=look)
+        for n in range(corpus.MIN_PICTURES)
+        for look in tuple(corpus.LOOKS)[: corpus.MIN_LOOKS - 1]
+    ]
+
+    with pytest.raises(corpus.CorpusTooSmallError, match="looks survived"):
+        corpus.check_present(labels)
+
+
+def test_a_corpus_refused_away_entirely_is_refused_cleanly() -> None:
+    with pytest.raises(corpus.CorpusTooSmallError, match="nothing to measure"):
+        corpus.check_present([])
+
+
+def test_a_corpus_that_survived_intact_is_measured() -> None:
+    labels = [
+        corpus.Label(picture=n, look=look)
+        for n in range(corpus.MIN_PICTURES)
+        for look in corpus.LOOKS
+    ]
+
+    corpus.check_present(labels)

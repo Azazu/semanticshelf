@@ -13,7 +13,11 @@
 - [x] 1.2 The corpus refuses to be too small to mean anything: at least 20
   photographs and at least 4 looks, or the run reports that and measures
   nothing (design decision 2's "four pictures decide nothing", made mechanical).
-  Verify: unit tests for both bounds, each watched to refuse.
+  **The bound holds for the corpus that survived, not for the plan**: constant
+  pictures are dropped after the count, so twenty planned photographs can leave
+  two, and the command checks what was actually embedded before it scores it.
+  Verify: unit tests for both bounds on the plan and both on what survived, plus
+  a wholly refused corpus, each watched to refuse.
 
 ## 2. The measurement
 
@@ -29,10 +33,16 @@
   `weights_only=True` and the four-entry allowlist of design decision 4, the
   `module.backbone.*` tensors loaded with **nothing missing and nothing
   unexpected**, and `module.last_layer_style` applied to the pooled output.
+  The tower is `ViT-L-14-quickgelu`, and the adapter **asserts the built
+  activation before the load**: CSD comes from OpenAI's CLIP ViT-L/14, whose
+  residual MLPs use QuickGELU, and an activation has no tensors, so the wrong
+  one loads with nothing missing and computes something else.
   Verify: a `models`-suite test (real checkpoint, never in CI) asserting width
-  768, unit rows, a batch keeping its order, and the refusal when a tensor is
-  missing; a unit test that the allowlist is exactly those four globals and
-  that `weights_only=False` appears nowhere in the repository.
+  768, unit rows, a batch keeping its order, the refusal when a tensor is
+  missing, and that the built tower's residual MLPs really are QuickGELU; unit
+  tests that the tower constant names the quickgelu variant, that a tower with
+  the wrong activation is refused, that the allowlist is exactly those four
+  globals, and that the pickle check is turned off nowhere in the repository.
 - [x] 2.3 The two statistics of design decision 2. **Deciding:** the rank
   preference — over every triple (anchor, a different picture under the anchor's
   look, the anchor's picture under another look), the fraction where the
@@ -54,6 +64,15 @@
   strict), one above it; the incumbent taken from the **highest** of several,
   not the first or the last; and the degenerate incumbent of 0, where the bound
   is exactly 0.5 and a candidate of 0.5 is still refused.
+- [x] 2.6 What a re-run can and cannot promise (design decision 6): the report
+  prints a **digest over the corpus's file names and bytes**, and, for every
+  checkpoint setting this build has, the configured name with the commit hash
+  the local model cache resolved it to — or `unresolved`. Reported, never
+  claimed: only the candidate is pinned here. Verify: unit tests that the digest
+  changes when a picture's bytes change and when one is renamed, that the
+  reported settings are derived from `Settings` rather than listed, and that a
+  cache holding nothing reports `unresolved` rather than inventing an identity.
+
 - [x] 2.5 `scripts/style_benchmark.py` runs the candidate and **every key the
   service stores image vectors under** — `clip-vit-l14` and `dinov2-large`, read
   from `app.domain`, not from a list written out here, so a key added later
@@ -102,7 +121,9 @@
   tier): each look's determinism, the blank-look refusal, the two corpus bounds,
   the allowlist, the missing-tensor refusal, the width check, the incumbents
   being derived from `app.domain`, the preference's degenerate corpora, the
-  ratio's non-positive denominator, and the bound's strict comparison. Verify: one
+  ratio's non-positive denominator, the bound's strict comparison, the
+  activation guard, the bounds on the corpus that survived, and the provenance
+  the report prints. Verify: one
   table, one row per check, each a run with that one edit and the file restored
   afterwards.
 - [x] 5.2 `openspec validate stretch-style-search --strict` passes and every

@@ -62,7 +62,20 @@ REVISION: Final = "5bc26a6fb0487f3f00a2a7313135103a005b1b67"
 CHECKPOINT_FILE: Final = "pytorch_model.bin"
 
 #: The architecture the weights are poured into, built by `open_clip`.
-TOWER: Final = "ViT-L-14"
+#:
+#: **The `-quickgelu` suffix is not a detail.** CSD is initialised from OpenAI's
+#: CLIP ViT-L/14, whose residual MLPs use QuickGELU — the checkpoint on disk
+#: declares `hidden_act: quick_gelu`. `open_clip`'s plain `ViT-L-14` config sets
+#: `quick_gelu: false` and builds `nn.GELU` instead, and **a state dict cannot
+#: detect the difference**, because an activation carries no tensors: the load
+#: reports nothing missing and nothing unexpected while the network computes
+#: something else. Built the wrong way, every vector moves — cosine 0.93 against
+#: the right one on this corpus, which is far more than enough to move a
+#: published number.
+TOWER: Final = "ViT-L-14-quickgelu"
+#: What an activation with no parameters looks like when it is the right one.
+#: Asserted at load, because nothing else in the pipeline can see it.
+ACTIVATION: Final = "QuickGELU"
 #: Where the tensors sit inside the training checkpoint.
 STATE: Final = "model_state_dict"
 BACKBONE_PREFIX: Final = "module.backbone."
@@ -119,6 +132,23 @@ def check_tensors(missing: Sequence[str], unexpected: Sequence[str]) -> None:
         )
 
 
+def check_activation(visual: Any) -> None:
+    """Refuse a tower whose residual MLPs are not the checkpoint's activation.
+
+    The tensor check cannot see this: an activation has no parameters, so a
+    network built with the wrong one loads cleanly and answers differently.
+    This is the only place the architecture is compared with what the weights
+    were trained under.
+    """
+    built = type(visual.transformer.resblocks[0].mlp[1]).__name__
+    if built != ACTIVATION:
+        raise CheckpointArchitectureError(
+            f"{LABEL!r} needs {ACTIVATION} in its residual MLPs, as OpenAI's CLIP ViT-L/14 "
+            f"was trained with, and this tower was built with {built}: the weights would "
+            "load without complaint and compute something else"
+        )
+
+
 def read_state(cache: Path) -> dict[str, Any]:
     """Download the checkpoint once, at the pinned revision, and read it."""
     import torch
@@ -139,6 +169,11 @@ def backbone_of(state: dict[str, Any]) -> dict[str, Any]:
         for name, tensor in state.items()
         if name.startswith(BACKBONE_PREFIX)
     }
+
+
+class CheckpointArchitectureError(RuntimeError):
+    """A checkpoint poured into an architecture that is not the one it was
+    trained under, in a way no tensor can reveal."""
 
 
 class StyleCandidate:
@@ -166,6 +201,7 @@ class StyleCandidate:
 
         model, _, preprocess = open_clip.create_model_and_transforms(TOWER)
         visual = model.visual
+        check_activation(visual)
         # Before the load, not after: see the module docstring.
         visual.proj = None
         report = visual.load_state_dict(backbone_of(state), strict=False)

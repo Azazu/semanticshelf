@@ -217,3 +217,72 @@ def test_no_model_key_is_written_out_in_the_command() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
 
     assert [key for key in EMBEDDING_MODELS if key in source] == []
+
+
+# --- what a reader needs to tell whether they have the same inputs -------------
+
+
+def test_the_corpus_digest_is_over_the_names_and_the_bytes(tmp_path: Path) -> None:
+    """ "The first hundred pictures of a folder" is not a corpus anyone else can
+    obtain; the digest is what two runs compare to find out whether they
+    measured the same pictures."""
+    style_corpus = script_module("style_corpus")
+    (tmp_path / "a.jpg").write_bytes(b"first")
+    (tmp_path / "b.jpg").write_bytes(b"second")
+    plan = style_corpus.Corpus(
+        root=tmp_path, paths=style_corpus.photographs(tmp_path), looks=tuple(style_corpus.LOOKS)
+    )
+
+    before = benchmark.corpus_digest(plan)
+
+    assert before == benchmark.corpus_digest(plan)
+    (tmp_path / "b.jpg").write_bytes(b"second, edited")
+    assert benchmark.corpus_digest(plan) != before
+
+
+def test_the_digest_changes_when_a_picture_is_renamed(tmp_path: Path) -> None:
+    style_corpus = script_module("style_corpus")
+    (tmp_path / "a.jpg").write_bytes(b"first")
+    plan = style_corpus.Corpus(
+        root=tmp_path, paths=style_corpus.photographs(tmp_path), looks=tuple(style_corpus.LOOKS)
+    )
+    before = benchmark.corpus_digest(plan)
+
+    (tmp_path / "a.jpg").rename(tmp_path / "z.jpg")
+    renamed = style_corpus.Corpus(
+        root=tmp_path, paths=style_corpus.photographs(tmp_path), looks=tuple(style_corpus.LOOKS)
+    )
+
+    assert benchmark.corpus_digest(renamed) != before
+
+
+def test_every_configured_checkpoint_is_reported(tmp_path: Path) -> None:
+    """Read from the settings fields rather than a list, for the same reason the
+    measured keys are read from `app.domain`."""
+    from app.core.settings import Settings
+
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+asyncpg://127.0.0.1:1/nowhere",
+        model_cache=tmp_path,
+    )
+
+    rows = benchmark.checkpoints(settings)
+    fields = [field for field, _, _ in rows]
+
+    assert fields == sorted(f for f in type(settings).model_fields if f.endswith("_model_name"))
+    assert fields, "no checkpoint setting was found to report"
+
+
+def test_a_checkpoint_the_cache_does_not_hold_is_reported_as_unresolved(tmp_path: Path) -> None:
+    """Reported, never claimed: only the candidate is pinned by this repository,
+    and a name that resolved to nothing must not read as a fixed identity."""
+    from app.core.settings import Settings
+
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+asyncpg://127.0.0.1:1/nowhere",
+        model_cache=tmp_path / "empty",
+    )
+
+    assert all(revision == "unresolved" for _, _, revision in benchmark.checkpoints(settings))

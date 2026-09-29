@@ -1,7 +1,7 @@
 # ADR-006: a model key earns its place by measurement, and this is the style candidate's
 
 **Date:** 2026-09-29
-**Status:** accepted
+**Status:** proposed
 **Related:** ADR-001 (one space per model key; vectors of different models never compared); ADR-002 (an index family decided by measurement, and the precedent for deciding to change nothing); `embedding-models` — "A model key earns its place by measurement"; authored by the OpenSpec change `stretch-style-search`
 
 ## Context
@@ -73,6 +73,13 @@ record is one of the more useful things in this repository. What the
 key whose value nobody measured.
 
 ## Decision
+
+> **The numbers below are withdrawn and are being measured again.** They were
+> produced by a tower built with `nn.GELU` where the checkpoint was trained
+> under QuickGELU — an architecture difference no tensor check can see, found by
+> the Gate 2 reviewer. The two incumbent rows are unaffected, since they load
+> through the service's own adapters. Everything above this line — the corpus,
+> the statistic and the bound — was fixed before either run and does not change.
 
 **No third key.** The candidate does not clear the bound, so `EMBEDDING_MODELS`,
 the CHECK and the indexes stay as they are, and roadmap row 18a — the migration,

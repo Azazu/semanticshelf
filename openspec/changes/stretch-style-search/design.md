@@ -30,11 +30,23 @@ pickle still names the old one), `numpy.dtype`, `numpy.dtypes.Float64DType` and
 pickles, each of which builds a value and runs nothing else.
 
 **The backbone loads cleanly, in one order only.** With `open_clip`'s
-`ViT-L-14` visual tower and `visual.proj` removed **before** the load — CSD
-replaces CLIP's own 1024→768 projection with its two (1024, 768) heads — the
-checkpoint's `module.backbone.*` tensors load with **0 missing and 0
+`ViT-L-14-quickgelu` visual tower and `visual.proj` removed **before** the load
+— CSD replaces CLIP's own 1024→768 projection with its two (1024, 768) heads —
+the checkpoint's `module.backbone.*` tensors load with **0 missing and 0
 unexpected**. Removed after the load, the same call reports `proj` missing, so
 "nothing missing" is a statement about a sequence, not about the weights alone.
+
+**And "nothing missing" is not a statement about the architecture at all.** A
+tensor report can only see parameters. CSD is initialised from OpenAI's CLIP
+ViT-L/14, whose residual MLPs use QuickGELU — the checkpoint of that model on
+this machine declares `hidden_act: quick_gelu` — while `open_clip`'s plain
+`ViT-L-14` config sets `quick_gelu: false` and builds `nn.GELU`. An activation
+carries no parameters, so the wrong one loads with nothing missing and nothing
+unexpected and computes something else: cosine 0.93 against the right one on
+this corpus, which is far more than enough to move a published number. The
+tower is therefore named `-quickgelu`, and the adapter **asserts the built
+activation** before it pours any weights in, because that is the only place the
+difference is visible.
 
 **The probe's numbers**, four photographs × six looks, are in `proposal.md`.
 
@@ -208,6 +220,31 @@ the decision — **including "no key" as a decision with the same standing as
 "a key"**. Change 14 is the precedent: it measured, decided to change nothing,
 and the record of that is one of the more useful things in this repository.
 
+### 6. What a re-run can and cannot promise
+
+The requirement this change adds says a measurement must be re-runnable. Two of
+its inputs are not equally fixed, and the record says which is which rather than
+implying both.
+
+**The corpus.** "The first hundred pictures of a folder" is not something a
+reader can obtain, so the command prints a **digest over the file names and
+their bytes**. Two runs agree on it exactly when they measured the same
+pictures, and a reader who gets different numbers can tell in one line whether
+the corpus was the difference.
+
+**The checkpoints.** Only the candidate is pinned here, by repository constant.
+`clip-vit-l14` and `dinov2-large` load a checkpoint *name* that a deployment
+configures, with no revision, and each adapter resolves the weights and the
+processor separately. Nothing in this change can make that fixed — it is a
+defect of the service, recorded as roadmap row 20 — so the command **reports**
+instead: for every checkpoint setting, the configured name and the commit hash
+the local model cache resolved it to, or `unresolved`.
+
+*What this guarantees:* a reader comparing two runs can see which input
+differed. *What it does not:* it does not make an unpinned checkpoint
+reproducible. Reporting provenance is not the same as controlling it, and the
+spec scenario says so in those words rather than promising identical numbers.
+
 ## Risks / Trade-offs
 
 - **The filters are not styles** → stated in the ADR, in the how-to and in the
@@ -231,6 +268,14 @@ and the record of that is one of the more useful things in this repository.
 - **The answer may be "no key"**, after the work of measuring → that is the
   outcome this change is shaped to allow, and the requirement it adds makes it
   the normal one rather than a failure.
+- **An architecture difference that carries no tensors** → the activation is
+  asserted before the load, because the tensor report that catches every other
+  mismatch is blind to this one. Found at Gate 2, after a full measurement had
+  already been run against the wrong one.
+- **Two of the measurement's inputs are not pinned** → the corpus is named by a
+  digest of its bytes, the checkpoints by what they resolved to, and the
+  requirement is worded as "the record tells you whether you have the same
+  inputs" rather than "you will get the same numbers".
 
 ## Migration Plan
 

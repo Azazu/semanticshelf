@@ -55,5 +55,15 @@ answering in another key's space — is measured under the rule it already has.
 
 #### Scenario: The measurement can be re-run
 - **WHEN** somebody re-runs the published command against the corpus it names
-- **THEN** they get the same numbers, because the corpus is built by that
-  command or named exactly, and the checkpoint it loads is pinned
+- **THEN** they get the same numbers whenever they have the same corpus and the
+  same checkpoints, and the record tells them whether they do: it publishes a
+  digest of the corpus's bytes and the identity of every checkpoint the run
+  loaded
+
+#### Scenario: An input the repository does not pin
+- **WHEN** the measurement loads a checkpoint whose revision this repository
+  does not fix — a name a deployment configures rather than a pinned commit
+- **THEN** the record SHALL print what that name resolved to on the machine
+  that produced the numbers, and SHALL NOT present it as fixed; a reader
+  comparing two runs can then see which input differed instead of trusting that
+  none did

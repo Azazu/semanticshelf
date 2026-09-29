@@ -18,6 +18,18 @@ from app.ml.base import CheckpointTensorsError
 from tests.scripts import script_module
 
 candidate = script_module("style_candidate")
+CheckpointArchitectureError = candidate.CheckpointArchitectureError
+
+
+def torch_gelu() -> object:
+    """A stand-in for what `open_clip`'s plain `ViT-L-14` builds."""
+    return type("GELU", (), {})()
+
+
+def quick_gelu() -> object:
+    """A stand-in for what the checkpoint was trained under."""
+    return type("QuickGELU", (), {})()
+
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 
@@ -133,6 +145,36 @@ def test_the_backbone_is_taken_by_prefix_and_renamed() -> None:
     }
 
     assert candidate.backbone_of(state) == {"conv1.weight": "a", "ln_post.bias": "b"}
+
+
+def test_the_tower_is_the_quickgelu_one() -> None:
+    """CSD is initialised from OpenAI's CLIP ViT-L/14, whose residual MLPs use
+    QuickGELU. `open_clip`'s plain `ViT-L-14` builds `nn.GELU` instead, and no
+    tensor check can see the difference because an activation has no
+    parameters: the weights load cleanly and the network computes something
+    else. The constant is asserted here so CI catches a regression of it; that
+    the built tower really carries it is asserted in the models suite."""
+    assert candidate.TOWER.endswith("-quickgelu")
+    assert candidate.ACTIVATION == "QuickGELU"
+
+
+def test_a_tower_with_the_wrong_activation_is_refused() -> None:
+    class Wrong:
+        transformer = type(
+            "T", (), {"resblocks": [type("B", (), {"mlp": [None, torch_gelu()]})()]}
+        )()
+
+    with pytest.raises(CheckpointArchitectureError, match="QuickGELU"):
+        candidate.check_activation(Wrong())
+
+
+def test_a_tower_with_the_right_activation_passes() -> None:
+    class Right:
+        transformer = type(
+            "T", (), {"resblocks": [type("B", (), {"mlp": [None, quick_gelu()]})()]}
+        )()
+
+    candidate.check_activation(Right())
 
 
 def test_the_checkpoint_is_pinned_to_a_commit() -> None:
