@@ -152,3 +152,22 @@
 - Targeted checks: 88 passed via `PYTHONDONTWRITEBYTECODE=1 PYTEST_ADDOPTS='-p no:cacheprovider tests/unit/test_style_benchmark.py tests/unit/test_style_corpus.py tests/unit/test_style_candidate.py tests/unit/test_image_definition.py' make test RUN='.venv/bin/python -B -m'`.
 - Architecture checked against the installed OpenCLIP configuration and activation selection. The real-weight benchmark and models suite were not rerun during this confirmation; numerical rerun evidence is the updated ADR, how-to and handoff.
 - Repository search checked the corrected measurement values and reproduction claims; the old values remain only as an explicitly identified account of the incorrect architecture.
+
+## Confirmation 3 · Gate 1 · Round 2
+**Reviewer:** codex
+**Date:** 2026-09-29
+**Reviewed-Commit:** 8433ddd4ce4cc1c36c8d08b331f288ab75f31f5f
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the vector-cache feature and its fingerprint/equivalence guarantee are withdrawn from the proposal, design and tasks. Task 3.1 requires the full measurement, and the published command unconditionally calls `embed()` for the candidate and every incumbent; `embed()` constructs the adapter and computes every surviving image batch without reading or writing persisted vectors. The revised spec, design and report explicitly limit reproducibility claims: incumbent checkpoint rows are diagnostic only and establish neither effective weights/processor identity nor identical results, even on the same machine. Pinning those inputs remains roadmap row 20. Removing the cache eliminates the stale-vector path rather than claiming the existing adapters now identify their inputs. |
+
+### Confirmation evidence
+
+- This additional confirmation follows the user's explicit request after two failed confirmations and the documented arbitration to remove the cache.
+- Scope: only the diff from `f12e7fb6b035d0ecc8747117edef5a28524982ba` to `8433ddd4ce4cc1c36c8d08b331f288ab75f31f5f` and the code paths/artifacts implicated by Round 2 finding 1. No unrelated findings introduced.
+- Targeted checks: 29 passed via `PYTHONDONTWRITEBYTECODE=1 PYTEST_ADDOPTS='-p no:cacheprovider tests/unit/test_style_benchmark.py' make test RUN='.venv/bin/python -B -m'`, including the diagnostic-only report regression.
+- An additional in-memory check called the actual `embed()` twice with a changed incumbent identity: the first four outputs stayed identical while the remaining eight changed. All twelve images were embedded on each call, and the second result contained the changed outputs. No model weights were downloaded and no test file was added.
+- Repository search found no remaining active vector-cache options or fingerprint-equivalence claims in the implementation, tests or planning artifacts; previous review records and the handoff retain the historical account. The real-weight measurement was not rerun for this confirmation.
