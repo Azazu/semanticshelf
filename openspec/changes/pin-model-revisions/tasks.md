@@ -2,20 +2,20 @@
 
 ## 1. The revision reaches the weights
 
-- [ ] 1.1 `app/core/settings.py`: `clip_revision` and `dinov2_revision`, read
+- [x] 1.1 `app/core/settings.py`: `clip_revision` and `dinov2_revision`, read
   from `CLIP_REVISION` and `DINOV2_REVISION`, defaulting to the commits this
   repository verified against the hub — re-read from the hub at implementation
   time rather than copied from the proposal. Verify: unit tests that each
   default is a 40-character lowercase hex commit and that each setting is read
   from its documented environment name.
-- [ ] 1.2 Configuration validation, design decision 1: a configured revision
+- [x] 1.2 Configuration validation, design decision 1: a configured revision
   must be a **full 40-character lowercase hexadecimal commit**, and anything
   else is refused at startup by setting name. Verify: unit tests, each watched
   to refuse, for both settings — `main`, a tag-shaped value, a 7-character
   abbreviated hash, a 40-character value with a non-hex character, an empty
   string, and whitespace; plus the values that must be accepted, the defaults
   and another full commit.
-- [ ] 1.3 A substituted name does not inherit the default revision, and is not
+- [x] 1.3 A substituted name does not inherit the default revision, and is not
   refused either: when a checkpoint name is configured away from its default and
   no revision is configured with it, that checkpoint loads **without** a
   revision and the service states that it is unpinned, where an operator can see
@@ -23,7 +23,7 @@
   that the service starts, and that the statement is made; and that the
   combination of a substituted name **with** a configured revision passes it
   through unchanged.
-- [ ] 1.4 `app/ml/clip.py` and `app/ml/dinov2.py`: when a load has a revision it
+- [x] 1.4 `app/ml/clip.py` and `app/ml/dinov2.py`: when a load has a revision it
   is resolved once per `load` and passed to **every** `from_pretrained` call —
   the processor and the model alike (design decision 2). Verify: unit tests that
   record the two calls a stand-in receives and assert both carry the same

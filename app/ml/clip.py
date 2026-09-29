@@ -19,7 +19,14 @@ import numpy as np
 from PIL.Image import Image
 
 from app.domain import CLIP_VIT_L14, dimension_of
-from app.ml.base import EmbeddingResult, batches, check_checkpoint_width, empty, normalise
+from app.ml.base import (
+    EmbeddingResult,
+    batches,
+    check_checkpoint_width,
+    empty,
+    normalise,
+    say_unpinned,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only
     from app.core.settings import Settings
@@ -63,8 +70,22 @@ class ClipEmbedder:
         cache = settings.model_cache
         cache.mkdir(parents=True, exist_ok=True)
         name = settings.clip_model_name
-        processor = AutoProcessor.from_pretrained(name, cache_dir=cache)
-        model = CLIPModel.from_pretrained(name, cache_dir=cache)
+        # Resolved once and handed to both reads: a repository can move between
+        # two calls, and a processor from one snapshot beside weights from
+        # another is a difference no width check and no tensor check can see.
+        # `None` is the deliberately unpinned case (ADR-007) — a substituted
+        # checkpoint whose operator named no commit of it, which loads exactly
+        # as it did before this rule and says so.
+        revision = settings.clip_revision_in_effect
+        say_unpinned(CLIP_VIT_L14, name, revision)
+        # One mapping, both reads: the unpinned case passes no `revision` at all
+        # rather than passing `None`, so it is the call this adapter made before
+        # revisions existed — byte for byte, not merely in effect.
+        read: dict[str, Any] = {"cache_dir": cache}
+        if revision is not None:
+            read["revision"] = revision
+        processor = AutoProcessor.from_pretrained(name, **read)
+        model = CLIPModel.from_pretrained(name, **read)
         model.eval()
 
         embedder = cls(model, processor, batch_size=settings.embed_batch_size)

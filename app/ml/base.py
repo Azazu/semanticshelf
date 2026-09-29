@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import numpy as np
+import structlog
 from PIL.Image import Image
 
 #: Row-major `float32`, shape `(n, dim)`, every row of unit length.
@@ -113,6 +114,25 @@ def normalise(vectors: np.ndarray) -> Vectors:
 def empty(dim: int) -> EmbeddingResult:
     """The result of embedding nothing: no rows, no flags, no model touched."""
     return EmbeddingResult(vectors=np.empty((0, dim), dtype=np.float32), truncated=())
+
+
+def say_unpinned(key: str, name: str, revision: str | None) -> None:
+    """State, once per load, that a checkpoint is being read unpinned.
+
+    A checkpoint name configured away from its default inherits no revision —
+    the default commit belongs to the repository that was replaced — so it is
+    read the way every checkpoint was read before revisions were pinned, and
+    what it answers can change under it. That is a deliberate compatibility
+    decision (ADR-007) and not one an operator should have to infer from the
+    absence of something.
+    """
+    if revision is None:
+        structlog.stdlib.get_logger(__name__).warning(
+            "checkpoint is unpinned",
+            model=key,
+            checkpoint=name,
+            reason="a substituted checkpoint name inherits no revision; set its own to pin it",
+        )
 
 
 def check_checkpoint_width(key: str, declared: int, observed: int) -> None:
