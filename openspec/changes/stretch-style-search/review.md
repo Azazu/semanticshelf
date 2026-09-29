@@ -111,3 +111,23 @@
 - Targeted checks: 86 passed via `PYTHONDONTWRITEBYTECODE=1 PYTEST_ADDOPTS='-p no:cacheprovider tests/unit/test_style_benchmark.py tests/unit/test_style_corpus.py tests/unit/test_style_candidate.py tests/unit/test_image_definition.py' make test RUN='.venv/bin/python -B -m'`.
 - Empty-corpus reproduction patched the image reader, candidate loader, settings and corpus planner in memory, then called the actual `main()`/`embed()` path; no images or model weights were written or downloaded.
 - Architecture verified against the installed OpenCLIP quickgelu configuration and vision-tower builder. The real-weight benchmark and models suite were not rerun during this confirmation; the numerical rerun is recorded in the updated ADR and handoff.
+
+## Confirmation 2 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-29
+**Reviewed-Commit:** 931f434f19f8fd8771c01e1d4a42a4f8ba14e349
+**Verdict:** changes-requested
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — the adapter selects `ViT-L-14-quickgelu` and checks the built activation before loading tensors. The installed OpenCLIP configuration and tower builder agree with that choice, and regression tests cover the variant and rejection of GELU. ADR-006 and the how-to consistently report the corrected candidate preference of 0.282 and edges preference of 0.898, retaining the no-third-key decision. |
+| 2 | confirmed — `embed()` now returns an empty result before concatenation when every image is rejected, allowing `main()` to issue the intended refusal and exit with code 2. The command-path test patches the actual imported corpus module and checks the specific all-rejected message. Surviving-label validation also refuses fewer than 20 photographs or 4 looks before scoring. |
+| 3 | changes-requested — the report, spec, how-to and design decision 6 now correctly describe checkpoint rows as diagnostic only, with a regression test for the caveat. However, `design.md:77` still promises that a re-run on the same machine reproduces the table exactly and limits the unpinned-checkpoint caveat to runs across machines. Machine identity does not freeze a configured model name or its remote revision: the unchanged CLIP and DINOv2 adapters resolve processor and weights separately without a revision on every load, so a later run on the same machine can load different inputs too. This is the remaining exact-reproduction claim explicitly named in Confirmation 1. Remove that guarantee or state it only as conditional on identical effective weights, processors and other inputs, which the command does not establish on any machine. |
+
+### Confirmation evidence
+
+- Scope: only the diff from `e9ea55c722323ad869f19d8b4448476e26129e78` to the reviewed commit and the code paths/artifacts implicated by findings 1–3.
+- Targeted checks: 88 passed via `PYTHONDONTWRITEBYTECODE=1 PYTEST_ADDOPTS='-p no:cacheprovider tests/unit/test_style_benchmark.py tests/unit/test_style_corpus.py tests/unit/test_style_candidate.py tests/unit/test_image_definition.py' make test RUN='.venv/bin/python -B -m'`.
+- Architecture checked against the installed OpenCLIP configuration and activation selection; the real-weight benchmark and models suite were not rerun. Numerical rerun evidence remains the updated ADR and handoff.
+- Finding 3 has now failed two confirmations. Per AGENTS.md, stop the confirmation loop and seek user arbitration or split/reduce the change before proceeding.
