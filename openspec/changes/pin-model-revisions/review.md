@@ -36,3 +36,22 @@
 - Confirmed the requested branch and HEAD, a clean initial working tree, and both source findings dispositioned as `fixed`.
 - Read the changed planning artifacts, repository review rules and OpenSpec configuration; checked the existing settings and adapter load paths and searched the repository for surviving conflicting claims.
 - `openspec validate pin-model-revisions --strict` passed. Structural validation does not resolve the conflicting behavioral requirements above.
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-29
+**Reviewed-Commit:** b63357184ba4f928b93d36d63bf3ab911c1d2018
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — Design decision 1 and the delta specification require configured revisions to be full 40-character hexadecimal commit identifiers. Tasks 1.1–1.2 cover defaults, configured full commits, and rejection of mutable, abbreviated, malformed and empty values for both settings; task 3.1 requires demonstrated failing inputs. Task 1.4 preserves the shared immutable revision for both reads of a pinned load. The deliberately unpinned compatibility path is explicitly excluded from this guarantee. |
+| 2 | confirmed — The chosen compatibility policy preserves a substituted checkpoint name with no configured revision: it inherits no default revision, loads without one, and reports that it is unpinned. The delta's default scenario now requires the default checkpoint name, and its snapshot scenario, design decision 2 and retry guarantee apply only to pinned loads. Tasks 1.3–1.4 cover both pinned and unpinned calls, task 2.1 explicitly requires the unpinned scenario for both adapters, and task 3.2 verifies the pre-upgrade custom-name configuration still starts. Proposal Capabilities and task 2.1 no longer require a revision for substitution; handoff.md explicitly supersedes the startup-refusal decision. These changes resolve the contradictory requirements identified in the source round and Confirmation 1. |
+
+### Validation
+
+- Reviewed only `e6598b9f10652034958df34b641eea403b785dd0..b63357184ba4f928b93d36d63bf3ab911c1d2018` and collateral effects reachable from findings 1 and 2; introduced no unrelated findings.
+- Confirmed branch `change/pin-model-revisions`, HEAD matching the reviewed commit, a clean initial working tree, and both source findings dispositioned as `fixed`.
+- Read the changed planning artifacts, repository review rules and OpenSpec configuration; checked existing settings and adapter call sites and searched for surviving conflicting substitution/revision claims.
+- `openspec validate pin-model-revisions --strict` passed. This confirms resolution in the Gate 1 plan; implementation and demonstrated failing-input evidence remain for Gate 2.
