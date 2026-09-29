@@ -1,7 +1,7 @@
 # Handoff — pin-model-revisions
 
 **Updated:** 2026-09-29 · claude
-**State:** awaiting-gate-1
+**State:** implementing
 **Branch:** change/pin-model-revisions
 
 ## Done this session
@@ -118,7 +118,9 @@ artifacts were not.
 
 ## Next step
 
-`/gate-review pin-model-revisions 1` — Gate 1 on the artifacts.
+**Gate 1 is passed** — confirmation 2 on `b633571` confirms both findings.
+
+`/opsx:apply pin-model-revisions` — implementation.
 `scripts/pregate-verify.sh gate1 pin-model-revisions` passes (13 tasks, tier
 declared, applicability table present, links resolve).
 
