@@ -1,0 +1,224 @@
+# Handoff — stretch-style-search
+
+**Updated:** 2026-09-28 · claude
+**State:** ready-to-merge
+**Branch:** change/stretch-style-search
+
+## Done this session
+
+**Gate 1 passed** at `eb3f588` (round 1 changes-requested, confirmation 1
+changes-requested, confirmation 2 confirmed). Findings 1 and 2 reshaped the
+measurement: `clip-vit-l14` is measured too, and the deciding statistic is a
+rank preference rather than a ratio of averages, because a ratio is moved by a
+model's own similarity scale.
+
+Implemented, 9 of 16 tasks:
+
+- **1.1, 1.2** `scripts/style_corpus.py` — six looks as pure functions of the
+  bytes, the stream the benchmark walks, and the refusals: a corpus below 20
+  photographs or 4 looks, and a look that flattens a photograph to one colour.
+  That last rule reads the picture's **interior**: a 3x3 filter leaves the
+  outermost ring, so `edges` of a uniform picture is a flat field inside the
+  original frame and a whole-picture rule missed exactly the case it exists for.
+- **2.1** `open_clip_torch` in a group of its own, and `torchvision` declared
+  beside it so `[tool.uv.sources]` can point it at the same index as `torch` —
+  left to `open_clip` it came from PyPI and every import ended in "operator
+  torchvision::nms does not exist". The image test now asserts the service
+  builder names **no** group at all.
+- **2.2** `scripts/style_candidate.py` — the tower with CLIP's projection
+  removed before the load, the checkpoint at its pinned revision read with
+  `weights_only=True` and four named globals, 0 missing and 0 unexpected, the
+  style head applied to the pooled output.
+- **2.3, 2.4, 2.5** `scripts/style_benchmark.py` — the rank preference, the
+  diagnostic ratio, the bound as one strict comparison, and the command. The
+  measured keys are read from `app.domain`; a unit test proves no key is
+  written out in the command.
+- **3.3** roadmap and requirements register reshaped: row 18 is the
+  measurement, row 18a is the key, proposed only if ADR-006 says yes.
+- **5.1** the demonstrated failing inputs, below.
+
+Also written, pending only the numbers: **ADR-006** at `proposed`, carrying the
+candidate, the corpus, the statistic and the bound — everything fixed *before*
+the run, so the bound cannot be fitted to the table; and the fourth section of
+`docs/how-to/benchmarks.md` minus its results.
+
+## Demonstrated failing inputs (high tier, task 5.1)
+
+Each guard removed on its own, the covering test run, the file restored.
+
+| check | file | test | with the guard removed |
+|---|---|---|---|
+| a look is deterministic | `scripts/style_corpus.py` | `test_a_look_gives_the_same_bytes_every_time` | FAILED |
+| a look that returns one colour is refused | `scripts/style_corpus.py` | `test_style_corpus.py -k refused` | FAILED |
+| the corpus is large enough | `scripts/style_corpus.py` | `test_too_few_photographs_is_refused` | FAILED |
+| the corpus has enough looks | `scripts/style_corpus.py` | `test_too_few_looks_is_refused` | FAILED |
+| the allowlist is exactly four globals | `scripts/style_candidate.py` | `test_the_allowlist_is_exactly_these_four_globals` | FAILED |
+| no source file turns the pickle check off | `scripts/style_candidate.py` | `test_no_source_file_turns_the_pickle_check_off` | FAILED |
+| a checkpoint short of a tensor is refused | `scripts/style_candidate.py` | `test_style_candidate.py -k checkpoint` | FAILED |
+| the checkpoint's width is the declared one | `scripts/style_candidate.py` | `tests/models/test_style_candidate.py` (real weights) | FAILED — `CheckpointWidthError` |
+| the measured keys come from `app.domain` | `scripts/style_benchmark.py` | `-k measured_keys or no_model_key` | FAILED |
+| a corpus forming no triple is refused | `scripts/style_benchmark.py` | `-k no_triple` | FAILED |
+| the ratio has no value through a non-positive denominator | `scripts/style_benchmark.py` | `-k denominator` | FAILED |
+| the bound is strict | `scripts/style_benchmark.py` | `-k exactly_on_the_bound or indifference_itself` | FAILED |
+| the bound is taken against the best incumbent | `scripts/style_benchmark.py` | `test_the_bound_is_taken_against_the_best_incumbent_not_the_first` | FAILED |
+| the tower is the quickgelu variant | `scripts/style_candidate.py` | `test_style_candidate.py -k quickgelu` | FAILED |
+| the built activation is checked before the load | `scripts/style_candidate.py` | `test_style_candidate.py -k wrong_activation` | FAILED |
+| the bounds hold for the corpus that survived | `scripts/style_corpus.py` | `test_style_corpus.py -k refused_away` | FAILED |
+| a wholly refused corpus never reaches the concatenation | `scripts/style_benchmark.py` | `test_style_benchmark.py -k wholly` | FAILED — `ValueError` |
+| the checkpoint table says it establishes nothing | `scripts/style_benchmark.py` | `test_style_benchmark.py -k establishes_nothing` | FAILED |
+| the corpus digest covers the bytes | `scripts/style_benchmark.py` | `test_style_benchmark.py -k digest` | FAILED |
+
+## Scope change, and why Gate 1 is requested again
+
+The machine this measurement runs on is in use, and twenty-five minutes of
+CPU on it is not a number that can be scheduled around. The user asked for the
+run to be payable in instalments while staying a full one, and agreed to the
+shape below; that agreement is not a gate record, so the artifacts carry it and
+the gate decides.
+
+**Design decision 6** adds `--only <model>` and `--cache <directory>`, and
+**task 2.6** implements them. The default is unchanged — with no `--cache` the
+command writes nothing anywhere. What the decision is really about is the
+fingerprint: a cache that served a vector from a different corpus would corrupt
+a published number invisibly, so a cached file is read only when the model, the
+candidate's revision, the corpus root, **every photograph's content**, the looks
+and the labels all match, and a write is a rename of a temporary file.
+
+Two rows of the applicability table changed with it — "crash around an external
+effect" now has a second effect to answer for, and "concurrent writers" is no
+longer `n/a`.
+
+**Round 2's finding was withdrawn with the feature it objected to.** The cache
+had to prove that the vectors in a file came from the same weights the next run
+loads, and there is nothing here to prove it with: `clip-vit-l14` and
+`dinov2-large` load a checkpoint *name* that is a setting, with no revision, and
+each adapter resolves the weights and the processor in separate calls. A partial
+check proves only the part it checked; a full check is the measurement itself.
+Two confirmations failed on this, so under AGENTS.md the executor stopped and
+the user arbitrated: **drop the cache**, run the measurement in one sitting.
+
+Design decision 6 and task 2.6 are removed, the two applicability rows are back
+to what Gate 1 round 1 confirmed, and the finding is `wont-fix` with that
+reason. The defect it exposed is real and outlives this change, so it is
+**roadmap row 20** (`pin-model-revisions`): ADR-005 pinned the query encoder's
+revision for exactly this reason and the two stored keys were never pinned, which
+means a stored vector cannot be reproduced from the key alone.
+
+The artifacts are now the shape Gate 1 confirmed at `eb3f588`, plus the
+implementation of tasks 1.1-2.5, 3.3 and 5.1.
+
+## Gate 2 round 1: three findings, all fixed
+
+**1. The tower was the wrong architecture (major).** CSD is initialised from
+OpenAI's CLIP ViT-L/14, whose residual MLPs use QuickGELU; `open_clip`'s plain
+`ViT-L-14` config sets `quick_gelu: false` and builds `nn.GELU`. An activation
+carries no parameters, so the load reported nothing missing and nothing
+unexpected while the network computed something else. Confirmed against the
+local `openai/clip-vit-large-patch14` config, which declares
+`hidden_act: quick_gelu`, and the two towers differ by cosine 0.93 on this
+corpus. The tower is now `ViT-L-14-quickgelu` and the adapter asserts the built
+activation before the load.
+
+**The measurement was run again**, and the wrong architecture had flattered the
+candidate: 0.395 -> **0.282**, `edges` 0.981 -> 0.898. Both incumbent rows came
+back identical to the digit, which is what established that the activation was
+the whole of the difference. The verdict is unchanged — no third key — and
+ADR-006 records what the first table had been.
+
+**2. The corpus bounds read the plan, not the corpus (major).** Constant
+pictures are dropped after the count, so twenty planned photographs could leave
+two and still be scored. `check_present` applies both bounds to the labels that
+survived — and the first fix was incomplete: a corpus refused *entirely* still
+crashed in `np.concatenate([])` before the refusal was reached. `embed` now
+returns an empty result instead.
+
+The test that was meant to cover it did not. `script_module` builds a fresh
+module object on every call, so the test patched a second copy of
+`style_corpus` and the command refused for having no photographs at all — the
+right words down the wrong path. It now patches the module the command
+imported, asserts the message of that path, and reproduces the reviewer's
+`ValueError` when the guard is removed.
+
+**3. The re-run scenario promised more than the command can deliver (major).**
+The first answer narrowed it and still overclaimed: a scan of the model cache
+reads whatever a name points at *now*, cannot tell which snapshot either of an
+adapter's two `from_pretrained` calls read, and cannot distinguish weights from
+one revision beside a processor from another.
+
+The narrowing is completed rather than the identity captured, because capturing
+it means pinning revisions in the service's adapters — roadmap row 20. What the
+command establishes exactly is the **corpus**: a digest over its file names and
+bytes, `7a0f6d0a346953a3` for the published run. The checkpoint table is printed
+under a caveat that it is diagnostic only and that matching rows establish
+neither matching inputs nor matching numbers, a test asserts that caveat, the
+spec claims reproducibility only for what this repository pins, and the
+applicability table's retry row conditions reproduction on the same weights and
+the same preprocessing — not on the same machine, which freezes nothing, since
+those two keys resolve their name afresh on every load.
+
+## What CI runs, run locally (task 5.3)
+
+| command | result |
+|---|---|
+| `FORCE_COLOR=1 CI=true make check` | **green** — 798 passed, 1 skipped |
+| `openspec validate --all --strict` | **green** — 17 passed, 0 failed |
+| `sh -n scripts/*.sh` | **green** — 7 files |
+| `scripts/gate_run_test.sh` | **green** — 77 passed |
+| `scripts/workflow_verify_test.sh` | **green** — 23 passed |
+| `make audit` | **green** — no known vulnerabilities in 97 packages |
+| `make image` | **green** — and the point of the group holds |
+| `FORCE_COLOR=1 CI=true make test-integration` | **green** — 296 passed, 1 skipped |
+
+**The image did not grow.** `semanticshelf:runtime` is **1.79 GB**, the same as
+the build of 2026-09-28 that predates the dependency, and the service image
+carries none of what the `style` group pulls in:
+
+```console
+$ docker run --rm --entrypoint sh semanticshelf:runtime \
+    -c 'ls /app/.venv/lib/python3.12/site-packages | grep -iE "^(open_clip|torchvision|timm)"'
+(nothing)
+```
+
+**The integration database is a container of its own.** The suite reads
+`semanticshelf_it` on port 5434 from a standalone `pgvector/pgvector:pg16`
+container named `semanticshelf-it`, not the compose `db` service on 5433; it had
+stopped when the machine rebooted, and `docker start semanticshelf-it` was the
+whole fix. Nothing in the configuration needed changing.
+
+**One check failed first and was right to.** `make check` rejected
+`scripts/style_candidate.py`: its own docstring quoted the literal the sweep
+forbids. The sweep reads `git ls-files`, so the file passed while it was
+untracked and failed the moment it was committed — the guard working exactly as
+written. The docstring says the same thing without the literal.
+
+## The mechanical floor for Gate 2 (task 5.4)
+
+```console
+$ scripts/pregate-verify.sh gate2 stretch-style-search
+[OK]   git diff --check clean
+[OK]   openspec validate stretch-style-search --strict
+[OK]   risk tier declared: high
+[OK]   proposal.md has a Non-goals section
+[OK]   tasks.md has 16 task(s)
+[OK]   every task checked
+[OK]   checked-task referenced paths exist
+[OK]   markdown links resolve (11 changed .md files)
+[OK]   make check green
+pregate-verify: gate2 stretch-style-search — all checks passed (0 warning(s))
+```
+
+## Next step
+
+**Gate 2 is passed** — confirmation 3 on `f8c3c0d` confirms all three findings.
+
+Finding 3 took three confirmations because each one found a further place where
+the same claim survived: first the spec scenario, then the cache scan presented
+as provenance, then the applicability table conditioning exact reproduction on
+"the same machine". Fix the claim, not the line — the rule AGENTS.md already
+carries, demonstrated three times inside one finding.
+
+The user merges: `/git:merge stretch-style-search`.
+
+## Blockers
+
+None.
