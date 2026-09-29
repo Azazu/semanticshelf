@@ -1,7 +1,7 @@
 # Handoff — stretch-style-search
 
 **Updated:** 2026-09-28 · claude
-**State:** awaiting-gate-2
+**State:** fixing-g2
 **Branch:** change/stretch-style-search
 
 ## Done this session
@@ -101,6 +101,36 @@ means a stored vector cannot be reproduced from the key alone.
 The artifacts are now the shape Gate 1 confirmed at `eb3f588`, plus the
 implementation of tasks 1.1-2.5, 3.3 and 5.1.
 
+## Gate 2 round 1: three findings, all fixed
+
+**1. The tower was the wrong architecture (major).** CSD is initialised from
+OpenAI's CLIP ViT-L/14, whose residual MLPs use QuickGELU; `open_clip`'s plain
+`ViT-L-14` config sets `quick_gelu: false` and builds `nn.GELU`. An activation
+carries no parameters, so the load reported nothing missing and nothing
+unexpected while the network computed something else. Confirmed against the
+local `openai/clip-vit-large-patch14` config, which declares
+`hidden_act: quick_gelu`, and the two towers differ by cosine 0.93 on this
+corpus. The tower is now `ViT-L-14-quickgelu` and the adapter asserts the built
+activation before the load.
+
+**The measurement was run again**, and the wrong architecture had flattered the
+candidate: 0.395 -> **0.282**, `edges` 0.981 -> 0.898. Both incumbent rows came
+back identical to the digit, which is what established that the activation was
+the whole of the difference. The verdict is unchanged — no third key — and
+ADR-006 records what the first table had been.
+
+**2. The corpus bounds read the plan, not the corpus (major).** Constant
+pictures are dropped after the count, so twenty planned photographs could leave
+two and still be scored. `check_present` now applies both bounds to the labels
+that survived, and refuses a wholly refused corpus cleanly.
+
+**3. The re-run scenario promised more than the command can deliver (major).**
+Only the candidate is pinned here. The scenario now says the record tells a
+reader whether they have the same inputs, and the report prints them: a digest
+over the corpus's file names and bytes (`7a0f6d0a346953a3` for the published
+run) and every checkpoint setting with what it resolved to, or `unresolved`.
+Reported, never claimed — pinning the two stored keys is roadmap row 20.
+
 ## What CI runs, run locally (task 5.3)
 
 | command | result |
@@ -155,7 +185,8 @@ pregate-verify: gate2 stretch-style-search — all checks passed (0 warning(s))
 ## Next step
 
 The user pushes `change/stretch-style-search` and reports the CI run; then
-`/gate-review stretch-style-search 2` — Gate 2 on the code diff.
+`scripts/gate-run.sh stretch-style-search 2 confirm 1` — the confirmation of
+round 1.
 
 ## Blockers
 
