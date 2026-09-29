@@ -1,7 +1,7 @@
 # Handoff — stretch-style-search
 
 **Updated:** 2026-09-28 · claude
-**State:** fixing-g2
+**State:** awaiting-gate-2
 **Branch:** change/stretch-style-search
 
 ## Done this session
@@ -61,6 +61,12 @@ Each guard removed on its own, the covering test run, the file restored.
 | the ratio has no value through a non-positive denominator | `scripts/style_benchmark.py` | `-k denominator` | FAILED |
 | the bound is strict | `scripts/style_benchmark.py` | `-k exactly_on_the_bound or indifference_itself` | FAILED |
 | the bound is taken against the best incumbent | `scripts/style_benchmark.py` | `test_the_bound_is_taken_against_the_best_incumbent_not_the_first` | FAILED |
+| the tower is the quickgelu variant | `scripts/style_candidate.py` | `test_style_candidate.py -k quickgelu` | FAILED |
+| the built activation is checked before the load | `scripts/style_candidate.py` | `test_style_candidate.py -k wrong_activation` | FAILED |
+| the bounds hold for the corpus that survived | `scripts/style_corpus.py` | `test_style_corpus.py -k refused_away` | FAILED |
+| a wholly refused corpus never reaches the concatenation | `scripts/style_benchmark.py` | `test_style_benchmark.py -k wholly` | FAILED — `ValueError` |
+| the checkpoint table says it establishes nothing | `scripts/style_benchmark.py` | `test_style_benchmark.py -k establishes_nothing` | FAILED |
+| the corpus digest covers the bytes | `scripts/style_benchmark.py` | `test_style_benchmark.py -k digest` | FAILED |
 
 ## Scope change, and why Gate 1 is requested again
 
@@ -121,15 +127,32 @@ ADR-006 records what the first table had been.
 
 **2. The corpus bounds read the plan, not the corpus (major).** Constant
 pictures are dropped after the count, so twenty planned photographs could leave
-two and still be scored. `check_present` now applies both bounds to the labels
-that survived, and refuses a wholly refused corpus cleanly.
+two and still be scored. `check_present` applies both bounds to the labels that
+survived — and the first fix was incomplete: a corpus refused *entirely* still
+crashed in `np.concatenate([])` before the refusal was reached. `embed` now
+returns an empty result instead.
+
+The test that was meant to cover it did not. `script_module` builds a fresh
+module object on every call, so the test patched a second copy of
+`style_corpus` and the command refused for having no photographs at all — the
+right words down the wrong path. It now patches the module the command
+imported, asserts the message of that path, and reproduces the reviewer's
+`ValueError` when the guard is removed.
 
 **3. The re-run scenario promised more than the command can deliver (major).**
-Only the candidate is pinned here. The scenario now says the record tells a
-reader whether they have the same inputs, and the report prints them: a digest
-over the corpus's file names and bytes (`7a0f6d0a346953a3` for the published
-run) and every checkpoint setting with what it resolved to, or `unresolved`.
-Reported, never claimed — pinning the two stored keys is roadmap row 20.
+The first answer narrowed it and still overclaimed: a scan of the model cache
+reads whatever a name points at *now*, cannot tell which snapshot either of an
+adapter's two `from_pretrained` calls read, and cannot distinguish weights from
+one revision beside a processor from another.
+
+The narrowing is completed rather than the identity captured, because capturing
+it means pinning revisions in the service's adapters — roadmap row 20. What the
+command establishes exactly is the **corpus**: a digest over its file names and
+bytes, `7a0f6d0a346953a3` for the published run. The checkpoint table is printed
+under a caveat that it is diagnostic only and that matching rows establish
+neither matching inputs nor matching numbers, a test asserts that caveat, the
+spec claims reproducibility only for what this repository pins, and the
+applicability table's retry row is qualified to one machine.
 
 ## What CI runs, run locally (task 5.3)
 
@@ -185,8 +208,8 @@ pregate-verify: gate2 stretch-style-search — all checks passed (0 warning(s))
 ## Next step
 
 The user pushes `change/stretch-style-search` and reports the CI run; then
-`scripts/gate-run.sh stretch-style-search 2 confirm 1` — the confirmation of
-round 1.
+`scripts/gate-run.sh stretch-style-search 2 confirm 1` — the second
+confirmation of round 1.
 
 ## Blockers
 

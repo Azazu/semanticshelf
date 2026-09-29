@@ -485,12 +485,17 @@ it keeps the machine responsive at the cost of wall-clock time.
 **What it prints so a second run can be compared with this one.** A digest over
 the corpus's file names and bytes — "the first hundred pictures of a folder" is
 not something a reader can obtain, and the digest is what two runs compare to
-find out whether they measured the same pictures. And, for every checkpoint
-setting this build has, the configured name with the commit hash the local model
-cache resolved it to, or `unresolved`. Only the candidate is pinned by this
-repository: the two stored keys load a name a deployment configures, so their
-identity is **reported rather than claimed**, and the difference between two
-runs can be seen instead of assumed away.
+find out whether they measured the same pictures. That part is exact.
+
+The checkpoint table beside it is **not**, and the command says so above it.
+Only the candidate is pinned by this repository. The two stored keys load a
+checkpoint *name* a deployment configures, with no revision, and each adapter
+resolves its weights and its processor in two separate calls — so a scan of the
+model cache afterwards reads whatever that name points at now, not what either
+call read. Two runs whose rows match may still have loaded different weights.
+The table is a thread to pull when numbers disagree, not evidence that they
+should agree; pinning those two keys is a change to the service
+(`openspec/ROADMAP.md`, row 20).
 
 ### The corpus is built, not found
 
@@ -568,9 +573,10 @@ refused as one colour, 297 000 triples, 29 700 pairs sharing a look and 1 500
 sharing a picture, corpus digest `7a0f6d0a346953a3`. Candidate
 `tomg-group-umd/CSD-ViT-L` at revision
 `5bc26a6fb0487f3f00a2a7313135103a005b1b67`, tower `ViT-L-14-quickgelu`. The
-incumbents are not pinned by this repository; this run resolved
-`openai/clip-vit-large-patch14` to `32bd6428` and `facebook/dinov2-large` to
-`47b73eef`. Run with the `TORCH_NUM_THREADS=4 nice -n 19` prefix above, which
+incumbents are not pinned by this repository; the model cache on the machine
+that produced these numbers held `openai/clip-vit-large-patch14` at `32bd6428`
+and `facebook/dinov2-large` at `47b73eef`, which is a diagnostic rather than a
+statement about which weights answered. Run with the `TORCH_NUM_THREADS=4 nice -n 19` prefix above, which
 took about seventeen minutes; the thread count changes the order a reduction is
 summed in and so the last digit, never the ranking.
 

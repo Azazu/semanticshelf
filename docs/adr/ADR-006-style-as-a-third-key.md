@@ -81,9 +81,12 @@ the index, the re-index and `model=` on the picture searches — is not proposed
 The run: 100 photographs of the demo corpus under six looks, 600 images, none
 refused as one colour, 297 000 triples, corpus digest `7a0f6d0a346953a3`.
 Candidate at `5bc26a6fb0487f3f00a2a7313135103a005b1b67`, tower
-`ViT-L-14-quickgelu`. The incumbents are not pinned by this repository; this run
-resolved `openai/clip-vit-large-patch14` to `32bd6428` and
-`facebook/dinov2-large` to `47b73eef`.
+`ViT-L-14-quickgelu`. The incumbents are not pinned by this repository: the
+model cache on the machine that produced these numbers held
+`openai/clip-vit-large-patch14` at `32bd6428` and `facebook/dinov2-large` at
+`47b73eef`, which is a diagnostic and not a statement about which weights
+answered — each adapter resolves its weights and its processor separately,
+without a revision. Pinning them is roadmap row 20.
 
 ```console
 $ uv run --group style python scripts/style_benchmark.py --pictures 100

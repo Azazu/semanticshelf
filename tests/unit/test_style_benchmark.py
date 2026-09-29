@@ -16,7 +16,8 @@ from app.domain import EMBEDDING_MODELS
 from tests.scripts import script_module
 
 benchmark = script_module("style_benchmark")
-Label = script_module("style_corpus").Label
+style_corpus = benchmark.style_corpus
+Label = style_corpus.Label
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "style_benchmark.py"
 
@@ -226,7 +227,6 @@ def test_the_corpus_digest_is_over_the_names_and_the_bytes(tmp_path: Path) -> No
     """ "The first hundred pictures of a folder" is not a corpus anyone else can
     obtain; the digest is what two runs compare to find out whether they
     measured the same pictures."""
-    style_corpus = script_module("style_corpus")
     (tmp_path / "a.jpg").write_bytes(b"first")
     (tmp_path / "b.jpg").write_bytes(b"second")
     plan = style_corpus.Corpus(
@@ -241,7 +241,6 @@ def test_the_corpus_digest_is_over_the_names_and_the_bytes(tmp_path: Path) -> No
 
 
 def test_the_digest_changes_when_a_picture_is_renamed(tmp_path: Path) -> None:
-    style_corpus = script_module("style_corpus")
     (tmp_path / "a.jpg").write_bytes(b"first")
     plan = style_corpus.Corpus(
         root=tmp_path, paths=style_corpus.photographs(tmp_path), looks=tuple(style_corpus.LOOKS)
@@ -286,3 +285,88 @@ def test_a_checkpoint_the_cache_does_not_hold_is_reported_as_unresolved(tmp_path
     )
 
     assert all(revision == "unresolved" for _, _, revision in benchmark.checkpoints(settings))
+
+
+# --- the command path, not just the functions it calls -------------------------
+
+
+def uniform_picture() -> object:
+    """A photograph every look flattens to one colour, so nothing survives."""
+    from PIL import Image
+
+    return Image.new("RGB", (32, 32), (128, 128, 128))
+
+
+def test_a_wholly_refused_corpus_is_refused_in_words_not_in_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Twenty photographs pass the plan's bound and none of them survives its
+    looks. The functions each behave, and the path between them used to raise
+    `need at least one array to concatenate` before the refusal was reached."""
+    from PIL import Image
+
+    paths = tuple(tmp_path / f"{n}.jpg" for n in range(style_corpus.MIN_PICTURES))
+    monkeypatch.setattr(style_corpus, "photographs", lambda folder: paths)
+    monkeypatch.setattr(Image, "open", lambda path: uniform_picture())
+
+    class Nothing:
+        """An embedder the run must never reach."""
+
+        def embed_images(self, images: object) -> object:  # pragma: no cover - not reached
+            raise AssertionError("a refused corpus must not be embedded")
+
+    monkeypatch.setattr(
+        benchmark.style_candidate.StyleCandidate, "load", lambda settings: Nothing()
+    )
+    monkeypatch.setattr(
+        benchmark, "FACTORIES", {key: lambda s: Nothing() for key in benchmark.incumbents()}
+    )
+    configured = benchmark.Settings(  # type: ignore[call-arg]
+        _env_file=None,
+        database_url="postgresql+asyncpg://127.0.0.1:1/nowhere",
+        model_cache=tmp_path / "models",
+    )
+    monkeypatch.setattr(benchmark, "Settings", lambda: configured)
+    monkeypatch.setattr("sys.argv", ["style_benchmark.py", "--folder", str(tmp_path)])
+
+    code = benchmark.main()
+
+    assert code == 2
+    printed = capsys.readouterr().out
+    assert "nothing measured" in printed
+    # The words alone are not the path: a folder with no photographs at all
+    # refuses with the same opening and never reaches the embedding.
+    assert "every look of every photograph was refused" in printed
+
+
+# --- what the provenance table may and may not be read as ----------------------
+
+
+def test_the_checkpoint_table_says_it_establishes_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The rows look like provenance and are not: each adapter resolves its
+    weights and its processor separately, without a revision."""
+    from app.core.settings import Settings
+
+    (tmp_path / "a.jpg").write_bytes(b"first")
+    plan = style_corpus.Corpus(
+        root=tmp_path, paths=style_corpus.photographs(tmp_path), looks=("plain", "grayscale")
+    )
+    labels = corpus(pictures=2, looks=2)
+    vectors = directions(labels, "look")
+    rows = [
+        benchmark.score(name, vectors, labels) for name in ("csd-vit-l", *benchmark.incumbents())
+    ]
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+asyncpg://127.0.0.1:1/nowhere",
+        model_cache=tmp_path / "models",
+    )
+
+    benchmark.report(plan, labels, rows, settings)
+    printed = capsys.readouterr().out
+
+    assert benchmark.PROVENANCE_CAVEAT in printed
+    assert "diagnostic only" in benchmark.PROVENANCE_CAVEAT
+    assert "establish neither matching inputs nor matching numbers" in benchmark.PROVENANCE_CAVEAT

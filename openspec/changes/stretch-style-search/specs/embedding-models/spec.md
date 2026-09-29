@@ -55,15 +55,15 @@ answering in another key's space — is measured under the rule it already has.
 
 #### Scenario: The measurement can be re-run
 - **WHEN** somebody re-runs the published command against the corpus it names
-- **THEN** they get the same numbers whenever they have the same corpus and the
-  same checkpoints, and the record tells them whether they do: it publishes a
-  digest of the corpus's bytes and the identity of every checkpoint the run
-  loaded
+- **THEN** the command rebuilds the corpus from that folder by itself, needing
+  no download and no labelling, and publishes a digest over the corpus's file
+  names and bytes, so a reader can establish that two runs measured the same
+  pictures
 
 #### Scenario: An input the repository does not pin
 - **WHEN** the measurement loads a checkpoint whose revision this repository
   does not fix — a name a deployment configures rather than a pinned commit
-- **THEN** the record SHALL print what that name resolved to on the machine
-  that produced the numbers, and SHALL NOT present it as fixed; a reader
-  comparing two runs can then see which input differed instead of trusting that
-  none did
+- **THEN** the record SHALL say so, and SHALL NOT present any identity it prints
+  for that checkpoint as establishing which weights answered: reproducibility is
+  claimed only for the inputs this repository pins, and the rest are named as
+  the open question they are

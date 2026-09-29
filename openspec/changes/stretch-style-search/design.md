@@ -74,7 +74,7 @@ difference is visible.
 |---|---|
 | Empty, zero and null inputs | A look that returns a **constant picture** — one colour everywhere, as a hard posterisation of a near-white photograph can — keeps no subject, so the pair it would form carries no ground truth. The corpus builder refuses that look for that picture (task 1.1) rather than measuring it, so nothing blank reaches an embedder and the zero vector the shared guard exists for cannot arise here. The deciding metric is a proportion of a finite set of triples: a corpus with fewer than two pictures or two looks yields no triple, and the benchmark refuses such a corpus rather than dividing by zero — the same refusal as its minimum size. The diagnostic ratio prints `undefined` rather than a value whenever its denominator is not positive. |
 | Crash around an external effect | The only external effect is the checkpoint download; a failed one leaves nothing half-built, because the benchmark writes nothing anywhere. It reads no database at all — the corpus is files. |
-| Idempotent retries | The looks are deterministic functions of the bytes, the vectors are deterministic given the weights, so a re-run reproduces the table exactly. That is the requirement's "can be re-run" scenario, not a nicety. |
+| Idempotent retries | The looks are deterministic functions of the bytes and the vectors are deterministic given the weights, so a re-run on the same machine reproduces the table exactly, and the corpus digest establishes that the pictures were the same. Across machines it does not: two of the three checkpoints are names a deployment configures rather than revisions this repository pins, so "the same weights" is an assumption a reader makes, not a fact the command can check (decision 6, roadmap row 20). |
 | Authorization boundary | n/a — nothing in the service changes; the benchmark is a command an operator runs. |
 | Concurrent writers | n/a — nothing is written. |
 | Money and rounding | n/a. |
@@ -232,18 +232,25 @@ their bytes**. Two runs agree on it exactly when they measured the same
 pictures, and a reader who gets different numbers can tell in one line whether
 the corpus was the difference.
 
-**The checkpoints.** Only the candidate is pinned here, by repository constant.
-`clip-vit-l14` and `dinov2-large` load a checkpoint *name* that a deployment
-configures, with no revision, and each adapter resolves the weights and the
-processor separately. Nothing in this change can make that fixed — it is a
-defect of the service, recorded as roadmap row 20 — so the command **reports**
-instead: for every checkpoint setting, the configured name and the commit hash
-the local model cache resolved it to, or `unresolved`.
+**The checkpoints — and here the honest answer is that it cannot be done.**
+Only the candidate is pinned here, by repository constant. `clip-vit-l14` and
+`dinov2-large` load a checkpoint *name* that a deployment configures, with no
+revision, and each adapter resolves the weights and the processor in two
+separate calls. A scan of the model cache afterwards reads whatever `main`
+points at now: it cannot tell which snapshot either call read, it cannot
+distinguish weights from revision A beside a processor from revision B, and
+`unresolved` establishes nothing at all.
 
-*What this guarantees:* a reader comparing two runs can see which input
-differed. *What it does not:* it does not make an unpinned checkpoint
-reproducible. Reporting provenance is not the same as controlling it, and the
-spec scenario says so in those words rather than promising identical numbers.
+So the table the command prints is **diagnostic and nothing more**, and it says
+so above itself: two runs whose rows match may still have loaded different
+weights, and matching rows establish neither matching inputs nor matching
+numbers. It is there because a reader chasing a difference would otherwise have
+no thread to pull, not because it proves anything.
+
+*What this guarantees:* the corpus is identified exactly. *What it does not:*
+the weights are not, and this change cannot make them so — pinning them is a
+change to the service's adapters, roadmap row 20. The requirement is worded to
+claim reproducibility only for what this repository pins.
 
 ## Risks / Trade-offs
 
@@ -272,10 +279,10 @@ spec scenario says so in those words rather than promising identical numbers.
   asserted before the load, because the tensor report that catches every other
   mismatch is blind to this one. Found at Gate 2, after a full measurement had
   already been run against the wrong one.
-- **Two of the measurement's inputs are not pinned** → the corpus is named by a
-  digest of its bytes, the checkpoints by what they resolved to, and the
-  requirement is worded as "the record tells you whether you have the same
-  inputs" rather than "you will get the same numbers".
+- **Two of the measurement's inputs are not pinned** → the corpus is named
+  exactly, by a digest of its bytes. The checkpoints are not and cannot be here:
+  what the command prints for them is labelled diagnostic, and the requirement
+  claims reproducibility only for what this repository pins.
 
 ## Migration Plan
 

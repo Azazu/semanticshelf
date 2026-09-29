@@ -66,6 +66,17 @@ DEFAULT_FOLDER: Final = Path(".data/demo/pictures")
 DEFAULT_PICTURES: Final = 100
 
 
+#: Printed above the checkpoint table, and asserted by a test, because the table
+#: is the kind of thing a reader takes for provenance when it is not.
+PROVENANCE_CAVEAT: Final = (
+    "Checkpoints: diagnostic only. Only the candidate is pinned by this repository. The rows "
+    "below are what the local model cache holds now, not what this run loaded: each adapter "
+    "resolves its weights and its processor in separate calls without a revision, so two runs "
+    "whose rows match may still have loaded different weights, and matching rows establish "
+    "neither matching inputs nor matching numbers."
+)
+
+
 class NoTriplesError(RuntimeError):
     """A corpus that forms no comparison at all — the preference has no value.
 
@@ -246,6 +257,11 @@ def embed(
         rows.append(embedder.embed_images(pictures).vectors)
         progress(model, len(labels), corpus.size, time.monotonic() - started)
     print(file=sys.stderr)
+    if not rows:
+        # Every look of every photograph was refused as one colour. There is
+        # nothing to concatenate, and `np.concatenate([])` raises where the
+        # caller is about to refuse the corpus in words.
+        return [], np.zeros((0, 0), dtype=np.float32)
     return labels, np.concatenate(rows)
 
 
@@ -362,8 +378,7 @@ def report(
     verdict = "clears the bound" if clears(candidate.preference, stored) else "does not clear it"
     print(f"Verdict: the candidate {verdict}.")
 
-    print("\nCheckpoints this run loaded. Only the candidate is pinned by this repository;")
-    print("the rest are configured names, and what is shown is the snapshot found here.\n")
+    print(f"\n{PROVENANCE_CAVEAT}\n")
     print("| setting | checkpoint | resolved to |")
     print("|---|---|---|")
     for field, name, revision in checkpoints(settings):
