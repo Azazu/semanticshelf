@@ -1,7 +1,7 @@
 # Handoff — pin-model-revisions
 
 **Updated:** 2026-09-29 · claude
-**State:** awaiting-gate-2
+**State:** ready-to-merge
 **Branch:** change/pin-model-revisions
 
 ## Done this session
@@ -215,12 +215,10 @@ gap a hand-written list of bad inputs leaves.
 
 ## Next step
 
-**Gate 1 is passed** — confirmation 2 on `b633571` confirms both findings.
+**Both gates are passed** — Gate 1 confirmed at `b633571`, Gate 2 confirmed at
+`ba9fe35`.
 
-The user pushes `change/pin-model-revisions` and reports the CI run; then
-`/gate-review pin-model-revisions 2` — Gate 2 on the code diff.
-`scripts/pregate-verify.sh gate1 pin-model-revisions` passes (13 tasks, tier
-declared, applicability table present, links resolve).
+The user merges: `/git:merge pin-model-revisions`.
 
 ## Blockers
 
