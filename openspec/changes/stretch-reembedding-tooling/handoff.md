@@ -1,7 +1,7 @@
 # Handoff — stretch-reembedding-tooling
 
 **Updated:** 2026-09-30 · claude
-**State:** awaiting-gate-2
+**State:** ready-to-merge
 **Branch:** change/stretch-reembedding-tooling
 
 ## Done this session
@@ -291,10 +291,14 @@ pregate-verify: gate2 stretch-reembedding-tooling — all checks passed (0 warni
 
 ## Next step
 
-**Gate 1 is passed** — confirmation 2 on `c89e9a3` confirms all four findings.
+**Both gates are passed** — Gate 1 confirmed at `c89e9a3`, Gate 2 confirmed at
+`1cbb96b`.
 
-The user pushes `change/stretch-reembedding-tooling` and reports the CI run;
-then `/gate-review stretch-reembedding-tooling 2` — Gate 2 on the code diff.
+Eight findings across the two gates, every one of them a real defect in the plan
+or the code rather than a wording problem, and three of them defects the tests
+as written could not have caught.
+
+The user merges: `/git:merge stretch-reembedding-tooling`.
 
 ## Blockers
 
