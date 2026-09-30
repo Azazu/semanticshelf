@@ -13,10 +13,12 @@
   count naming how many, for an empty corpus, and for the pair given in the
   other order — the count is not symmetric and the test says so.
 - [ ] 1.3 The outstanding-work query: for a key and a selection, the work that
-  is waiting, the work a claim still holds, and the work that failed terminally,
-  told apart. Loads no model. Verify: integration tests for each of the three
-  states and for none of them, and one that a live claim and an expired one are
-  not the same answer.
+  is waiting, the work whose retry is **not yet due**, the work a **live** claim
+  holds, the work whose claim has **expired**, and the work that failed
+  terminally — five states told apart, because the commands act differently on
+  each. Loads no model. Verify: integration tests for each state and for none of
+  them, and one that a live claim and an expired one give different answers,
+  since the repair refuses on the first and carries out the second.
 
 ## 2. The engine and its two sentences
 
@@ -42,13 +44,27 @@
   asserting every vector changed and the row count did not; a test that a key
   this build does not run is refused before anything is queued; a test that a
   key the schema does not allow is refused with its name; and — design decision
-  7 — a test that the repair is **refused while any work for that key is
-  outstanding**, because outstanding work is the observable shadow of a writer
-  that may still hold the previous checkpoint.
+  7 — a test that the repair is **refused while another runner holds a live
+  claim** on that key, and a test that it is **not** refused when the key's
+  outstanding work is merely pending or held by an expired claim, because that
+  is what an interrupted repair leaves and finishing it is the point.
 - [ ] 2.4 `semanticshelf models migrate <old-key> <new-key>`: fill the new key
   for every asset holding a vector under the old. Verify: integration tests that
   only those assets are queued, that `migrate <key> <key>` is refused, and that
   an unknown key on either side is refused before anything is queued.
+- [ ] 2.6 A repair survives its own interruption, and a stale writer cannot undo
+  it (design decision 7, and the reason findings 3 and 4 were one problem).
+  Verify: an integration test with **two distinguishable fake checkpoints** —
+  a runner claims work for the key and is abandoned holding it; its lease
+  expires; the repair runs to completion with the second checkpoint; the
+  abandoned runner then tries to finish the work it claimed and its result does
+  not land, because a finish matches only the lease expiry its own claim wrote.
+  Every vector under the key afterwards comes from the second checkpoint, and
+  the test asserts that by value rather than by count. Plus a test of the
+  supported order — configuration changed, writers restarted, repair run — and
+  one that work whose retry is not yet due is reported as such and the run does
+  not claim the corpus is rebuilt.
+
 - [ ] 2.5 Both report and change nothing without `--apply` (design decision 2):
   how many assets need work, how many vectors that is, and what a retirement
   would do. Verify: integration tests that without `--apply` the queue is empty
@@ -108,9 +124,10 @@
 - [ ] 5.1 A demonstrated failing input for every new or changed check (high
   tier): the refusal of an unknown key, of a key this build does not run, of
   `migrate <key> <key>`, of a retirement while incomplete, of a retirement while
-  the queue owes work, of a retirement without the word, of a repair while work
-  is outstanding, the coverage condition inside the delete, the two-key lock,
-  and the draining of a selection's outstanding work.
+  the queue owes work, of a retirement without the word, of a repair while a
+  live claim is held, the coverage condition inside the delete, the two-key
+  lock, the draining of a selection's outstanding work, and the lease token that
+  voids a stale runner's late finish.
   Verify: one table, one row per check, each a run with that one edit and the
   file restored afterwards.
 - [ ] 5.2 `openspec validate stretch-reembedding-tooling --strict` passes and

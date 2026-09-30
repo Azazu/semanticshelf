@@ -132,8 +132,30 @@ the limit (while a key holds vectors from two checkpoints, its scores are
 comparable only within each group). It says which of those is a guarantee and
 which is a precondition.
 
-Tasks grew from 16 to 19: the outstanding-work query, the runner-switch
-verification, and the two-session retirement test are each their own.
+**Confirmation 1 confirmed findings 1 and 2 and returned 3 and 4 — as one
+problem.** My answer to 4 broke my answer to 3: decision 7 refused a repair while
+*any* work for the key was outstanding, and an interrupted repair leaves exactly
+that, so its own re-run would have refused and the recovery decision 6 exists
+for would never have happened.
+
+The cases are separated now, and the separation rests on a mechanism that was
+already there. **A live claim refuses**: another runner is writing that key right
+now and nothing can say which checkpoint it holds. **Pending work and expired
+claims do not refuse** — they are what an interrupted run leaves — because a
+lease is a token: a finish lands only `WHERE lease_expires_at = <the value the
+claim wrote>`, so a runner that wakes after its lease expired, including one
+still holding the previous checkpoint, matches nothing and rolls back. That is
+ADR-003's mechanism; what is new is leaning on it deliberately and testing that
+reliance with two distinguishable checkpoints.
+
+A fifth state joins the report: work whose **retry is not yet due**. It cannot be
+run now, and a run that counted it as done would claim a rebuilt corpus it has
+not rebuilt.
+
+Tasks grew from 16 to 20: the outstanding-work query now distinguishes five
+states, and the interrupted-repair test — abandon a claim, let it expire, repair
+with a second fake checkpoint, then watch the stale runner's finish fail to land
+— is its own.
 
 ## Next step
 

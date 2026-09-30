@@ -39,10 +39,12 @@ different spaces and migrating between them is meaningless.
   keys' advisory locks, so two retirements cannot undo each other.
 - **`semanticshelf models reembed <key>`** — recompute every vector stored under
   one key and replace it. This is the repair ADR-007 names, and the one that can
-  be run against this repository's own corpus today. It carries a precondition
-  the command states and half-enforces: every process writing that key must
-  already be running the new configuration, because a process that loaded the
-  model earlier keeps it and a queued job carries a key, not a revision.
+  be run against this repository's own corpus today. Its precondition is stated
+  and partly enforced: a repair does not begin while another runner holds a live
+  claim on the key, a stale runner's late finish cannot land because a lease is
+  a token, and the rest — a writer still holding the previous checkpoint and
+  holding no claim — is an order of operations the documentation gives, because
+  nothing in the store can see which weights a process holds.
 - **Both report by default and act on `--apply`**, as `storage prune` does. The
   report says how many vectors would be computed before anything computes them,
   which on a laptop is the difference between a decision and a surprise.
@@ -114,8 +116,10 @@ None.
   any other time.
 - **No enforcement that a writer is running the new checkpoint.** Nothing in the
   store can see which weights a process holds — ADR-007 settled that, and the
-  provenance table that would see it was designed and refused there. This change
-  states the order of operations, refuses while work is outstanding, and names
-  what a mixed key means for a search.
+  provenance table that would see it was designed and refused there. What this
+  change enforces is narrower and real: no repair while another runner holds a
+  live claim, and a lease token that voids a stale runner's late finish. The
+  rest is an order of operations, and a named limit on what a key holding two
+  checkpoints' vectors means for a search.
 - **No undo.** Deleted vectors are gone; the repair is to run the command again,
   which is why retirement is refused unless the replacement is already complete.

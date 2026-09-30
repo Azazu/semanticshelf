@@ -19,11 +19,22 @@ outstanding work of its own selection, so that a run interrupted halfway is
 finished by the next one rather than leaving work nobody drains. It SHALL NOT
 queue that work a second time.
 
-Three states are reported apart, because they need different acts from an
-operator: work this run **queued**, work that was **already waiting** and this
-run carried out, and work it could not touch — a claim another runner still
-holds, or work that has **failed** and which the existing rule says only an
-explicit reset may run again.
+Four states are reported apart, because they need different acts from an
+operator: work this run **queued**; work that was **already waiting** and this
+run carried out; work whose **retry is not yet due**, which cannot be run now
+and which SHALL NOT be counted as done; and work it could not touch — a claim
+another runner still holds, or work that has **failed** and which the existing
+rule says only an explicit reset may run again. A run SHALL NOT report itself
+complete while any of the last two remain: "nothing to do right now" and "the
+corpus is rebuilt" are different statements.
+
+**A rebuild of a key SHALL NOT begin while another runner holds a live claim on
+that key.** A live claim is a process writing that key at this moment, and
+nothing in the store can say which checkpoint it holds. Pending work and expired
+claims are **not** grounds to refuse: they are what an interrupted run leaves,
+carrying them out is the point, and a runner that wakes after its lease expired
+cannot land its result — a finish matches only the lease expiry its own claim
+wrote.
 
 The service SHALL also answer, for an ordered pair of keys, how many assets have
 a vector under the first and none under the second. Zero means the second key
@@ -62,8 +73,22 @@ they say so.
 #### Scenario: Work another runner is holding
 - **WHEN** a run's selection includes work whose claim another runner still
   holds
-- **THEN** that work is not executed by this run and is reported as held, so an
-  operator can tell a run that finished from one that stopped short
+- **THEN** that work is not executed by this run and is reported as held, the
+  run does not report itself complete, and a rebuild of that key refuses to
+  begin at all
+
+#### Scenario: Work whose retry is not yet due
+- **WHEN** a run's selection includes work that failed once and is waiting out
+  its backoff
+- **THEN** it is neither run nor counted as done, it is reported as not yet due,
+  and the run does not claim the corpus is rebuilt
+
+#### Scenario: A runner that wakes after its lease expired
+- **WHEN** work left by an interrupted run is carried out by a later run, and
+  the earlier runner then tries to finish the same work
+- **THEN** the late result does not land — a finish matches only the lease
+  expiry its own claim wrote — so a process still holding a previous checkpoint
+  cannot overwrite what the later run computed
 
 #### Scenario: Work that has already failed
 - **WHEN** a run's selection includes work that has failed terminally

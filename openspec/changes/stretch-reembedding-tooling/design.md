@@ -157,39 +157,56 @@ reset may run again. A rebuild does not get to suspend that rule.
 *What it does not:* it does not make the command a worker. It touches only its
 own selection, and it never breaks another runner's live claim.
 
-### 7. Repairing a key is an operation with a precondition, not a spell
+### 7. Repairing a key has a precondition, and the lease enforces most of it
 
 `reembed` recomputes a key's vectors with the checkpoint this build is
-configured to read. That is only a repair if nothing else is writing that key
-with the checkpoint it used to read — and a process that loaded the model
-before the configuration changed keeps it: the registry caches an embedder per
-process for the life of that process, and a queued job carries a key, never a
-revision. So an API process or a worker started before the change can finish
-outstanding work with the old weights, or overwrite a repaired vector
-afterwards, and the corpus is mixed again with nothing to show for the hours.
+configured to read. That is only a repair if nothing else writes that key with
+the checkpoint it used to read — and a process that loaded the model before the
+configuration changed keeps it: the registry caches an embedder per process for
+that process's life, and a queued job carries a key, never a revision.
 
-Nothing in the store can detect that — ADR-007 established exactly this, and the
-provenance table that would detect it was designed and refused there. What this
-change does instead is state the precondition and enforce the part of it that is
-observable:
+The first draft refused the repair while **any** work for the key was
+outstanding. That was wrong, and it contradicted decision 6 in the same
+document: an interrupted repair *leaves* outstanding work, so its own re-run
+would have refused, and the recovery this change exists to provide would never
+happen. What follows separates the cases instead.
 
-- **Stated:** every process that writes this key must already be running the new
-  configuration. In practice: change the setting, restart the writers, then
-  repair. The documentation gives that order and says why.
-- **Enforced:** the repair is refused while any work for that key is waiting,
-  running or failed. Outstanding work is the observable shadow of a writer that
-  may still be holding the old weights, and refusing is cheap where guessing is
-  not.
+**A live claim is refused.** Another runner is holding work for this key right
+now and nothing can see which weights it holds. The repair stops and says so;
+the operator lets it finish or restarts it, which is the documented order
+anyway.
+
+**Pending work and expired claims are carried out, not refused.** They are what
+an interrupted run leaves, and the engine of decision 6 is what finishes them.
+This is safe because **the lease is a token**: a claim hands back the expiry it
+wrote, and a finish lands only `WHERE status = 'running' AND lease_expires_at =
+<that value>`. A runner that wakes after its lease expired — including one still
+holding the previous checkpoint — matches nothing and its whole transaction
+rolls back. It cannot overwrite a repaired vector. That mechanism is ADR-003's
+and it is not new here; what is new is relying on it deliberately and testing
+that reliance with two distinguishable checkpoints.
+
+**Work whose retry is not yet due is reported, not waited for.** A job that
+failed and is serving its backoff cannot be run now. The run says so and does
+**not** report itself complete, because "nothing left to do right now" and "the
+corpus is repaired" are different statements and only one of them is true.
+
+**Work that failed terminally is reported and left alone**, as everywhere else:
+only an explicit reset runs it again.
+
+So the precondition and the enforcement are these, and the design says which is
+which:
+
+- **Stated, not enforced:** every process that writes this key must already be
+  running the new configuration — change the setting, restart the writers, then
+  repair. A writer started with the old configuration and holding no claim is
+  invisible to this command, and only restarting it fixes that.
+- **Enforced:** no repair begins while another runner holds a live claim on the
+  key; a stale runner's late finish cannot land, by the lease token.
 - **Limited:** while a key holds vectors from two checkpoints, its scores are
-  comparable only within each group, and the search that ranks them cannot tell
-  them apart. That is the state a repair exists to leave, and it is named in the
-  how-to rather than left for someone to deduce from a bad result.
-
-*What this guarantees:* the window in which an old-weights writer can undo the
-repair is the window in which an operator ignored the documented order. *What it
-does not:* it is a precondition, not a lock. A writer started with the old
-configuration and no outstanding work is invisible to this command, and only
-restarting it fixes that.
+  comparable only within each group and the search ranking them cannot tell them
+  apart. That is the state a repair passes through, and the how-to names it
+  rather than leaving it to be deduced from a bad result.
 
 ## Risks / Trade-offs
 
@@ -200,10 +217,13 @@ restarting it fixes that.
   uncovered.
 - **Two subcommands to keep in step** → one engine underneath, and the tests
   drive both through it.
-- **A repair another process can undo** → a stated order of operations, a
-  refusal while work is outstanding, and a named limit on what a mixed key
-  means. Decision 7 says plainly which of those is a guarantee and which is a
-  precondition.
+- **A repair another process can undo** → a refusal while another runner holds
+  a live claim, the lease token that voids a stale runner's late finish, a
+  stated order of operations for what neither can see, and a named limit on what
+  a mixed key means for a search. Decision 7 says plainly which of those is
+  enforced and which is a precondition — and it does **not** refuse on pending
+  work, because that is what an interrupted repair leaves and finishing it is
+  the point.
 - **`migrate` has no meaningful pair of keys today** → stated in the proposal.
   `reembed` does, and it is the one this repository can exercise end to end,
   which is why both exist rather than only the one §9 named.
