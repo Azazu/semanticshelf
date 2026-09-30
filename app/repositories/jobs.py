@@ -265,8 +265,22 @@ class IndexingJobRepository:
                 )
             )
 
-    async def outstanding(self, *, model: str) -> "Outstanding":
+    async def outstanding(
+        self,
+        *,
+        model: str,
+        already_has_one: bool | None = None,
+        answering_for: str | None = None,
+    ) -> "Outstanding":
         """What a key still owes, in the five states that need different acts.
+
+        **Scoped to a selection, or to the whole key.** `already_has_one` and
+        `answering_for` name the same predicates `_queue` uses, so a run
+        recovers its own selection's work and nothing else: a migration that
+        also drained unrelated jobs of the key it is filling would do expensive
+        work its own plan never counted. Left at `None`, the answer is about the
+        key as a whole, which is what the live-claim preflight and a retirement
+        ask about — those are questions about the key, not about a selection.
 
         A command that lumps these together tells an operator nothing they can
         use: work waiting to be run is theirs to carry out, a live claim belongs
@@ -296,6 +310,11 @@ class IndexingJobRepository:
                 .where(
                     IndexingJobRow.model == model,
                     IndexingJobRow.status.in_(BLOCKING_STATUSES),
+                    *self._selection(
+                        model=model,
+                        already_has_one=already_has_one,
+                        answering_for=answering_for,
+                    ),
                 )
                 .order_by(IndexingJobRow.created_at, IndexingJobRow.id)
             )
@@ -310,6 +329,34 @@ class IndexingJobRepository:
         for asset_id, state in rows:
             by_state[str(state)].append(asset_id)
         return Outstanding(**by_state)
+
+    @staticmethod
+    def _selection(
+        *, model: str, already_has_one: bool | None, answering_for: str | None
+    ) -> list[sa.ColumnElement[bool]]:
+        """The vector predicates a selection adds to a query over jobs.
+
+        The same shape `_queue` selects assets with, expressed against a job's
+        asset rather than against the asset table, so a run asks about the work
+        of its own selection and a plan's count and a run's work are the same
+        set.
+        """
+        if already_has_one is None and answering_for is None:
+            return []
+
+        def holds(key: str) -> sa.ColumnElement[bool]:
+            return (
+                sa.select(sa.literal(1))
+                .where(EmbeddingRow.asset_id == IndexingJobRow.asset_id, EmbeddingRow.model == key)
+                .exists()
+            )
+
+        conditions: list[sa.ColumnElement[bool]] = []
+        if already_has_one is not None:
+            conditions.append(holds(model) if already_has_one else ~holds(model))
+        if answering_for is not None:
+            conditions.append(holds(answering_for))
+        return conditions
 
     async def fail_for_asset(self, asset_id: UUID, reason: str) -> int:
         """Finish every unfinished job of one asset as failed, with a reason.

@@ -581,8 +581,12 @@ class RebuildReport:
         retry serving its backoff and a live claim both count against it.
         """
         left = bool(self.not_yet_due or self.held or self.skipped_failed)
-        outstanding_after = bool(self.work.queued) if self.work is not None else True
-        return not left and not outstanding_after
+        if self.work is None:
+            return False
+        # A job that exhausted its attempts during this run lands in `failed`,
+        # not in `queued`: counting only the latter printed "failed: 1" and
+        # "complete" in the same report.
+        return not left and not self.work.queued and not self.work.failed
 
 
 async def rebuild(
@@ -621,10 +625,21 @@ async def rebuild(
         raise ModelNotEnabled(f"model {model!r} is not enabled in this build")
 
     async with session_factory() as session, session.begin():
-        owed = await IndexingJobRepository(session).outstanding(model=model)
-    if refuse_while_held and owed.held:
+        repository = IndexingJobRepository(session)
+        # Two questions, deliberately different in scope. A live claim is about
+        # the **key**: any runner writing it may hold other weights, whichever
+        # assets it is working on. What this run may carry out is about its own
+        # **selection**: draining the key's whole backlog would do expensive
+        # work the plan never counted and the caller never asked for.
+        anywhere = await repository.outstanding(model=model)
+        owed = await repository.outstanding(
+            model=model,
+            already_has_one=answering_for is None,
+            answering_for=answering_for,
+        )
+    if refuse_while_held and anywhere.held:
         raise HeldElsewhere(
-            f"{len(owed.held)} unit(s) of work for {model!r} are claimed by another runner; "
+            f"{len(anywhere.held)} unit(s) of work for {model!r} are claimed by another runner; "
             "let it finish or restart it, then run this again"
         )
 
@@ -786,6 +801,7 @@ async def retire(
                 "corpus that is still changing"
             ]
         embeddings = EmbeddingRepository(session)
+        held = await embeddings.count_for(model=key)
         uncovered = await embeddings.uncovered(key=key, by=replaced_by)
         if uncovered:
             return [
@@ -793,6 +809,17 @@ async def retire(
                 f"{replaced_by!r} one"
             ]
         removed = await embeddings.retire(key=key, replaced_by=replaced_by)
+        if removed == 0 and held:
+            # The statement's own condition refused where the reading above did
+            # not. Claiming, finishing and upserting a vector take none of these
+            # locks, so a job for the old key can land between the two — and a
+            # retirement that announced success over a key it did not touch
+            # would be the worst possible report.
+            still = await embeddings.uncovered(key=key, by=replaced_by)
+            return [
+                f"retirement refused: the corpus changed while this ran — {still} asset(s) now "
+                f"have a {key!r} vector and no {replaced_by!r} one, so nothing was deleted"
+            ]
 
     lines = [f"retired: {removed} vector(s) of {key!r} deleted"]
     if key in settings.enabled_models:

@@ -133,19 +133,44 @@ def moved_checkpoint() -> Iterator[None]:
         registry.clear()
 
 
+def _parsed(raw: object) -> list[float]:
+    """pgvector comes back as its text form over a raw connection."""
+    return [float(part) for part in str(raw).strip("[]").split(",")]
+
+
+def vectors_of_label(key: str, asset_id: object, *, moved: bool = False) -> np.ndarray:
+    """What a checkpoint would answer for the picture this asset holds.
+
+    The stand-ins derive a vector from the image's label, and every upload here
+    uses the same picture, so the expected answer is computable without running
+    anything — which is what makes "the repaired vector is the new
+    checkpoint's" an assertion rather than a comparison with itself.
+    """
+    del asset_id
+    embedder = (
+        OtherCheckpoint(key, dimension_of(key)) if moved else FakeEmbedder(key, dimension_of(key))
+    )
+    return embedder.embed_images([Image.open(io.BytesIO(picture_bytes(1)))]).vectors[0]
+
+
 async def upload(client: httpx.AsyncClient, seed: int) -> str:
     response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes(seed))})
     assert response.status_code == 201, response.text
     return str(response.json()["id"])
 
 
-async def vectors_of(engine: AsyncEngine, model: str) -> dict[str, list[float]]:
+async def vectors_of(engine: AsyncEngine, model: str) -> dict[str, str]:
+    """Each stored vector in the text form a raw connection hands back.
+
+    Kept as text on purpose: two of them are compared for equality, and the
+    string is the exact value the column holds.
+    """
     async with engine.connect() as connection:
         rows = await connection.execute(
             sa.text("SELECT asset_id, vector FROM embeddings WHERE model = :model"),
             {"model": model},
         )
-    return {str(asset_id): list(vector) for asset_id, vector in rows}
+    return {str(asset_id): str(vector) for asset_id, vector in rows}
 
 
 async def states(engine: AsyncEngine, model: str) -> list[str]:
@@ -500,10 +525,16 @@ async def test_a_runner_that_wakes_after_its_lease_cannot_undo_the_repair(
         await IndexingJobRepository(session).queue_rebuild(model=CLIP_VIT_L14)
     async with sessions() as session, session.begin():
         stale = (await IndexingJobRepository(session).claim(limit=1, lease_seconds=600))[0]
+    # What the abandoned runner computed with the weights it still holds: the
+    # default stand-in's answer, which is not the moved checkpoint's.
+    stale_vector = list(vectors_of_label(CLIP_VIT_L14, stale.job.asset_id))
     async with engine.begin() as connection:
         await connection.execute(
             sa.text("UPDATE indexing_jobs SET lease_expires_at = now() - interval '1 minute'")
         )
+    expected_from_moved_checkpoint = list(
+        vectors_of_label(CLIP_VIT_L14, stale.job.asset_id, moved=True)
+    )
 
     with moved_checkpoint():
         report = await indexing.rebuild(
@@ -516,9 +547,19 @@ async def test_a_runner_that_wakes_after_its_lease_cannot_undo_the_repair(
         )
     repaired = await vectors_of(engine, CLIP_VIT_L14)
 
-    async with sessions() as session, session.begin():
-        landed = await IndexingJobRepository(session).mark_done(stale.job.id, stale.owned_until)
+    # The abandoned runner finishes the way any runner does: one transaction
+    # that marks the work done and writes its vector, together. Calling the
+    # repository alone would test the ownership check and not the write it
+    # guards.
+    landed = await indexing.finish(
+        indexing.Executed(claimed=stale, vector=tuple(stale_vector)),
+        session_factory=sessions,
+    )
 
     assert report.work is not None and report.work.indexed == 1
     assert landed is False, "the abandoned runner is not the owner any more"
-    assert await vectors_of(engine, CLIP_VIT_L14) == repaired, "and it changed nothing"
+    after = await vectors_of(engine, CLIP_VIT_L14)
+    assert after == repaired, "and its vector did not land"
+    assert expected_from_moved_checkpoint == pytest.approx(
+        [float(value) for value in _parsed(next(iter(after.values())))], abs=1e-5
+    ), "every vector under the key is the new checkpoint's"
