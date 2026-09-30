@@ -373,3 +373,42 @@ async def test_the_deleting_statement_removes_what_is_covered(
 
     assert removed == 1
     assert await counts(engine) == {DINOV2_LARGE: 1}
+
+
+async def test_a_retirement_waits_while_another_holds_the_same_locks(
+    client: httpx.AsyncClient,
+    engine: AsyncEngine,
+    sessions: async_sessionmaker[AsyncSession],
+    settings: Settings,
+) -> None:
+    """The serialisation itself, without racing for it.
+
+    Two retirements in opposite directions take the same two locks in the same
+    order, so one waits for the other rather than both reading a corpus that the
+    other is about to change. Here the first pair of locks is simply held open,
+    and the retirement that wants them has to wait — which is what "they cannot
+    undo each other" means mechanically.
+    """
+    await upload(client, 1)
+    await drain_queue(engine)
+
+    async with sessions() as holder, holder.begin():
+        await IndexingJobRepository(holder).lock_models(sorted({CLIP_VIT_L14, DINOV2_LARGE}))
+
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(
+                indexing.retire(
+                    session_factory=sessions,
+                    settings=settings,
+                    key=DINOV2_LARGE,
+                    replaced_by=CLIP_VIT_L14,
+                ),
+                timeout=1.0,
+            )
+        assert await counts(engine) == {CLIP_VIT_L14: 1, DINOV2_LARGE: 1}
+
+    lines = await indexing.retire(
+        session_factory=sessions, settings=settings, key=DINOV2_LARGE, replaced_by=CLIP_VIT_L14
+    )
+
+    assert any("retired: 1 vector(s)" in line for line in lines), lines
