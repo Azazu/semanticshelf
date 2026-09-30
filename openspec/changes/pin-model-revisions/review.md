@@ -76,3 +76,24 @@
 - Independently reproduced finding 1 for both environment variables and inspected URL construction in the installed Hugging Face Hub package without making network requests. The existing rejection tests cover trailing spaces, but do not cover a final newline.
 - Full checks, integration tests, real-weight tests and guard-removal demonstrations were assessed from the executor's recorded handoff evidence, not rerun in this review. No GitHub Actions query was made.
 - Modified only this review file; ran no git write commands.
+
+## Confirmation 1 · Gate 2 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-30
+**Reviewed-Commit:** ba9fe352338a026b310b7a7d468c32c69663f330
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — The shared validator now uses `COMMIT.fullmatch(value)` with an unanchored 40-character lowercase hexadecimal pattern, rejecting the entire malformed value for both settings at configuration time and naming the setting. Added tests reject trailing and leading newlines and two-line values for both fields; separate environment-source tests reject each default commit followed by a newline. Valid commits and the existing pinned/unpinned paths still pass. Independently restoring the previous anchored `match` behavior in memory makes all four trailing-newline regression tests fail, including both environment-source tests, confirming the required demonstrated failing inputs without modifying implementation files. |
+
+### Validation
+
+- Reviewed only `8ea1eaf3c8e431b3dd216342b5f05d0a5fe68b47..ba9fe352338a026b310b7a7d468c32c69663f330` and collateral effects reachable from Gate 2 round 1 finding 1; introduced no unrelated findings.
+- Confirmed branch `change/pin-model-revisions`, HEAD matching the requested reviewed commit, a clean initial working tree, and the source finding dispositioned as `fixed`.
+- Read the changed settings, regression tests and handoff evidence, the source review, repository rules, OpenSpec configuration and relevant planning artifacts; searched the repository for commit-validation and newline claims and uses of `COMMIT`.
+- `openspec validate pin-model-revisions --strict` and `git diff --check 8ea1eaf3c8e431b3dd216342b5f05d0a5fe68b47 ba9fe352338a026b310b7a7d468c32c69663f330` passed.
+- `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest tests/unit/test_checkpoint_revisions.py tests/unit/test_settings.py -p no:cacheprovider --basetemp=/tmp/pin-model-revisions-g2-confirm-tests -q` passed: 52 tests.
+- An isolated in-memory replacement of the shared matcher with the previous `^[0-9a-f]{40}$` / `match` behavior, selecting `newline or line_ending or models_revision_too`, produced the expected 4 failures and 2 passes. No source file was changed for this demonstration.
+- Full checks, integration and real-weight tests were assessed from recorded handoff evidence rather than rerun; no GitHub Actions query was made. Modified only this review file; ran no git write commands.
