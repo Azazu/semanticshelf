@@ -55,3 +55,24 @@
 - Confirmed branch `change/pin-model-revisions`, HEAD matching the reviewed commit, a clean initial working tree, and both source findings dispositioned as `fixed`.
 - Read the changed planning artifacts, repository review rules and OpenSpec configuration; checked existing settings and adapter call sites and searched for surviving conflicting substitution/revision claims.
 - `openspec validate pin-model-revisions --strict` passed. This confirms resolution in the Gate 1 plan; implementation and demonstrated failing-input evidence remain for Gate 2.
+
+## Round 1 · Gate 2
+**Reviewer:** codex
+**Date:** 2026-09-30
+**Reviewed-Commit:** 8ea1eaf3c8e431b3dd216342b5f05d0a5fe68b47
+**Verdict:** changes-requested
+
+### Findings
+| # | Severity | Location | Finding | Status |
+|---|----------|----------|---------|--------|
+| 1 | major | app/core/settings.py:41,195; tests/unit/test_checkpoint_revisions.py | The commit validator accepts a full hash followed by a newline. Python's `$` anchor matches immediately before a final newline, so `COMMIT.match(value)` accepts this 41-character value and returns it unchanged. Reproduced through the actual environment source for both settings with `os.environ["CLIP_REVISION"] = DEFAULT_CLIP_REVISION + "\n"` and the corresponding DINOv2 value: `Settings` constructs successfully and each effective revision retains the newline. Both adapters then pass this malformed revision to the hub; the installed `hf_hub_url` includes `%0A` in the revision path. Thus configuration succeeds instead of refusing a non-commit by setting name at startup, contrary to the delta specification and task 1.2, leaving failure until model loading (potentially the first request). Require a whole-string match, such as `COMMIT.fullmatch(value)`, and add newline-suffixed rejection coverage for both settings, including the high-tier demonstrated failing-input evidence. | open |
+
+### Validation
+
+- Confirmed branch `change/pin-model-revisions`, HEAD equal to the requested reviewed commit, and a clean initial working tree.
+- Reviewed `git diff main...change/pin-model-revisions`, the proposal, design, tasks, delta specification, Gate 1 records, handoff evidence, repository rules and OpenSpec configuration; inspected the relevant settings, adapter, registry, documentation and real-model test paths.
+- `openspec validate pin-model-revisions --strict` passed; `git diff --check main...change/pin-model-revisions` passed.
+- `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest tests/unit/test_checkpoint_revisions.py tests/unit/test_settings.py -p no:cacheprovider --basetemp=/tmp/pin-model-revisions-gate2-tests -q` passed: 44 tests. Used the installed environment directly and disabled bytecode and pytest cache writes to preserve the review-only file boundary.
+- Independently reproduced finding 1 for both environment variables and inspected URL construction in the installed Hugging Face Hub package without making network requests. The existing rejection tests cover trailing spaces, but do not cover a final newline.
+- Full checks, integration tests, real-weight tests and guard-removal demonstrations were assessed from the executor's recorded handoff evidence, not rerun in this review. No GitHub Actions query was made.
+- Modified only this review file; ran no git write commands.
