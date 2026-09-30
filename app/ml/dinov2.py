@@ -26,6 +26,7 @@ from app.ml.base import (
     check_checkpoint_width,
     empty,
     normalise,
+    say_unpinned,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only
@@ -69,8 +70,18 @@ class Dinov2Embedder:
         # one resolves the Pillow-backed processor the checkpoint declares
         # (`BitImageProcessorPil`). The project depends on `torch` alone, and a
         # second image stack for one resize is not worth installing.
-        processor = AutoProcessor.from_pretrained(name, cache_dir=cache)
-        model = AutoModel.from_pretrained(name, cache_dir=cache)
+        # One revision for both reads, and `None` for the deliberately unpinned
+        # case: see the same lines in `clip.py` and ADR-007.
+        revision = settings.dinov2_revision_in_effect
+        say_unpinned(DINOV2_LARGE, name, revision)
+        # One mapping, both reads: the unpinned case passes no `revision` at all
+        # rather than passing `None`, so it is the call this adapter made before
+        # revisions existed — byte for byte, not merely in effect.
+        read: dict[str, Any] = {"cache_dir": cache}
+        if revision is not None:
+            read["revision"] = revision
+        processor = AutoProcessor.from_pretrained(name, **read)
+        model = AutoModel.from_pretrained(name, **read)
         model.eval()
 
         embedder = cls(model, processor, batch_size=settings.embed_batch_size)

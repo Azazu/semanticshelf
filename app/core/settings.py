@@ -5,10 +5,11 @@ runs, so importing the package never requires a database variable and tests
 can construct several configurations in one process.
 """
 
+import re
 from pathlib import Path
 from typing import Annotated, Literal, Self
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from app.domain import (
@@ -27,6 +28,23 @@ LogLevel = Literal["debug", "info", "warning", "error"]
 DEFAULT_MODEL_CACHE = Path(".data/models")
 DEFAULT_CLIP_CHECKPOINT = "openai/clip-vit-large-patch14"
 DEFAULT_DINOV2_CHECKPOINT = "facebook/dinov2-large"
+#: The commits those two names resolved to when this repository verified them.
+#: A checkpoint name points at whatever a repository holds today; a commit is
+#: the same weights a year from now, which is what a model key has to mean
+#: (ADR-007).
+DEFAULT_CLIP_REVISION = "32bd64288804d66eefd0ccbe215aa642df71cc41"
+DEFAULT_DINOV2_REVISION = "47b73eefe95e8d44ec3623f8890bd894b6ea2d6c"
+#: What a revision may be. A branch or a tag is accepted by the model hub and
+#: resolves at load time, which is the defect this pin exists to remove, so only
+#: a full commit will do — an abbreviated one is refused as well, because it is
+#: a prefix and a repository may grow a second object that shares it.
+#:
+#: No anchors, and matched with `fullmatch`: `$` also matches immediately before
+#: a final newline, so `^[0-9a-f]{40}$` accepts a 41-character value ending in
+#: one. A variable read from a file or pasted with its line ending would then
+#: pass configuration and reach the hub as `%0A` in a URL — refused there, at
+#: the first load, instead of here at startup.
+COMMIT = re.compile(r"[0-9a-f]{40}")
 DEFAULT_MEDIA_ROOT = Path(".data/media")
 MIB = 1024 * 1024
 
@@ -64,10 +82,16 @@ class Settings(BaseSettings):
     #: The checkpoint behind the `clip-vit-l14` key. A compatible fine-tune or
     #: mirror may be substituted; one of a different width is refused at load.
     clip_model_name: str = DEFAULT_CLIP_CHECKPOINT
+    #: The commit of that checkpoint to read. Configuration rather than a
+    #: constant, because the name above is configuration: a substituted
+    #: checkpoint needs a commit of its own, which only its operator knows.
+    clip_revision: str = DEFAULT_CLIP_REVISION
     #: The checkpoint behind the `dinov2-large` key, under the same rule: a
     #: mirror or compatible fine-tune is fine, a different width is refused at
     #: load rather than stored.
     dinov2_model_name: str = DEFAULT_DINOV2_CHECKPOINT
+    #: The commit of that checkpoint to read, under the same rule as CLIP's.
+    dinov2_revision: str = DEFAULT_DINOV2_REVISION
     #: Which query encoders this build runs. Empty by default: an encoder is
     #: gigabytes of weights for a question most deployments do not ask, and
     #: enabling one must be a decision rather than an inheritance.
@@ -135,6 +159,51 @@ class Settings(BaseSettings):
     def _require_asyncpg_scheme(cls, value: str) -> str:
         if not value.startswith(ASYNCPG_SCHEME):
             raise ValueError(f"DATABASE_URL must use the {ASYNCPG_SCHEME} scheme")
+        return value
+
+    def _revision_in_effect(
+        self, name_field: str, revision_field: str, default_name: str
+    ) -> str | None:
+        """The commit to read a checkpoint at, or `None` when it must not be pinned.
+
+        A revision belongs to the repository it is a commit of. An operator who
+        configured one meant it, whatever the name says. One left at its default
+        belongs to the default checkpoint, so it is applied only while that is
+        the checkpoint being read — a substituted name inherits nothing and
+        loads exactly as it did before this rule existed.
+        """
+        if revision_field in self.model_fields_set:
+            return str(getattr(self, revision_field))
+        substituted = getattr(self, name_field) != default_name
+        return None if substituted else str(getattr(self, revision_field))
+
+    @property
+    def clip_revision_in_effect(self) -> str | None:
+        """The commit `clip-vit-l14` is read at, or `None` when it is unpinned."""
+        return self._revision_in_effect("clip_model_name", "clip_revision", DEFAULT_CLIP_CHECKPOINT)
+
+    @property
+    def dinov2_revision_in_effect(self) -> str | None:
+        """The commit `dinov2-large` is read at, or `None` when it is unpinned."""
+        return self._revision_in_effect(
+            "dinov2_model_name", "dinov2_revision", DEFAULT_DINOV2_CHECKPOINT
+        )
+
+    @field_validator("clip_revision", "dinov2_revision")
+    @classmethod
+    def _require_a_commit(cls, value: str, info: ValidationInfo) -> str:
+        """A revision names one immutable object or it names nothing useful.
+
+        `main` is a valid revision to the model hub and a moving target to
+        everyone else: it would read as pinned and pin nothing, which is worse
+        than the unpinned load it replaced.
+        """
+        if not COMMIT.fullmatch(value):
+            raise ValueError(
+                f"{(info.field_name or '').upper()} must be a full 40-character commit "
+                "(lowercase hexadecimal); a branch, a tag or an abbreviated hash resolves "
+                "at load time, which is what pinning exists to prevent"
+            )
         return value
 
     @field_validator("log_level", mode="before")
