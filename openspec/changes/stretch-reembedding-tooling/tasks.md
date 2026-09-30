@@ -100,21 +100,21 @@
 
 ## 4. The record and the documents
 
-- [ ] 4.1 Both deltas land as written. Verify: `openspec validate --strict`;
+- [x] 4.1 Both deltas land as written. Verify: `openspec validate --strict`;
   each scenario of each delta has a test.
-- [ ] 4.2 `docs/adr/ADR-008-reembedding-a-corpus.md`: why one engine carries two
+- [x] 4.2 `docs/adr/ADR-008-reembedding-a-corpus.md`: why one engine carries two
   subcommands, why the completeness count lives inside the deleting statement,
   why retirement is a separate word from applying, and why the command does not
   touch configuration. It names ADR-003 (the queue it rests on) and ADR-007 (the
   repair it provides). Verify: the ADR index carries its row.
-- [ ] 4.3 `docs/reference/commands.md` gains both subcommands in their exact
+- [x] 4.3 `docs/reference/commands.md` gains both subcommands in their exact
   form; `docs/how-to/models.md` gains a section on replacing a model **and one
   on repairing a key after its checkpoint moved**, with the order of operations
   design decision 7 requires — change the setting, restart every writer, then
   repair — why that order and not another, and what a key holding vectors from
   two checkpoints means for a search until the repair finishes. Verify: both re-read whole after
   the last edit; every command printed was run in that form.
-- [ ] 4.4 Reconcile the plan: `openspec/ROADMAP.md` row 21 and
+- [x] 4.4 Reconcile the plan: `openspec/ROADMAP.md` row 21 and
   `docs/explanation/requirements.md` §9, which has asked for this since change 0
   and describes only the migrate half. Verify: both re-read whole; no document
   describes tooling that does not exist, and none omits the half that does.

@@ -103,6 +103,79 @@ Three things about this checkpoint are worth knowing before you enable it.
   the model's authors — this repository records the question rather than
   answering it for you.
 
+## Replacing or repairing a model
+
+Two different jobs, and the difference matters before you type anything.
+
+**Repairing** is one key whose weights moved: you changed `CLIP_REVISION`, or
+you are cleaning up a corpus indexed before revisions were pinned at all
+([ADR-007](../adr/ADR-007-pinned-checkpoint-revisions.md)). The key stays,
+every vector under it is recomputed.
+
+**Replacing** is a new key taking over from an old one — a different model, a
+different width, its own index. The old key's vectors stay until you retire
+them, and searches keep answering from whichever key they name.
+
+Both commands report first and do nothing without `--apply`. The report is three
+statements and loads no model, so it is the cheap answer to "how long will this
+take and can I afford it now":
+
+```console
+$ uv run semanticshelf models reembed clip-vit-l14
+plan: rebuild clip-vit-l14
+vectors to compute: 0
+already waiting: 0
+nothing was queued or computed; pass --apply to do it
+```
+
+`vectors to compute` is how many that key holds — one per indexed picture, so
+on the 500-picture demo corpus it is 500 and on an empty store, as above, it is
+nothing. That number times a few seconds is the wait.
+
+### Repairing a key, in this order
+
+1. **Change the configuration** — the revision, or whatever moved.
+2. **Restart every process that writes this key**: the API, and the worker if
+   your deployment has one. This step is not optional and nothing enforces it.
+   A process that loaded the model before the change keeps it for its whole
+   life, and a queued job carries a key, never a revision — so a writer you did
+   not restart can finish outstanding work with the old weights, or overwrite a
+   repaired vector after you are done.
+3. **Repair**: `uv run semanticshelf models reembed clip-vit-l14 --apply`.
+
+The command refuses to begin while another runner holds a live claim on the key,
+because that is a writer working right now whose weights nothing can see. It
+does **not** refuse on work that is merely waiting, or on a claim whose lease has
+expired — that is what an interrupted repair leaves, and finishing it is the
+point. A runner that wakes after its lease has gone cannot overwrite anything:
+its finish matches only the lease expiry its own claim wrote.
+
+**While it runs, the key holds vectors from two checkpoints.** Their scores are
+comparable within each group and not across, and the search ranking them cannot
+tell them apart. There is no way to avoid that window; there is only finishing
+it. Run it when a slightly worse ranking for a while is acceptable.
+
+### Replacing a key
+
+```console
+$ uv run semanticshelf models migrate clip-vit-l14 some-new-key --apply
+$ uv run semanticshelf models migrate clip-vit-l14 some-new-key --apply --retire
+```
+
+The first fills. Searches keep answering from `clip-vit-l14` throughout, because
+which key answers is the request's own `model` and its default is a constant in
+the code — nothing repoints itself while you are not looking.
+
+The second fills and then deletes the old key's vectors. That deletion is
+refused unless every asset the old key answers for has a vector under the new
+one, tested inside the statement that deletes, and unless the queue owes nothing
+for the new key. Run the fill first, let it finish, then retire.
+
+**Retiring deletes vectors and disables nothing.** A key left in
+`ENABLED_MODELS` will be queued for on the next upload; removing it is
+configuration and yours to change. The command says so rather than deciding for
+you.
+
 ## The download
 
 The weights come from the Hugging Face hub the first time a model is
