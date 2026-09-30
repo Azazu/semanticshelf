@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
+from uuid import UUID
 
 import httpx
 import numpy as np
@@ -563,3 +564,92 @@ async def test_a_runner_that_wakes_after_its_lease_cannot_undo_the_repair(
     assert expected_from_moved_checkpoint == pytest.approx(
         [float(value) for value in _parsed(next(iter(after.values())))], abs=1e-5
     ), "every vector under the key is the new checkpoint's"
+
+
+async def test_a_replacement_does_not_drain_the_new_key_s_unrelated_backlog(
+    client: httpx.AsyncClient,
+    engine: AsyncEngine,
+    sessions: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    storage: MediaStorage,
+    pool: ThreadPoolExecutor,
+) -> None:
+    """A run recovers its own selection's work and nobody else's.
+
+    An asset the old key never answered for is outside the replacement, and
+    finishing its pending job would be expensive work this run's own plan never
+    counted — the difference between a replacement and a backfill nobody asked
+    for.
+    """
+    outsider = await upload(client, 2)
+    async with engine.begin() as connection:
+        await connection.execute(sa.text("DELETE FROM indexing_jobs"))
+        await connection.execute(
+            sa.text("DELETE FROM embeddings WHERE model = :model"), {"model": DINOV2_LARGE}
+        )
+        await connection.execute(
+            sa.text("DELETE FROM embeddings WHERE asset_id = :asset_id"), {"asset_id": outsider}
+        )
+    both_keys = settings.model_copy(update={"enabled_models": (CLIP_VIT_L14, DINOV2_LARGE)})
+    async with sessions() as session, session.begin():
+        await IndexingJobRepository(session).add(asset_id=UUID(outsider), model=DINOV2_LARGE)
+
+    report = await indexing.rebuild(
+        session_factory=sessions,
+        storage=storage,
+        settings=both_keys,
+        pool=pool,
+        model=DINOV2_LARGE,
+        answering_for=CLIP_VIT_L14,
+    )
+
+    assert report.carried_over == [], "the outsider's job is not this run's to carry out"
+    async with engine.connect() as connection:
+        left = (
+            await connection.execute(
+                sa.text("SELECT status FROM indexing_jobs WHERE asset_id = :asset_id"),
+                {"asset_id": outsider},
+            )
+        ).scalar_one()
+    assert left == "pending", "and it is still waiting for whoever it belongs to"
+
+
+async def test_a_run_whose_work_fails_terminally_is_not_complete(
+    client: httpx.AsyncClient,
+    engine: AsyncEngine,
+    sessions: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    storage: MediaStorage,
+    pool: ThreadPoolExecutor,
+) -> None:
+    """A job that exhausts its attempts during the run lands in `failed`, not in
+    `queued` — and a report that printed both "failed: 1" and "complete" would
+    be telling an operator the corpus was rebuilt when it was not."""
+    asset = await upload(client, 1)
+    async with engine.begin() as connection:
+        await connection.execute(sa.text("DELETE FROM indexing_jobs"))
+    media = MediaStorage.at(settings.media_root).original(UUID(asset), "png")
+    media.unlink()
+    # Queued before the run, with its retries already spent: one more failure is
+    # terminal, which is the state this test is about. A fresh job would simply
+    # go back to the queue, and "waiting" is not "gave up".
+    async with sessions() as session, session.begin():
+        await IndexingJobRepository(session).queue_rebuild(model=CLIP_VIT_L14)
+    async with engine.begin() as connection:
+        await connection.execute(
+            sa.text("UPDATE indexing_jobs SET attempts = :spent"),
+            {"spent": settings.job_max_attempts},
+        )
+
+    report = await indexing.rebuild(
+        session_factory=sessions,
+        storage=storage,
+        settings=settings,
+        pool=pool,
+        model=CLIP_VIT_L14,
+    )
+
+    assert report.work is not None and report.work.failed, report.work
+    assert not report.complete
+    lines = indexing.describe_rebuild(report, settings=settings)
+    assert any("not complete" in line for line in lines), lines

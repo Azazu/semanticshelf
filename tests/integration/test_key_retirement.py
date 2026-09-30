@@ -412,3 +412,46 @@ async def test_a_retirement_waits_while_another_holds_the_same_locks(
     )
 
     assert any("retired: 1 vector(s)" in line for line in lines), lines
+
+
+async def test_a_retirement_says_so_when_the_statement_refuses_where_the_read_did_not(
+    client: httpx.AsyncClient,
+    engine: AsyncEngine,
+    sessions: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The window nothing can close, made deterministic.
+
+    Claiming, finishing and upserting a vector take none of the retirement's
+    locks, so an old-key job can land between the service's coverage reading and
+    the deleting statement. The statement's own condition then refuses — and a
+    report that announced `retired: 0 vector(s)` over a key it did not touch
+    would be the worst possible answer.
+
+    Here the reading is made to say "covered" while the corpus is not, which is
+    exactly what that interval looks like from the service's side.
+    """
+    await upload(client, 1)
+    await upload(client, 2)
+    await drain_queue(engine)
+    async with engine.begin() as connection:
+        await connection.execute(
+            sa.text("DELETE FROM embeddings WHERE model = :model"), {"model": DINOV2_LARGE}
+        )
+    truth = EmbeddingRepository.uncovered
+    calls = {"n": 0}
+
+    async def covered_the_first_time(self: EmbeddingRepository, **keywords: str) -> int:
+        calls["n"] += 1
+        return 0 if calls["n"] == 1 else await truth(self, **keywords)
+
+    monkeypatch.setattr(EmbeddingRepository, "uncovered", covered_the_first_time)
+
+    lines = await indexing.retire(
+        session_factory=sessions, settings=settings, key=CLIP_VIT_L14, replaced_by=DINOV2_LARGE
+    )
+
+    assert (await counts(engine))[CLIP_VIT_L14] == 2, "the statement refused"
+    assert any("corpus changed while this ran" in line for line in lines), lines
+    assert not any("retired:" in line for line in lines), lines
