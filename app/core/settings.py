@@ -38,7 +38,13 @@ DEFAULT_DINOV2_REVISION = "47b73eefe95e8d44ec3623f8890bd894b6ea2d6c"
 #: resolves at load time, which is the defect this pin exists to remove, so only
 #: a full commit will do — an abbreviated one is refused as well, because it is
 #: a prefix and a repository may grow a second object that shares it.
-COMMIT = re.compile(r"^[0-9a-f]{40}$")
+#:
+#: No anchors, and matched with `fullmatch`: `$` also matches immediately before
+#: a final newline, so `^[0-9a-f]{40}$` accepts a 41-character value ending in
+#: one. A variable read from a file or pasted with its line ending would then
+#: pass configuration and reach the hub as `%0A` in a URL — refused there, at
+#: the first load, instead of here at startup.
+COMMIT = re.compile(r"[0-9a-f]{40}")
 DEFAULT_MEDIA_ROOT = Path(".data/media")
 MIB = 1024 * 1024
 
@@ -192,7 +198,7 @@ class Settings(BaseSettings):
         everyone else: it would read as pinned and pin nothing, which is worse
         than the unpinned load it replaced.
         """
-        if not COMMIT.match(value):
+        if not COMMIT.fullmatch(value):
             raise ValueError(
                 f"{(info.field_name or '').upper()} must be a full 40-character commit "
                 "(lowercase hexadecimal); a branch, a tag or an abbreviated hash resolves "

@@ -75,6 +75,9 @@ def test_each_revision_is_read_from_its_documented_variable(
         "",
         "   ",
         "32bd64288804d66eefd0ccbe215aa642df71cc41 ",
+        "32bd64288804d66eefd0ccbe215aa642df71cc41\n",
+        "\n32bd64288804d66eefd0ccbe215aa642df71cc41",
+        "32bd64288804d66eefd0ccbe215aa642df71cc41\n32bd64288804d66eefd0ccbe215aa642df71cc41",
     ],
     ids=[
         "branch",
@@ -86,11 +89,21 @@ def test_each_revision_is_read_from_its_documented_variable(
         "empty",
         "whitespace",
         "trailing-space",
+        "trailing-newline",
+        "leading-newline",
+        "two-lines",
     ],
 )
 def test_a_revision_that_is_not_a_commit_is_refused(field: str, refused: str) -> None:
     """Each of these is accepted by the model hub and resolves at load time,
-    which is the defect pinning exists to remove."""
+    which is the defect pinning exists to remove.
+
+    The newline cases are not decoration. Python's `$` also matches immediately
+    before a final newline, so an anchored pattern accepts a 41-character value
+    ending in one — and a revision read from a file or pasted with its line
+    ending is exactly how that arrives. It then reaches the hub as `%0A` in a
+    URL and fails at the first load instead of at startup.
+    """
     with pytest.raises(ValueError, match=field.upper()):
         configured(**{field: refused})
 
@@ -312,3 +325,21 @@ def test_a_pinned_load_says_nothing_of_the_kind(
         load_clip(monkeypatch, configured(model_cache=tmp_path))
 
     assert [line for line in recorded if "unpinned" in line["event"]] == []
+
+
+def test_a_revision_read_from_the_environment_with_its_line_ending_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The path the value actually travels: a variable set from a file keeps the
+    newline, and the environment source hands it over unchanged."""
+    monkeypatch.setenv("CLIP_REVISION", DEFAULT_CLIP_REVISION + "\n")
+
+    with pytest.raises(ValueError, match="CLIP_REVISION"):
+        configured()
+
+
+def test_the_picture_models_revision_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DINOV2_REVISION", DEFAULT_DINOV2_REVISION + "\n")
+
+    with pytest.raises(ValueError, match="DINOV2_REVISION"):
+        configured()
