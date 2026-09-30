@@ -93,6 +93,84 @@ class EmbeddingRepository:
             created_at=row.created_at,
         )
 
+    async def count_for(self, *, model: str) -> int:
+        """How many vectors a key holds — what a rebuild would recompute."""
+        statement = (
+            sa.select(sa.func.count()).select_from(EmbeddingRow).where(EmbeddingRow.model == model)
+        )
+        return int((await self._session.execute(statement)).scalar_one())
+
+    async def uncovered(self, *, key: str, by: str) -> int:
+        """How many assets have a vector under `key` and none under `by`.
+
+        Zero means `by` can answer for everything `key` answers for, which is
+        the one precondition a retirement rests on. Asked as a single statement
+        so the answer describes one moment: a walk over assets, counted in the
+        application, is a moment that moves while it is being read, and a
+        retirement that trusted it would delete vectors an upload had just made
+        necessary.
+
+        The count is not symmetric — `uncovered(key=a, by=b)` and
+        `uncovered(key=b, by=a)` answer different questions — and nothing here
+        loads a model.
+        """
+        replacement = (
+            sa.select(sa.literal(1))
+            .where(
+                EmbeddingRow.asset_id == sa.literal_column("held.asset_id"),
+                EmbeddingRow.model == by,
+            )
+            .exists()
+        )
+        held = (
+            sa.select(EmbeddingRow.asset_id.label("asset_id"))
+            .where(EmbeddingRow.model == key)
+            .subquery("held")
+        )
+        statement = sa.select(sa.func.count()).select_from(held).where(~replacement)
+        return int((await self._session.execute(statement)).scalar_one())
+
+    async def retire(self, *, key: str, replaced_by: str) -> int:
+        """Delete a key's vectors, and only while another key answers for all of them.
+
+        The condition lives **inside** this statement rather than in a count the
+        caller took first. Tested earlier and acted on later it is a race: work
+        finishing in between leaves an asset the replacing key cannot answer
+        for, and its old vector is already gone.
+
+        The caller holds both keys' queue locks before it calls this — a
+        statement snapshot stops a race against the queue and does nothing about
+        two retirements in opposite directions, which could each see themselves
+        covered and delete disjoint rows.
+
+        Returns how many vectors were deleted; zero means either the key held
+        none or the replacement did not cover it, and the caller distinguishes
+        those with `uncovered`.
+        """
+        replacement = (
+            sa.select(sa.literal(1))
+            .where(
+                EmbeddingRow.asset_id == sa.literal_column("retiring.asset_id"),
+                EmbeddingRow.model == replaced_by,
+            )
+            .exists()
+        )
+        retiring = (
+            sa.select(EmbeddingRow.asset_id.label("asset_id"))
+            .where(EmbeddingRow.model == key)
+            .subquery("retiring")
+        )
+        uncovered_exists = (
+            sa.select(sa.literal(1)).select_from(retiring).where(~replacement).exists()
+        )
+        statement = (
+            sa.delete(EmbeddingRow)
+            .where(EmbeddingRow.model == key, ~uncovered_exists)
+            .returning(EmbeddingRow.asset_id)
+        )
+        deleted = (await self._session.execute(statement)).scalars().all()
+        return len(deleted)
+
     async def reachable(
         self,
         *,

@@ -549,6 +549,128 @@ class BackfillReport:
     work: WorkReport | None = None
 
 
+class HeldElsewhere(RuntimeError):
+    """Another runner is writing this key right now, and may hold other weights."""
+
+
+@dataclass
+class RebuildReport:
+    """What a rebuild or a replacement did, in the states an operator acts on.
+
+    `queued` is what this run created; `carried_over` is work an earlier run
+    left that this one finished — the two are apart because a run that reports
+    only what it queued looks idle after a crash it is in fact repairing.
+    `not_yet_due` and `held` are why a run may be over without the corpus being
+    rebuilt, and `skipped_failed` is the work only an explicit reset may touch.
+    """
+
+    model: str
+    queued: list[UUID] = field(default_factory=list)
+    carried_over: list[UUID] = field(default_factory=list)
+    skipped_failed: list[UUID] = field(default_factory=list)
+    not_yet_due: list[UUID] = field(default_factory=list)
+    held: list[UUID] = field(default_factory=list)
+    #: `None` when nothing was executed — `--no-index`, or a runner of its own.
+    work: WorkReport | None = None
+
+    @property
+    def complete(self) -> bool:
+        """Did this run leave the key owing nothing?
+
+        "Nothing to do right now" is not the same statement, which is why a
+        retry serving its backoff and a live claim both count against it.
+        """
+        left = bool(self.not_yet_due or self.held or self.skipped_failed)
+        if self.work is None:
+            return False
+        # A job that exhausted its attempts during this run lands in `failed`,
+        # not in `queued`: counting only the latter printed "failed: 1" and
+        # "complete" in the same report.
+        return not left and not self.work.queued and not self.work.failed
+
+
+async def rebuild(
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    storage: MediaStorage,
+    settings: Settings,
+    pool: ThreadPoolExecutor,
+    model: str,
+    answering_for: str | None = None,
+    index: bool = True,
+    refuse_while_held: bool = False,
+    on_progress: Callable[[int], None] | None = None,
+) -> RebuildReport:
+    """Queue a selection's work and carry out everything of it that is runnable.
+
+    Two selections share this: a **rebuild** of a key (`answering_for` is None)
+    queues the assets that already have a vector under it, and a **replacement**
+    queues the assets another key answers for and this one does not.
+
+    What is new here, and the reason this is not `backfill`: the run carries out
+    the work its selection **already had outstanding** as well as the work it
+    queued. `backfill` drains only what it queued, and the selection passes over
+    assets whose work is already waiting — so after a crash a re-run of it
+    queues nothing, drains nothing, and reports success over a corpus it never
+    touched.
+
+    `refuse_while_held` is the repair's precondition (ADR-007): a live claim is
+    a process writing this key right now, and nothing in the store can say which
+    checkpoint it holds. An expired claim is not grounds to refuse — it is what
+    an interrupted repair leaves, and a runner that wakes after its lease has
+    gone cannot land its result: a finish matches only the lease expiry its own
+    claim wrote.
+    """
+    if model not in settings.enabled_models:
+        raise ModelNotEnabled(f"model {model!r} is not enabled in this build")
+
+    async with session_factory() as session, session.begin():
+        repository = IndexingJobRepository(session)
+        # Two questions, deliberately different in scope. A live claim is about
+        # the **key**: any runner writing it may hold other weights, whichever
+        # assets it is working on. What this run may carry out is about its own
+        # **selection**: draining the key's whole backlog would do expensive
+        # work the plan never counted and the caller never asked for.
+        anywhere = await repository.outstanding(model=model)
+        owed = await repository.outstanding(
+            model=model,
+            already_has_one=answering_for is None,
+            answering_for=answering_for,
+        )
+    if refuse_while_held and anywhere.held:
+        raise HeldElsewhere(
+            f"{len(anywhere.held)} unit(s) of work for {model!r} are claimed by another runner; "
+            "let it finish or restart it, then run this again"
+        )
+
+    async with session_factory() as session, session.begin():
+        repository = IndexingJobRepository(session)
+        created = (
+            await repository.queue_rebuild(model=model)
+            if answering_for is None
+            else await repository.queue_replacing(model=model, answering_for=answering_for)
+        )
+
+    report = RebuildReport(
+        model=model,
+        queued=list(created.queued),
+        carried_over=list(owed.drainable),
+        skipped_failed=list(created.skipped_failed),
+        not_yet_due=list(owed.not_yet_due),
+        held=list(owed.held),
+    )
+    if index:
+        report.work = await finish_work(
+            [*report.queued, *report.carried_over],
+            session_factory=session_factory,
+            storage=storage,
+            settings=settings,
+            pool=pool,
+            on_progress=on_progress,
+        )
+    return report
+
+
 async def queue_missing(
     *, session_factory: async_sessionmaker[AsyncSession], settings: Settings, model: str
 ) -> MissingWork:
@@ -596,6 +718,166 @@ async def backfill(
             on_progress=on_progress,
         )
     return report
+
+
+async def describe_plan(
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    model: str,
+    answering_for: str | None,
+    retire: bool,
+) -> list[str]:
+    """What a run would do, without doing any of it.
+
+    The work is hours of CPU on one machine, so the count comes first and it is
+    cheap: three statements, no model loaded, nothing queued. A command that
+    began a three-hour job because its name sounded additive would be a bad
+    command.
+    """
+    async with session_factory() as session, session.begin():
+        jobs = IndexingJobRepository(session)
+        embeddings = EmbeddingRepository(session)
+        # The same two scopes the run itself uses, and for the same reason: a
+        # plan whose counts came from the whole key would promise work the run
+        # will not do, which is the opposite of what a dry run is for.
+        owed = await jobs.outstanding(
+            model=model,
+            already_has_one=answering_for is None,
+            answering_for=answering_for,
+        )
+        anywhere = await jobs.outstanding(model=model)
+        if answering_for is None:
+            subject = f"rebuild {model}"
+            to_compute = await embeddings.count_for(model=model)
+        else:
+            subject = f"fill {model} for what {answering_for} answers for"
+            to_compute = await embeddings.uncovered(key=answering_for, by=model)
+        uncovered = (
+            await embeddings.uncovered(key=answering_for, by=model)
+            if answering_for is not None
+            else 0
+        )
+
+    lines = [
+        f"plan: {subject}",
+        f"vectors to compute: {to_compute}",
+        f"already waiting: {len(owed.drainable)}",
+    ]
+    if owed.held:
+        lines.append(f"held by another runner, in this selection: {len(owed.held)}")
+    if owed.not_yet_due:
+        lines.append(f"retry not yet due: {len(owed.not_yet_due)}")
+    if owed.failed:
+        lines.append(f"failed, needs an explicit reset: {len(owed.failed)}")
+    if anywhere.held:
+        # Key-wide on purpose: a repair refuses on any live claim, whichever
+        # assets it covers, because nothing can say which weights it holds.
+        lines.append(f"live claims anywhere on {model}: {len(anywhere.held)}")
+    if not carries_out_work(settings):
+        lines.append("this deployment's queue has a runner of its own: work would be queued only")
+    if retire and answering_for is not None:
+        # A retirement asks about the key, not about this run's selection: it
+        # refuses while *anything* is owed for the replacing key.
+        debt = len(anywhere.drainable) + anywhere.blocking
+        lines.append(
+            f"retirement: would delete {answering_for}'s vectors"
+            if uncovered == 0 and debt == 0
+            else f"retirement: would be refused — {uncovered} asset(s) not covered, "
+            f"{debt} unit(s) of work outstanding for {model}"
+        )
+    lines.append("nothing was queued or computed; pass --apply to do it")
+    return lines
+
+
+async def retire(
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    key: str,
+    replaced_by: str,
+) -> list[str]:
+    """Delete a key's vectors, or say why not.
+
+    Both keys' queue locks are held for the whole of it, in an order sorted by
+    key name so it does not depend on which is being retired. Coverage inside
+    the deleting statement stops a race against the queue; the locks stop two
+    retirements in opposite directions from each seeing itself covered, deleting
+    disjoint rows, and leaving an asset with neither vector.
+    """
+    async with session_factory() as session, session.begin():
+        jobs = IndexingJobRepository(session)
+        await jobs.lock_models(sorted({key, replaced_by}))
+        owed = await jobs.outstanding(model=replaced_by)
+        if owed.drainable or owed.blocking:
+            return [
+                f"retirement refused: {len(owed.drainable) + owed.blocking} unit(s) of work for "
+                f"{replaced_by!r} are outstanding, so a count of what it covers describes a "
+                "corpus that is still changing"
+            ]
+        embeddings = EmbeddingRepository(session)
+        uncovered = await embeddings.uncovered(key=key, by=replaced_by)
+        if uncovered:
+            return [
+                f"retirement refused: {uncovered} asset(s) have a {key!r} vector and no "
+                f"{replaced_by!r} one"
+            ]
+        removed = await embeddings.retire(key=key, replaced_by=replaced_by)
+        if removed == 0:
+            # Nothing was deleted, and only a fresh reading can say why. The
+            # count taken before the delete cannot: claiming, finishing and
+            # upserting a vector take none of these locks, so a job for the old
+            # key can land in between — including for a key that held nothing at
+            # all when this started, where a pre-delete count of zero would have
+            # sent the run down the "success" path over a corpus it refused.
+            still = await embeddings.uncovered(key=key, by=replaced_by)
+            if still:
+                return [
+                    f"retirement refused: the corpus changed while this ran — {still} asset(s) "
+                    f"now have a {key!r} vector and no {replaced_by!r} one, so nothing was deleted"
+                ]
+            return [f"nothing to retire: {key!r} holds no vectors"]
+
+    lines = [f"retired: {removed} vector(s) of {key!r} deleted"]
+    if key in settings.enabled_models:
+        lines.append(
+            f"{key!r} is still enabled in this build: the next upload will queue work for it. "
+            "Removing it from ENABLED_MODELS is configuration, and yours to change."
+        )
+    return lines
+
+
+def describe_rebuild(report: RebuildReport, *, settings: Settings) -> list[str]:
+    """What a run did, in the states an operator acts on."""
+    lines = [
+        f"model: {report.model}",
+        f"queued: {len(report.queued)}",
+        f"carried over from an earlier run: {len(report.carried_over)}",
+    ]
+    if report.skipped_failed:
+        lines.append(
+            f"skipped (failed work): {len(report.skipped_failed)} — only an explicit reset "
+            "runs those again"
+        )
+    if report.not_yet_due:
+        lines.append(f"retry not yet due: {len(report.not_yet_due)} — cannot be run now")
+    if report.held:
+        lines.append(f"held by another runner: {len(report.held)}")
+    work = report.work
+    if work is None:
+        reason = queued_because(asked_to_leave_it=False, settings=settings)
+        lines.append(f"indexing: not run{f' ({reason})' if reason else ''}")
+    else:
+        lines.append(f"indexed: {work.indexed}")
+        lines.append(f"still queued: {len(work.queued)}")
+        lines.append(f"failed: {len(work.failed)}")
+        lines.extend(f"  failed  {asset_id} — {why}" for asset_id, why in work.failed)
+    lines.append(
+        "complete: the key owes nothing"
+        if report.complete
+        else "not complete: something is still outstanding, so this is not a rebuilt corpus"
+    )
+    return lines
 
 
 def describe_backfill(reports: Sequence[BackfillReport]) -> list[str]:
