@@ -1,7 +1,7 @@
 # Handoff — stretch-reembedding-tooling
 
 **Updated:** 2026-09-30 · claude
-**State:** implementing
+**State:** awaiting-gate-2
 **Branch:** change/stretch-reembedding-tooling
 
 ## Done this session
@@ -157,11 +157,78 @@ states, and the interrupted-repair test — abandon a claim, let it expire, repa
 with a second fake checkpoint, then watch the stale runner's finish fail to land
 — is its own.
 
+## Demonstrated failing inputs (high tier, task 5.1)
+
+Each guard removed on its own, the covering test run, the file restored.
+
+| check | file | test | with the guard removed |
+|---|---|---|---|
+| an unknown key is refused | `app/cli.py` | `-k schema_does_not_allow` | FAILED |
+| a key this build does not run is refused | `app/cli.py` | `-k build_does_not_run` | FAILED |
+| a key cannot replace itself | `app/cli.py` | `-k replace_itself` | FAILED |
+| a repair refuses a live claim | `app/services/indexing.py` | `-k refuses_to_begin` | FAILED |
+| a run carries out what was left outstanding | `app/services/indexing.py` | `-k interrupted_one_left` | FAILED |
+| a retirement refuses while the queue owes work | `app/services/indexing.py` | `-k owes_work` | FAILED |
+| a retirement refuses an incomplete replacement | `app/services/indexing.py` | `-k incomplete_replacement` | FAILED |
+| coverage is tested inside the deleting statement | `app/repositories/embeddings.py` | `-k statement_deletes_nothing` | FAILED |
+| two retirements cannot undo each other | `app/services/indexing.py` | `-k waits_while_another` | FAILED |
+
+**Three of these read `passed` first, and each time the run was wrong rather
+than the guard.** They are worth recording because two of them are mistakes
+anyone repeating this work would make.
+
+1. `__pycache__` was cleared only at the top of `app/`, and the modules under
+   test live in subpackages — the plants ran against stale bytecode.
+2. The condition inside the deleting statement had **no test that reached it**.
+   The service refuses first, so its own test never gets that far, and the
+   statement is where the guarantee lives. A repository-level test was added.
+3. The two-retirement test was **non-deterministic**: it is a race, and its
+   outcome depends on the interleaving — it failed standalone and passed in a
+   batch. A demonstration whose result depends on the scheduler demonstrates
+   nothing. It was replaced by a deterministic test of the serialisation: one
+   session holds both locks open, a retirement that wants them must wait and
+   hits its timeout, and it succeeds once the holder commits. The race test is
+   kept as a sanity check beside it.
+
+## What CI runs, run locally (task 5.3)
+
+| command | result |
+|---|---|
+| `FORCE_COLOR=1 CI=true make check` | **green** — 858 passed |
+| `openspec validate --all --strict` | **green** — 17 passed |
+| `sh -n scripts/*.sh` | **green** — 7 files |
+| `scripts/gate_run_test.sh` | **green** — 77 passed |
+| `scripts/workflow_verify_test.sh` | **green** — 23 passed |
+| `FORCE_COLOR=1 CI=true make test-integration` | **green** — 338 passed (was 296) |
+| `make audit` | **green** — no known vulnerabilities in 97 packages |
+| `make image` | **green** — `semanticshelf:runtime` 1.79 GB, unchanged |
+
+Both commands printed in the how-to were run in that form, and the output shown
+there is the output they gave: an earlier draft printed `vectors to compute: 500`
+over a store that holds none, which is a number no reader could have reproduced.
+
+## The mechanical floor for Gate 2 (task 5.4)
+
+```console
+$ scripts/pregate-verify.sh gate2 stretch-reembedding-tooling
+[OK]   git diff --check clean
+[OK]   openspec validate stretch-reembedding-tooling --strict
+[OK]   risk tier declared: high
+[OK]   proposal.md has a Non-goals section
+[OK]   tasks.md has 20 task(s)
+[OK]   every task checked
+[OK]   checked-task referenced paths exist
+[OK]   markdown links resolve (13 changed .md files)
+[OK]   make check green
+pregate-verify: gate2 stretch-reembedding-tooling — all checks passed (0 warning(s))
+```
+
 ## Next step
 
 **Gate 1 is passed** — confirmation 2 on `c89e9a3` confirms all four findings.
 
-`/opsx:apply stretch-reembedding-tooling` — implementation, 20 tasks.
+The user pushes `change/stretch-reembedding-tooling` and reports the CI run;
+then `/gate-review stretch-reembedding-tooling 2` — Gate 2 on the code diff.
 
 ## Blockers
 

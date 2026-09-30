@@ -121,7 +121,7 @@
 
 ## 5. Closing the change
 
-- [ ] 5.1 A demonstrated failing input for every new or changed check (high
+- [x] 5.1 A demonstrated failing input for every new or changed check (high
   tier): the refusal of an unknown key, of a key this build does not run, of
   `migrate <key> <key>`, of a retirement while incomplete, of a retirement while
   the queue owes work, of a retirement without the word, of a repair while a
@@ -130,15 +130,15 @@
   voids a stale runner's late finish.
   Verify: one table, one row per check, each a run with that one edit and the
   file restored afterwards.
-- [ ] 5.2 `openspec validate stretch-reembedding-tooling --strict` passes and
+- [x] 5.2 `openspec validate stretch-reembedding-tooling --strict` passes and
   every task above is checked with its evidence.
-- [ ] 5.3 Run locally everything CI runs, in CI's own form:
+- [x] 5.3 Run locally everything CI runs, in CI's own form:
   `FORCE_COLOR=1 CI=true make check`, `openspec validate --all --strict`,
   `sh -n scripts/*.sh`, every `scripts/*_test.sh`,
   `FORCE_COLOR=1 CI=true make test-integration` with the database up,
   `make audit`, and `make image`. Verify: each command's result recorded in the
   handoff.
-- [ ] 5.4 Hand over for the push: `handoff.md` at `awaiting-gate-2`, the
+- [x] 5.4 Hand over for the push: `handoff.md` at `awaiting-gate-2`, the
   mechanical floor passing, and the branch ready. Verify:
   `scripts/pregate-verify.sh gate2 stretch-reembedding-tooling` prints all
   checks passed and its output is recorded in the handoff. The green CI run is
