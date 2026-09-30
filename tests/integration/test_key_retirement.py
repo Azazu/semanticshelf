@@ -216,6 +216,11 @@ async def test_an_incomplete_replacement_deletes_nothing_and_says_how_many(
 
     assert await counts(engine) == {CLIP_VIT_L14: 2}
     assert any("refused" in line and "2 asset(s)" in line for line in lines), lines
+    # The reading before the delete is not the guarantee — the statement's own
+    # condition is, and it refuses too. What this reading buys is the *right*
+    # message: an operator who never had a chance was told so, rather than being
+    # told the corpus changed under them.
+    assert not any("changed while this ran" in line for line in lines), lines
 
 
 async def test_a_queue_that_owes_work_refuses_even_when_coverage_holds(
