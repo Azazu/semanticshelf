@@ -157,6 +157,39 @@ states, and the interrupted-repair test — abandon a claim, let it expire, repa
 with a second fake checkpoint, then watch the stale runner's finish fail to land
 — is its own.
 
+## Gate 2 round 1: four findings, all fixed
+
+**1. Recovery drained the key's whole backlog, not the selection's (major).**
+`outstanding` had no vector predicate, so a migration A→B executed unrelated B
+work on assets with no A vector — expensive work its own plan never counted. It
+now takes the same selection predicates the queueing statement uses, and the run
+asks it twice on purpose: the **live-claim preflight is about the key**, because
+any runner writing it may hold other weights whichever assets it is on, while
+what this run may **carry out is about its selection**.
+
+**2. Completion ignored failures produced by the run (major).** A job that
+exhausts its attempts lands in `work.failed`, not `work.queued`, and
+`skipped_failed` only holds what failed *before* the run — so the report printed
+"failed: 1" and "complete: the key owes nothing" together. The regression queues
+the work with its retries already spent, because a missing file alone is a
+retryable failure and "waiting" is not "gave up".
+
+**3. A refused deletion announced itself as a retirement (major).** When
+coverage changed between the service's reading and the DELETE, the statement
+correctly removed nothing and the service reported `retired: 0 vector(s)`. The
+window is real — claiming, finishing and upserting take none of these locks — and
+the service now recounts and says the corpus changed. The regression makes that
+deterministic by having the reading answer "covered" once while the corpus is
+not, which is exactly what the interval looks like from the service's side.
+
+**4. The stale-runner verification did not verify (major).** It called
+`mark_done` rather than driving a real result through `indexing.finish`, and it
+compared the repaired vectors with themselves. It now finishes the way any
+runner does — one transaction that marks the work done and writes its vector —
+and asserts the surviving vector equals what the **new** checkpoint answers,
+computed independently. Two demonstrations the table was missing are in it: the
+lease token, and the retirement that needs its word.
+
 ## Demonstrated failing inputs (high tier, task 5.1)
 
 Each guard removed on its own, the covering test run, the file restored.
@@ -172,6 +205,11 @@ Each guard removed on its own, the covering test run, the file restored.
 | a retirement refuses an incomplete replacement | `app/services/indexing.py` | `-k incomplete_replacement` | FAILED |
 | coverage is tested inside the deleting statement | `app/repositories/embeddings.py` | `-k statement_deletes_nothing` | FAILED |
 | two retirements cannot undo each other | `app/services/indexing.py` | `-k waits_while_another` | FAILED |
+| a stale runner's finish cannot land | `app/services/indexing.py` | `-k wakes_after` | FAILED |
+| a retirement needs the word | `app/cli.py` | `-k without_retire` | FAILED |
+| a run recovers its own selection only | `app/repositories/jobs.py` | `-k unrelated_backlog` | FAILED |
+| a failure during the run is not completion | `app/services/indexing.py` | `-k fails_terminally` | FAILED |
+| the statement's refusal is reported | `app/services/indexing.py` | `-k statement_refuses_where` | FAILED |
 
 **Three of these read `passed` first, and each time the run was wrong rather
 than the guard.** They are worth recording because two of them are mistakes
@@ -199,7 +237,7 @@ anyone repeating this work would make.
 | `sh -n scripts/*.sh` | **green** — 7 files |
 | `scripts/gate_run_test.sh` | **green** — 77 passed |
 | `scripts/workflow_verify_test.sh` | **green** — 23 passed |
-| `FORCE_COLOR=1 CI=true make test-integration` | **green** — 338 passed (was 296) |
+| `FORCE_COLOR=1 CI=true make test-integration` | **green** — 341 passed (was 296) |
 | `make audit` | **green** — no known vulnerabilities in 97 packages |
 | `make image` | **green** — `semanticshelf:runtime` 1.79 GB, unchanged |
 
