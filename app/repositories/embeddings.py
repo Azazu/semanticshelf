@@ -93,6 +93,36 @@ class EmbeddingRepository:
             created_at=row.created_at,
         )
 
+    async def uncovered(self, *, key: str, by: str) -> int:
+        """How many assets have a vector under `key` and none under `by`.
+
+        Zero means `by` can answer for everything `key` answers for, which is
+        the one precondition a retirement rests on. Asked as a single statement
+        so the answer describes one moment: a walk over assets, counted in the
+        application, is a moment that moves while it is being read, and a
+        retirement that trusted it would delete vectors an upload had just made
+        necessary.
+
+        The count is not symmetric — `uncovered(key=a, by=b)` and
+        `uncovered(key=b, by=a)` answer different questions — and nothing here
+        loads a model.
+        """
+        replacement = (
+            sa.select(sa.literal(1))
+            .where(
+                EmbeddingRow.asset_id == sa.literal_column("held.asset_id"),
+                EmbeddingRow.model == by,
+            )
+            .exists()
+        )
+        held = (
+            sa.select(EmbeddingRow.asset_id.label("asset_id"))
+            .where(EmbeddingRow.model == key)
+            .subquery("held")
+        )
+        statement = sa.select(sa.func.count()).select_from(held).where(~replacement)
+        return int((await self._session.execute(statement)).scalar_one())
+
     async def reachable(
         self,
         *,

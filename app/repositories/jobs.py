@@ -58,6 +58,35 @@ def to_domain(row: IndexingJobRow) -> IndexingJob:
 
 
 @dataclass(frozen=True, slots=True)
+class Outstanding:
+    """A key's unfinished work, told apart by what an operator can do about it.
+
+    `waiting` and `expired` are a run's to carry out — the second because a
+    lease that has run out belongs to nobody, and a runner that wakes after it
+    cannot land its result anyway. `held` belongs to a live claim and is left
+    alone. `not_yet_due` is a retry serving its backoff: nothing can run it now,
+    and a run that counted it as done would claim a corpus it has not rebuilt.
+    `failed` is terminal until an explicit reset (FR-IDX-5).
+    """
+
+    waiting: list[UUID]
+    not_yet_due: list[UUID]
+    held: list[UUID]
+    expired: list[UUID]
+    failed: list[UUID]
+
+    @property
+    def drainable(self) -> list[UUID]:
+        """What this run may carry out: nobody else's, and runnable now."""
+        return [*self.waiting, *self.expired]
+
+    @property
+    def blocking(self) -> int:
+        """How much a run cannot finish, and so cannot call itself complete over."""
+        return len(self.not_yet_due) + len(self.held) + len(self.failed)
+
+
+@dataclass(frozen=True, slots=True)
 class MissingWork:
     """What a backfill did: the assets it queued, and the ones it passed over.
 
@@ -106,14 +135,28 @@ class IndexingJobRepository:
         return [await self.add(asset_id=asset_id, model=key) for key in keys]
 
     async def queue_missing(self, *, model: str) -> MissingWork:
-        """Queue one model's work for every stored asset that has none.
+        """Queue one model's work for every stored asset that has none."""
+        return await self._queue(model=model, already_has_one=False)
 
-        Every asset with no vector for the model and no work for it that is
+    async def queue_rebuild(self, *, model: str) -> MissingWork:
+        """Queue one model's work for every stored asset that **already has** one.
+
+        The mirror of `queue_missing`, and the only difference between them: a
+        rebuild exists to replace vectors that are already there, because the
+        weights behind them moved. Everything else — the lock, the statement,
+        what it passes over — is the same, so the two cannot drift apart.
+        """
+        return await self._queue(model=model, already_has_one=True)
+
+    async def _queue(self, *, model: str, already_has_one: bool) -> MissingWork:
+        """Queue work for the assets a selection names.
+
+        Every asset the selection matches that has no work for this model
         waiting, running or failed. One statement, so it either queued the work
         or it did not, and a query of the same shape first for what it will
         pass over.
 
-        **Two backfills of one model cannot double-queue**, because they cannot
+        **Two runs over one model cannot double-queue**, because they cannot
         run at the same time: the transaction takes
         `pg_advisory_xact_lock(<namespace>, hashtext(model))` before it selects
         anything and holds it until it commits, so the second reads the rows the
@@ -157,10 +200,11 @@ class IndexingJobRepository:
             .where(EmbeddingRow.asset_id == AssetRow.id, EmbeddingRow.model == model)
             .exists()
         )
+        selected = has_vector if already_has_one else ~has_vector
         skipped = (
             await self._session.execute(
                 sa.select(AssetRow.id)
-                .where(~has_vector, ~work_in(OPEN_STATUSES), work_in(("failed",)))
+                .where(selected, ~work_in(OPEN_STATUSES), work_in(("failed",)))
                 .order_by(AssetRow.created_at, AssetRow.id)
             )
         ).scalars()
@@ -170,13 +214,59 @@ class IndexingJobRepository:
                 .from_select(
                     ["asset_id", "model"],
                     sa.select(AssetRow.id, sa.literal(model, sa.Text)).where(
-                        ~has_vector, ~work_in(BLOCKING_STATUSES)
+                        selected, ~work_in(BLOCKING_STATUSES)
                     ),
                 )
                 .returning(IndexingJobRow.asset_id)
             )
         ).scalars()
         return MissingWork(queued=list(queued), skipped_failed=list(skipped))
+
+    async def outstanding(self, *, model: str) -> "Outstanding":
+        """What a key still owes, in the five states that need different acts.
+
+        A command that lumps these together tells an operator nothing they can
+        use: work waiting to be run is theirs to carry out, a live claim belongs
+        to somebody else, an expired one is theirs again, a retry serving its
+        backoff cannot be run now by anyone, and failed work only an explicit
+        reset may touch (FR-IDX-5).
+
+        Loads no model and reads no vector: the answer is what decides whether
+        loading one is worth it.
+        """
+        running = IndexingJobRow.status == "running"
+        pending = IndexingJobRow.status == "pending"
+        alive = IndexingJobRow.lease_expires_at >= sa.func.now()
+        due = IndexingJobRow.available_at <= sa.func.now()
+        rows = (
+            await self._session.execute(
+                sa.select(
+                    IndexingJobRow.asset_id,
+                    sa.case(
+                        (pending & due, sa.literal("waiting")),
+                        (pending, sa.literal("not_yet_due")),
+                        (running & alive, sa.literal("held")),
+                        (running, sa.literal("expired")),
+                        else_=sa.literal("failed"),
+                    ).label("state"),
+                )
+                .where(
+                    IndexingJobRow.model == model,
+                    IndexingJobRow.status.in_(BLOCKING_STATUSES),
+                )
+                .order_by(IndexingJobRow.created_at, IndexingJobRow.id)
+            )
+        ).all()
+        by_state: dict[str, list[UUID]] = {
+            "waiting": [],
+            "not_yet_due": [],
+            "held": [],
+            "expired": [],
+            "failed": [],
+        }
+        for asset_id, state in rows:
+            by_state[str(state)].append(asset_id)
+        return Outstanding(**by_state)
 
     async def fail_for_asset(self, asset_id: UUID, reason: str) -> int:
         """Finish every unfinished job of one asset as failed, with a reason.

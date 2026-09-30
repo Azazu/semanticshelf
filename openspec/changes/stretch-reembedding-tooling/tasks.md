@@ -2,17 +2,17 @@
 
 ## 1. What the store can be asked
 
-- [ ] 1.1 The selection a rebuild needs: the assets that **already have** a
+- [x] 1.1 The selection a rebuild needs: the assets that **already have** a
   vector under a named key, beside the existing "assets that have none". Verify:
   integration tests that it returns exactly those assets, that it is empty for a
   key nothing is stored under, and that it does not depend on any other key's
   vectors.
-- [ ] 1.2 The coverage count: how many assets have a vector under one key and
+- [x] 1.2 The coverage count: how many assets have a vector under one key and
   none under another, **in one statement**, loading no model. Verify:
   integration tests for zero (the replacement covers everything), for a positive
   count naming how many, for an empty corpus, and for the pair given in the
   other order — the count is not symmetric and the test says so.
-- [ ] 1.3 The outstanding-work query: for a key and a selection, the work that
+- [x] 1.3 The outstanding-work query: for a key and a selection, the work that
   is waiting, the work whose retry is **not yet due**, the work a **live** claim
   holds, the work whose claim has **expired**, and the work that failed
   terminally — five states told apart, because the commands act differently on
