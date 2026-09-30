@@ -131,12 +131,23 @@ Each guard removed on its own, the covering test run, the file restored.
 | the picture model hands one revision to both reads | `app/ml/dinov2.py` | `-k picture_model_pinned` | FAILED |
 | the picture model unpinned carries no revision | `app/ml/dinov2.py` | `-k picture_model_unpinned` | FAILED |
 | an unpinned load says so | `app/ml/base.py` | `-k unpinned_load_says_so` | FAILED |
+| the whole revision is matched, not the whole line | `app/core/settings.py` | `-k "newline or line_ending"` | FAILED — `match` instead of `fullmatch` |
 
-Two of these read `passed` on the first run, and the run was wrong rather than
-the guard: the `-k` expression for each CLIP case is a substring of the DINOv2
+Three of these read `passed` on a first run, and each time the run was wrong
+rather than the guard. Twice: the `-k` expression for each CLIP case is a substring of the DINOv2
 test's name, so the plant in `clip.py` was checked by a test of `dinov2.py`.
-Re-run against exact node ids, both fail. A demonstration that selects the wrong
-test proves nothing, which is the point of doing them one at a time.
+Re-run against exact node ids, both fail. And once more on the newline guard: the
+plant swapped the *pattern* back to `^[0-9a-f]{40}$` while the guard is the
+`fullmatch` call, so nothing was removed — with `fullmatch`, anchors change
+nothing. Restoring `match` fails three tests.
+
+A demonstration that selects the wrong test, or removes something other than the
+guard, proves nothing. Both mistakes were mine and both were caught by the result
+looking too good.
+
+`git checkout --` also discarded an uncommitted fix twice during this work,
+because it restores the committed version and the fix was not committed yet. The
+demonstrations are run **after** the guard is committed, for that reason.
 
 ## Nothing observable changed (task 3.2)
 
@@ -154,7 +165,7 @@ covers moved.
 
 | command | result |
 |---|---|
-| `FORCE_COLOR=1 CI=true make check` | **green** — 850 passed |
+| `FORCE_COLOR=1 CI=true make check` | **green** — 858 passed |
 | `openspec validate --all --strict` | **green** — 17 passed |
 | `sh -n scripts/*.sh` | **green** — 7 files |
 | `scripts/gate_run_test.sh` | **green** — 77 passed |
@@ -182,6 +193,25 @@ $ scripts/pregate-verify.sh gate2 pin-model-revisions
 [OK]   make check green
 pregate-verify: gate2 pin-model-revisions — all checks passed (0 warning(s))
 ```
+
+## Gate 2 round 1: one finding, fixed
+
+**The commit check matched the whole line, not the whole value (major).**
+Python's `$` also matches immediately before a final newline, so
+`^[0-9a-f]{40}$` accepted a 41-character value ending in one. A revision read
+from a file or pasted with its line ending therefore passed configuration and
+reached the hub as `%0A` in a URL — refused there, at the first model load,
+instead of at startup, which is the whole point of a startup check.
+
+Reproduced before fixing: `COMMIT.match(DEFAULT_CLIP_REVISION + "\n")` is truthy,
+`Settings` constructs, and the effective revision is 41 characters long.
+
+`COMMIT.fullmatch` now, with the anchors removed and a comment beside the
+pattern saying why — `^...$` is the form everyone reaches for. Three more refused
+forms per setting, and two tests that travel the path the value actually takes,
+through the environment source rather than a keyword argument. The existing suite
+covered a trailing *space* and missed a trailing *newline*, which is exactly the
+gap a hand-written list of bad inputs leaves.
 
 ## Next step
 
