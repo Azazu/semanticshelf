@@ -34,17 +34,27 @@ different spaces and migrating between them is meaningless.
 
 - **`semanticshelf models migrate <old-key> <new-key>`** — compute the new key's
   vectors for every asset that has one under the old key, then report whether
-  the new key is complete. With `--apply --retire`, and only when it is
-  complete, delete the old key's vectors.
+  the new key is complete. With `--apply --retire`, and only when it is complete
+  **and the queue owes nothing**, delete the old key's vectors — under both
+  keys' advisory locks, so two retirements cannot undo each other.
 - **`semanticshelf models reembed <key>`** — recompute every vector stored under
   one key and replace it. This is the repair ADR-007 names, and the one that can
-  be run against this repository's own corpus today.
+  be run against this repository's own corpus today. It carries a precondition
+  the command states and half-enforces: every process writing that key must
+  already be running the new configuration, because a process that loaded the
+  model earlier keeps it and a queued job carries a key, not a revision.
 - **Both report by default and act on `--apply`**, as `storage prune` does. The
   report says how many vectors would be computed before anything computes them,
   which on a laptop is the difference between a decision and a surprise.
 - **Completeness is a precondition, not a hope.** Retirement is refused unless
-  every asset with a vector under the old key has one under the new, counted in
-  one place at one moment.
+  every asset with a vector under the old key has one under the new — tested
+  inside the deleting statement — and unless the queue owes nothing for the new
+  key, because a count taken while work is outstanding describes a corpus that
+  is still changing.
+- **A run finishes what the last one left.** The existing fill queues only
+  missing work and drains only what it queued, which after a crash is nothing
+  and nothing. The engine also carries out the outstanding work of its own
+  selection, and reports queued, already-waiting and untouchable apart.
 - **ADR-008** records why two subcommands share one engine, why retirement is a
   separate word, and what "without downtime" rests on.
 
@@ -69,11 +79,15 @@ None.
   for "assets that already have a vector under this key",
   `docs/adr/ADR-008-*.md`, sections in `docs/reference/commands.md` and
   `docs/how-to/models.md`, unit and integration tests.
-- **Changed:** `app/cli.py`, `app/services/indexing.py` (the selection, not the
-  runner), `app/repositories/embeddings.py`, `openspec/ROADMAP.md` row 21.
+- **Changed:** `app/cli.py`, `app/services/indexing.py` (the selection, and
+  draining a selection's outstanding work), `app/repositories/embeddings.py`,
+  `app/repositories/jobs.py` (the outstanding-work query and the two-key lock),
+  `openspec/ROADMAP.md` row 21.
 - **Unchanged:** the queue's mechanics, leases, retries and at-least-once
-  guarantee; both search endpoints; the schema, the CHECK and the indexes; the
-  API; the model adapters.
+  guarantee; **which runner carries work out** — under a configuration with a
+  runner of its own these commands enqueue and execute nothing, like every other
+  creator of work; both search endpoints; the schema, the CHECK and the indexes;
+  the API; the model adapters.
 - **Downtime:** none, and nothing new is needed for that. Which key answers a
   search is the request's `model`, defaulting to a repository constant — so the
   old key keeps answering while the new one fills, and the switch is a separate,
@@ -90,8 +104,18 @@ None.
   spends its reviews preventing.
 - **No scheduling.** No cron, no background trigger, no "re-embed when a
   revision changes". An operator runs it.
-- **No resume state of its own.** The queue is at-least-once and the upsert is
-  idempotent; a re-run finishes what an interrupted run left. Inventing a second
-  progress record beside the queue would be a second source of truth.
+- **No resume state of its own.** The queue is the record: a re-run finishes
+  what an interrupted one left because the engine drains its selection's
+  outstanding work, not because anything new remembers where it stopped.
+  Inventing a progress record beside the queue would be a second source of
+  truth.
+- **No suspension of the reset rule.** Work that failed terminally is reported
+  and left alone; only an explicit reset runs it again, during a rebuild as at
+  any other time.
+- **No enforcement that a writer is running the new checkpoint.** Nothing in the
+  store can see which weights a process holds — ADR-007 settled that, and the
+  provenance table that would see it was designed and refused there. This change
+  states the order of operations, refuses while work is outstanding, and names
+  what a mixed key means for a search.
 - **No undo.** Deleted vectors are gone; the repair is to run the command again,
   which is why retirement is refused unless the replacement is already complete.

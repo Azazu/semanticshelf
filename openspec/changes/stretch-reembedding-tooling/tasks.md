@@ -7,30 +7,49 @@
   integration tests that it returns exactly those assets, that it is empty for a
   key nothing is stored under, and that it does not depend on any other key's
   vectors.
-- [ ] 1.2 The completeness count: how many assets have a vector under one key
-  and none under another, **in one statement**, loading no model. Verify:
+- [ ] 1.2 The coverage count: how many assets have a vector under one key and
+  none under another, **in one statement**, loading no model. Verify:
   integration tests for zero (the replacement covers everything), for a positive
   count naming how many, for an empty corpus, and for the pair given in the
   other order — the count is not symmetric and the test says so.
+- [ ] 1.3 The outstanding-work query: for a key and a selection, the work that
+  is waiting, the work a claim still holds, and the work that failed terminally,
+  told apart. Loads no model. Verify: integration tests for each of the three
+  states and for none of them, and one that a live claim and an expired one are
+  not the same answer.
 
 ## 2. The engine and its two sentences
 
-- [ ] 2.1 One engine over the existing queue: given a selection, queue the work
-  and carry it out through the runner that already exists, with the leases, the
-  at-least-once guarantee and the idempotent upsert untouched (ADR-003). Verify:
-  an integration test that a rebuild replaces a vector rather than adding a
-  second row, and one that an interrupted run finished by a second run leaves
-  each asset with exactly one current vector.
-- [ ] 2.2 `semanticshelf models reembed <key>`: recompute every vector stored
+- [ ] 2.1 One engine over the existing queue: given a selection, queue the work,
+  and carry out **both what it queued and what its selection already had
+  outstanding** (design decision 6), with the leases, the at-least-once
+  guarantee and the idempotent upsert untouched (ADR-003). It queues nothing
+  twice, breaks no live claim, and does not run work that failed. Verify:
+  integration tests — a rebuild replaces a vector rather than adding a row; a
+  run killed after queueing and before draining is finished by the next run,
+  which queues nothing and drains what was waiting; work under a live claim is
+  left alone and reported as held; work that failed terminally is neither queued
+  nor run and is reported as failed; the three outcomes are reported apart.
+- [ ] 2.2 The runner switch, unchanged (design decision 6 and the
+  `indexing-jobs` delta): under a configuration where a runner of its own
+  executes the queue, both commands enqueue and execute nothing, say which
+  configuration decided it, and refuse any step that needs the work to be done.
+  Verify: integration tests of both commands under both runner configurations,
+  asserting that nothing was executed under the second and that the reason is
+  named — the same `carries_out_work` the other commands ask.
+- [ ] 2.3 `semanticshelf models reembed <key>`: recompute every vector stored
   under one key. Verify: an integration test end to end on the fake embedder,
   asserting every vector changed and the row count did not; a test that a key
   this build does not run is refused before anything is queued; a test that a
-  key the schema does not allow is refused with its name.
-- [ ] 2.3 `semanticshelf models migrate <old-key> <new-key>`: fill the new key
+  key the schema does not allow is refused with its name; and — design decision
+  7 — a test that the repair is **refused while any work for that key is
+  outstanding**, because outstanding work is the observable shadow of a writer
+  that may still hold the previous checkpoint.
+- [ ] 2.4 `semanticshelf models migrate <old-key> <new-key>`: fill the new key
   for every asset holding a vector under the old. Verify: integration tests that
   only those assets are queued, that `migrate <key> <key>` is refused, and that
   an unknown key on either side is refused before anything is queued.
-- [ ] 2.4 Both report and change nothing without `--apply` (design decision 2):
+- [ ] 2.5 Both report and change nothing without `--apply` (design decision 2):
   how many assets need work, how many vectors that is, and what a retirement
   would do. Verify: integration tests that without `--apply` the queue is empty
   afterwards and no vector changed, and that the report's numbers match what a
@@ -40,13 +59,24 @@
 
 - [ ] 3.1 `--retire`, separate from `--apply` (design decisions 3 and 4): delete
   the old key's vectors **in a statement whose own condition is that every asset
-  holding one has a vector under the new key**, and refuse as a whole when any
-  asset would be left uncovered, naming how many. Verify: integration tests —
-  a complete replacement retires and leaves assets, files and other keys
-  untouched; an incomplete one deletes nothing and names the number; a corpus
-  that grew between the fill and the retirement is refused on the later count;
-  `--apply` without `--retire` deletes nothing whatever the state.
-- [ ] 3.2 Retiring is not disabling (design decision 5): the command touches
+  holding one has a vector under the new key**, refuse as a whole when any asset
+  would be left uncovered, naming how many, and refuse while the queue owes
+  anything for the replacing key. Verify: integration tests — a complete
+  replacement retires and leaves assets, files and other keys untouched; an
+  incomplete one deletes nothing and names the number; one where coverage holds
+  but work is still waiting is refused and says so; **an asset given a vector
+  under the retiring key after the fill ended** is refused on the count taken
+  inside the delete; `--apply` without `--retire` deletes nothing whatever the
+  state.
+- [ ] 3.2 Two retirements cannot undo each other (design decision 3): the
+  retirement holds the queue's per-model advisory lock for **both** keys, in an
+  order sorted by key name so it does not depend on which is being retired, for
+  the whole of the coverage test and the delete. Verify: a two-session
+  integration test — A→B and B→A attempted at once over an asset covered by
+  both — asserting that they serialise, that the second refuses, and that no
+  asset is left without a vector under either key; and a test that a fill of
+  either key cannot overlap a retirement of it.
+- [ ] 3.3 Retiring is not disabling (design decision 5): the command touches
   neither `ENABLED_MODELS`, nor `EMBEDDING_MODELS`, nor the schema's CHECK, and
   says in its report that a key left enabled will be queued for on the next
   upload. Verify: a test that the settings and the schema are unchanged after a
@@ -62,8 +92,11 @@
   touch configuration. It names ADR-003 (the queue it rests on) and ADR-007 (the
   repair it provides). Verify: the ADR index carries its row.
 - [ ] 4.3 `docs/reference/commands.md` gains both subcommands in their exact
-  form; `docs/how-to/models.md` gains a section on replacing a model, with the
-  order of operations and what each step costs. Verify: both re-read whole after
+  form; `docs/how-to/models.md` gains a section on replacing a model **and one
+  on repairing a key after its checkpoint moved**, with the order of operations
+  design decision 7 requires — change the setting, restart every writer, then
+  repair — why that order and not another, and what a key holding vectors from
+  two checkpoints means for a search until the repair finishes. Verify: both re-read whole after
   the last edit; every command printed was run in that form.
 - [ ] 4.4 Reconcile the plan: `openspec/ROADMAP.md` row 21 and
   `docs/explanation/requirements.md` §9, which has asked for this since change 0
@@ -74,8 +107,10 @@
 
 - [ ] 5.1 A demonstrated failing input for every new or changed check (high
   tier): the refusal of an unknown key, of a key this build does not run, of
-  `migrate <key> <key>`, of a retirement while incomplete, of a retirement
-  without the word, and the completeness count's condition inside the delete.
+  `migrate <key> <key>`, of a retirement while incomplete, of a retirement while
+  the queue owes work, of a retirement without the word, of a repair while work
+  is outstanding, the coverage condition inside the delete, the two-key lock,
+  and the draining of a selection's outstanding work.
   Verify: one table, one row per check, each a run with that one edit and the
   file restored afterwards.
 - [ ] 5.2 `openspec validate stretch-reembedding-tooling --strict` passes and

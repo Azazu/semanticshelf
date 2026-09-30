@@ -82,6 +82,59 @@ the shape of the change.
 - **Risk-Tier: high** — deletion of embeddings, and running models over a whole
   corpus.
 
+## Gate 1 round 1: four findings, all fixed
+
+Every one of them was a hole in the plan rather than a wording problem, and two
+of them contradicted claims the proposal made in so many words.
+
+**1. A statement snapshot is not serialisation (major).** Coverage tested inside
+the deleting statement stops a race against the queue, and does nothing about
+two retirements in opposite directions: A→B and B→A can each see themselves
+covered, delete disjoint rows and both commit, leaving an asset with neither
+vector. The retirement now holds the queue's own per-model advisory lock for
+**both** keys, in an order sorted by key name so it does not depend on which is
+being retired, across the test and the delete. Reusing the queue's lock means a
+fill of either key cannot overlap a retirement either.
+
+The reviewer also corrected the growth example, which was wrong: an asset
+uploaded mid-run has a vector under *neither* key, so it is outside the coverage
+predicate and cannot make the count refuse. The case that does refuse is an
+asset that gains a vector under the key being **retired**, and the test says that
+now.
+
+**2. The runner switch was never mentioned (major).** `indexing-jobs` already
+requires that under a configuration with a runner of its own, nothing that
+creates work executes it — `index missing` asks `carries_out_work` for exactly
+that reason. The plan had both commands queueing *and* carrying out, with no
+word about the other configuration. Both now enqueue and execute nothing there,
+say which configuration decided it, and refuse any step that needs the work
+done.
+
+**3. A re-run did not finish an interrupted one (major).** The proposal claimed
+the queue's at-least-once guarantee covered it. It does not: the fill queues only
+missing work — passing over assets whose work is already waiting — and drains
+only what it just queued, so after a crash a re-run queues nothing and drains
+nothing where no separate runner exists. The engine now carries out the
+outstanding work of its own selection too, without queueing it twice, and reports
+three outcomes apart: queued now, already waiting and carried out, and
+untouchable — a live claim, or work that failed terminally, which only an
+explicit reset may run again.
+
+**4. The repair had no checkpoint precondition (major).** `reembed` recomputes
+with the configured checkpoint, but the registry caches an embedder per process
+and a queued job carries a key, not a revision — so a worker or API process
+started before the setting changed can finish outstanding work with the old
+weights, or overwrite a repaired vector afterwards. ADR-007 already established
+that nothing in the store can see this. Design decision 7 states the order
+(change the setting, restart every writer, then repair), enforces the observable
+part (the repair is refused while work for that key is outstanding), and names
+the limit (while a key holds vectors from two checkpoints, its scores are
+comparable only within each group). It says which of those is a guarantee and
+which is a precondition.
+
+Tasks grew from 16 to 19: the outstanding-work query, the runner-switch
+verification, and the two-session retirement test are each their own.
+
 ## Next step
 
 `/gate-review stretch-reembedding-tooling 1` — Gate 1 on the artifacts.
