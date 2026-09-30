@@ -9,6 +9,7 @@ Everything here runs against a real store and the deterministic stand-ins; no
 weights are loaded.
 """
 
+import asyncio
 import io
 from collections.abc import AsyncIterator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -22,10 +23,12 @@ import sqlalchemy as sa
 from fastapi import FastAPI
 from PIL import Image
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from typer.testing import CliRunner, Result
 
+from app.cli import app as cli
 from app.core.settings import Settings
 from app.db.engine import create_session_factory
-from app.domain import CLIP_VIT_L14, WORKER_RUNNER, dimension_of
+from app.domain import CLIP_VIT_L14, DINOV2_LARGE, WORKER_RUNNER, dimension_of
 from app.main import create_app
 from app.ml import registry
 from app.ml.base import normalise
@@ -362,3 +365,160 @@ async def test_a_deployment_with_its_own_runner_queues_and_executes_nothing(
     assert report.work is None, "nothing is executed where a runner of its own exists"
     lines = indexing.describe_rebuild(report, settings=worker_only)
     assert any("INDEXING_RUNNER=worker" in line for line in lines), lines
+
+
+# --- the two sentences, through the command line -------------------------------
+
+
+async def run_cli(arguments: Sequence[str], settings: Settings) -> Result:
+    """The command in a thread of its own, against this test's database.
+
+    It is a synchronous entry point that calls `asyncio.run`, so the test's own
+    loop must not be the one it finds.
+    """
+    environment = {
+        "DATABASE_URL": settings.database_url,
+        "MEDIA_ROOT": str(settings.media_root),
+        "ENABLED_MODELS": ",".join(settings.enabled_models),
+        "INDEXING_RUNNER": settings.indexing_runner,
+        "LOG_LEVEL": "warning",
+    }
+    return await asyncio.to_thread(CliRunner().invoke, cli, list(arguments), env=environment)
+
+
+async def test_a_plan_computes_nothing_and_queues_nothing(
+    client: httpx.AsyncClient, engine: AsyncEngine, settings: Settings
+) -> None:
+    """The count is the answer to "can I afford this now", and it is cheap."""
+    await upload(client, 1)
+    async with engine.begin() as connection:
+        await connection.execute(sa.text("DELETE FROM indexing_jobs"))
+
+    result = await run_cli(["models", "reembed", CLIP_VIT_L14], settings)
+
+    assert result.exit_code == 0, result.output
+    assert "vectors to compute: 1" in result.output
+    assert "nothing was queued or computed" in result.output
+    assert await states(engine, CLIP_VIT_L14) == [], "a plan queues nothing"
+
+
+async def test_the_plan_s_number_is_what_apply_then_does(
+    client: httpx.AsyncClient, engine: AsyncEngine, settings: Settings
+) -> None:
+    for seed in (1, 2, 3):
+        await upload(client, seed)
+    async with engine.begin() as connection:
+        await connection.execute(sa.text("DELETE FROM indexing_jobs"))
+
+    planned = await run_cli(["models", "reembed", CLIP_VIT_L14], settings)
+    applied = await run_cli(["models", "reembed", CLIP_VIT_L14, "--apply"], settings)
+
+    assert "vectors to compute: 3" in planned.output, planned.output
+    assert "queued: 3" in applied.output, applied.output
+    assert "indexed: 3" in applied.output
+
+
+async def test_a_key_the_schema_does_not_allow_is_refused(settings: Settings) -> None:
+    result = await run_cli(["models", "reembed", "no-such-key"], settings)
+
+    assert result.exit_code == 2
+    assert "unknown model key" in result.output
+
+
+async def test_a_key_this_build_does_not_run_is_refused(settings: Settings) -> None:
+    """Its work would be queued and carried out by nobody."""
+    one_model = settings.model_copy(update={"enabled_models": (CLIP_VIT_L14,)})
+
+    result = await run_cli(["models", "reembed", DINOV2_LARGE], one_model)
+
+    assert result.exit_code == 2
+    assert "not enabled in this build" in result.output
+
+
+async def test_a_key_cannot_replace_itself(settings: Settings) -> None:
+    result = await run_cli(["models", "migrate", CLIP_VIT_L14, CLIP_VIT_L14], settings)
+
+    assert result.exit_code == 2
+    assert "cannot replace itself" in result.output
+    assert "models reembed" in result.output, "and it says which command does mean that"
+
+
+async def test_a_replacement_fills_only_what_the_old_key_answers_for(
+    client: httpx.AsyncClient,
+    engine: AsyncEngine,
+    sessions: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    storage: MediaStorage,
+    pool: ThreadPoolExecutor,
+) -> None:
+    """A corpus holds assets the old key never answered for either. Pulling them
+    in would turn a replacement into a backfill nobody asked for."""
+    both = await upload(client, 1)
+    neither = await upload(client, 2)
+    async with engine.begin() as connection:
+        await connection.execute(
+            sa.text("DELETE FROM embeddings WHERE asset_id = :asset_id"),
+            {"asset_id": neither},
+        )
+        await connection.execute(sa.text("DELETE FROM indexing_jobs"))
+        await connection.execute(
+            sa.text("DELETE FROM embeddings WHERE model = :model"), {"model": DINOV2_LARGE}
+        )
+
+    both_keys = settings.model_copy(update={"enabled_models": (CLIP_VIT_L14, DINOV2_LARGE)})
+    report = await indexing.rebuild(
+        session_factory=sessions,
+        storage=storage,
+        settings=both_keys,
+        pool=pool,
+        model=DINOV2_LARGE,
+        answering_for=CLIP_VIT_L14,
+    )
+
+    assert [str(asset_id) for asset_id in report.queued] == [both]
+    assert neither not in [str(asset_id) for asset_id in report.queued]
+
+
+async def test_a_runner_that_wakes_after_its_lease_cannot_undo_the_repair(
+    client: httpx.AsyncClient,
+    engine: AsyncEngine,
+    sessions: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    storage: MediaStorage,
+    pool: ThreadPoolExecutor,
+) -> None:
+    """The mechanism the repair's safety rests on, exercised rather than quoted.
+
+    A runner still holding the previous checkpoint claims work and is abandoned.
+    Its lease runs out, the repair finishes that work with the new checkpoint,
+    and the abandoned runner then tries to finish what it claimed: its result
+    matches nothing, because a finish lands only where the lease expiry its own
+    claim wrote is still the row's.
+    """
+    await upload(client, 1)
+    async with sessions() as session, session.begin():
+        await IndexingJobRepository(session).queue_rebuild(model=CLIP_VIT_L14)
+    async with sessions() as session, session.begin():
+        stale = (await IndexingJobRepository(session).claim(limit=1, lease_seconds=600))[0]
+    async with engine.begin() as connection:
+        await connection.execute(
+            sa.text("UPDATE indexing_jobs SET lease_expires_at = now() - interval '1 minute'")
+        )
+
+    with moved_checkpoint():
+        report = await indexing.rebuild(
+            session_factory=sessions,
+            storage=storage,
+            settings=settings,
+            pool=pool,
+            model=CLIP_VIT_L14,
+            refuse_while_held=True,
+        )
+    repaired = await vectors_of(engine, CLIP_VIT_L14)
+
+    async with sessions() as session, session.begin():
+        landed = await IndexingJobRepository(session).mark_done(stale.job.id, stale.owned_until)
+
+    assert report.work is not None and report.work.indexed == 1
+    assert landed is False, "the abandoned runner is not the owner any more"
+    assert await vectors_of(engine, CLIP_VIT_L14) == repaired, "and it changed nothing"

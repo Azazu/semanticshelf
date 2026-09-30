@@ -39,7 +39,7 @@
   Verify: integration tests of both commands under both runner configurations,
   asserting that nothing was executed under the second and that the reason is
   named — the same `carries_out_work` the other commands ask.
-- [ ] 2.3 `semanticshelf models reembed <key>`: recompute every vector stored
+- [x] 2.3 `semanticshelf models reembed <key>`: recompute every vector stored
   under one key. Verify: an integration test end to end on the fake embedder,
   asserting every vector changed and the row count did not; a test that a key
   this build does not run is refused before anything is queued; a test that a
@@ -48,11 +48,11 @@
   claim** on that key, and a test that it is **not** refused when the key's
   outstanding work is merely pending or held by an expired claim, because that
   is what an interrupted repair leaves and finishing it is the point.
-- [ ] 2.4 `semanticshelf models migrate <old-key> <new-key>`: fill the new key
+- [x] 2.4 `semanticshelf models migrate <old-key> <new-key>`: fill the new key
   for every asset holding a vector under the old. Verify: integration tests that
   only those assets are queued, that `migrate <key> <key>` is refused, and that
   an unknown key on either side is refused before anything is queued.
-- [ ] 2.6 A repair survives its own interruption, and a stale writer cannot undo
+- [x] 2.6 A repair survives its own interruption, and a stale writer cannot undo
   it (design decision 7, and the reason findings 3 and 4 were one problem).
   Verify: an integration test with **two distinguishable fake checkpoints** —
   a runner claims work for the key and is abandoned holding it; its lease
@@ -65,7 +65,7 @@
   one that work whose retry is not yet due is reported as such and the run does
   not claim the corpus is rebuilt.
 
-- [ ] 2.5 Both report and change nothing without `--apply` (design decision 2):
+- [x] 2.5 Both report and change nothing without `--apply` (design decision 2):
   how many assets need work, how many vectors that is, and what a retirement
   would do. Verify: integration tests that without `--apply` the queue is empty
   afterwards and no vector changed, and that the report's numbers match what a
