@@ -190,6 +190,33 @@ and asserts the surviving vector equals what the **new** checkpoint answers,
 computed independently. Two demonstrations the table was missing are in it: the
 lease token, and the retirement that needs its word.
 
+## Gate 2 confirmation 1: two confirmed, two returned
+
+**Finding 1 came back because I fixed the execution and forgot the report.**
+`describe_plan` still asked about the whole key, so an empty migration with one
+unrelated pending job promised "already waiting: 1" and then carried over
+nothing — a dry run that overstates the work is the opposite of what a dry run
+is for. It now asks the same two questions the run does and says which is which:
+the selection's own outstanding work on its lines, and live claims **anywhere**
+on the key on a line that says so, because a repair refuses on any of them
+whichever assets they cover. Three shapes of unrelated work are covered —
+pending, expired and delayed.
+
+**Finding 3 came back because my fix still trusted a count taken before the
+delete.** `removed == 0 and held` skipped the recount when the key held nothing
+at the start, so a retirement over an initially empty key announced
+`retired: 0 vector(s) ... deleted` even where the statement had refused. The
+count is gone: a zero removal is always explained by a fresh reading, which
+separates "the corpus changed under this run" from "there was nothing to
+retire".
+
+And the regression no longer substitutes the coverage query's answer. A real
+second session commits an old-only vector on the first call of the real query —
+which is what that interval is — and it runs for a key that starts empty and one
+that starts with vectors. Getting it to fail first took a correction of my own
+setup: the intruder had kept its replacement vector, which made the corpus
+covered again and the delete rightly proceeded.
+
 ## Demonstrated failing inputs (high tier, task 5.1)
 
 Each guard removed on its own, the covering test run, the file restored.
@@ -209,7 +236,8 @@ Each guard removed on its own, the covering test run, the file restored.
 | a retirement needs the word | `app/cli.py` | `-k without_retire` | FAILED |
 | a run recovers its own selection only | `app/repositories/jobs.py` | `-k unrelated_backlog` | FAILED |
 | a failure during the run is not completion | `app/services/indexing.py` | `-k fails_terminally` | FAILED |
-| the statement's refusal is reported | `app/services/indexing.py` | `-k statement_refuses_where` | FAILED |
+| a zero removal is explained by a fresh reading | `app/services/indexing.py` | `-k written_after_the_reading` | FAILED |
+| a plan counts its own selection | `app/services/indexing.py` | `-k counts_only_its_own` | FAILED |
 
 **Three of these read `passed` first, and each time the run was wrong rather
 than the guard.** They are worth recording because two of them are mistakes
@@ -237,7 +265,7 @@ anyone repeating this work would make.
 | `sh -n scripts/*.sh` | **green** — 7 files |
 | `scripts/gate_run_test.sh` | **green** — 77 passed |
 | `scripts/workflow_verify_test.sh` | **green** — 23 passed |
-| `FORCE_COLOR=1 CI=true make test-integration` | **green** — 341 passed (was 296) |
+| `FORCE_COLOR=1 CI=true make test-integration` | **green** — 346 passed (was 296) |
 | `make audit` | **green** — no known vulnerabilities in 97 packages |
 | `make image` | **green** — `semanticshelf:runtime` 1.79 GB, unchanged |
 
