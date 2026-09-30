@@ -1,7 +1,7 @@
 # Handoff — stretch-reembedding-tooling
 
 **Updated:** 2026-09-30 · claude
-**State:** awaiting-gate-1
+**State:** implementing
 **Branch:** change/stretch-reembedding-tooling
 
 ## Done this session
@@ -159,9 +159,9 @@ with a second fake checkpoint, then watch the stale runner's finish fail to land
 
 ## Next step
 
-`/gate-review stretch-reembedding-tooling 1` — Gate 1 on the artifacts.
-`scripts/pregate-verify.sh gate1 stretch-reembedding-tooling` passes (16 tasks,
-tier declared, applicability table present, links resolve).
+**Gate 1 is passed** — confirmation 2 on `c89e9a3` confirms all four findings.
+
+`/opsx:apply stretch-reembedding-tooling` — implementation, 20 tasks.
 
 ## Blockers
 
