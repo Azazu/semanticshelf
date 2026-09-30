@@ -738,7 +738,15 @@ async def describe_plan(
     async with session_factory() as session, session.begin():
         jobs = IndexingJobRepository(session)
         embeddings = EmbeddingRepository(session)
-        owed = await jobs.outstanding(model=model)
+        # The same two scopes the run itself uses, and for the same reason: a
+        # plan whose counts came from the whole key would promise work the run
+        # will not do, which is the opposite of what a dry run is for.
+        owed = await jobs.outstanding(
+            model=model,
+            already_has_one=answering_for is None,
+            answering_for=answering_for,
+        )
+        anywhere = await jobs.outstanding(model=model)
         if answering_for is None:
             subject = f"rebuild {model}"
             to_compute = await embeddings.count_for(model=model)
@@ -757,19 +765,26 @@ async def describe_plan(
         f"already waiting: {len(owed.drainable)}",
     ]
     if owed.held:
-        lines.append(f"held by another runner: {len(owed.held)}")
+        lines.append(f"held by another runner, in this selection: {len(owed.held)}")
     if owed.not_yet_due:
         lines.append(f"retry not yet due: {len(owed.not_yet_due)}")
     if owed.failed:
         lines.append(f"failed, needs an explicit reset: {len(owed.failed)}")
+    if anywhere.held:
+        # Key-wide on purpose: a repair refuses on any live claim, whichever
+        # assets it covers, because nothing can say which weights it holds.
+        lines.append(f"live claims anywhere on {model}: {len(anywhere.held)}")
     if not carries_out_work(settings):
         lines.append("this deployment's queue has a runner of its own: work would be queued only")
     if retire and answering_for is not None:
+        # A retirement asks about the key, not about this run's selection: it
+        # refuses while *anything* is owed for the replacing key.
+        debt = len(anywhere.drainable) + anywhere.blocking
         lines.append(
             f"retirement: would delete {answering_for}'s vectors"
-            if uncovered == 0 and owed.blocking == 0 and not owed.drainable
+            if uncovered == 0 and debt == 0
             else f"retirement: would be refused — {uncovered} asset(s) not covered, "
-            f"{len(owed.drainable) + owed.blocking} unit(s) of work outstanding"
+            f"{debt} unit(s) of work outstanding for {model}"
         )
     lines.append("nothing was queued or computed; pass --apply to do it")
     return lines
@@ -801,7 +816,6 @@ async def retire(
                 "corpus that is still changing"
             ]
         embeddings = EmbeddingRepository(session)
-        held = await embeddings.count_for(model=key)
         uncovered = await embeddings.uncovered(key=key, by=replaced_by)
         if uncovered:
             return [
@@ -809,17 +823,20 @@ async def retire(
                 f"{replaced_by!r} one"
             ]
         removed = await embeddings.retire(key=key, replaced_by=replaced_by)
-        if removed == 0 and held:
-            # The statement's own condition refused where the reading above did
-            # not. Claiming, finishing and upserting a vector take none of these
-            # locks, so a job for the old key can land between the two — and a
-            # retirement that announced success over a key it did not touch
-            # would be the worst possible report.
+        if removed == 0:
+            # Nothing was deleted, and only a fresh reading can say why. The
+            # count taken before the delete cannot: claiming, finishing and
+            # upserting a vector take none of these locks, so a job for the old
+            # key can land in between — including for a key that held nothing at
+            # all when this started, where a pre-delete count of zero would have
+            # sent the run down the "success" path over a corpus it refused.
             still = await embeddings.uncovered(key=key, by=replaced_by)
-            return [
-                f"retirement refused: the corpus changed while this ran — {still} asset(s) now "
-                f"have a {key!r} vector and no {replaced_by!r} one, so nothing was deleted"
-            ]
+            if still:
+                return [
+                    f"retirement refused: the corpus changed while this ran — {still} asset(s) "
+                    f"now have a {key!r} vector and no {replaced_by!r} one, so nothing was deleted"
+                ]
+            return [f"nothing to retire: {key!r} holds no vectors"]
 
     lines = [f"retired: {removed} vector(s) of {key!r} deleted"]
     if key in settings.enabled_models:

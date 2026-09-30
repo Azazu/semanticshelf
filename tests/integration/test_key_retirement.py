@@ -11,6 +11,7 @@ import io
 from collections.abc import AsyncIterator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from uuid import UUID
 
 import httpx
 import pytest
@@ -23,7 +24,7 @@ from typer.testing import CliRunner, Result
 from app.cli import app as cli
 from app.core.settings import Settings
 from app.db.engine import create_session_factory
-from app.domain import CLIP_VIT_L14, DINOV2_LARGE
+from app.domain import CLIP_VIT_L14, DINOV2_LARGE, dimension_of
 from app.main import create_app
 from app.ml.pool import create_pool
 from app.repositories import EmbeddingRepository
@@ -96,6 +97,13 @@ async def upload(client: httpx.AsyncClient, seed: int) -> str:
     response = await client.post(ASSETS, files={"file": ("p.png", picture_bytes(seed))})
     assert response.status_code == 201, response.text
     return str(response.json()["id"])
+
+
+def a_clip_vector() -> list[float]:
+    """A unit vector of CLIP's width: the value does not matter, its presence does."""
+    values = [0.0] * dimension_of(CLIP_VIT_L14)
+    values[0] = 1.0
+    return values
 
 
 async def counts(engine: AsyncEngine) -> dict[str, int]:
@@ -419,44 +427,69 @@ async def test_a_retirement_waits_while_another_holds_the_same_locks(
     assert any("retired: 1 vector(s)" in line for line in lines), lines
 
 
-async def test_a_retirement_says_so_when_the_statement_refuses_where_the_read_did_not(
+@pytest.mark.parametrize("key_starts_empty", [False, True], ids=["key-holds-vectors", "key-empty"])
+async def test_an_old_only_vector_written_after_the_reading_is_refused_and_counted(
     client: httpx.AsyncClient,
     engine: AsyncEngine,
     sessions: async_sessionmaker[AsyncSession],
     settings: Settings,
     monkeypatch: pytest.MonkeyPatch,
+    key_starts_empty: bool,
 ) -> None:
-    """The window nothing can close, made deterministic.
+    """The window nothing can close, with a real second session writing into it.
 
     Claiming, finishing and upserting a vector take none of the retirement's
-    locks, so an old-key job can land between the service's coverage reading and
-    the deleting statement. The statement's own condition then refuses — and a
-    report that announced `retired: 0 vector(s)` over a key it did not touch
-    would be the worst possible answer.
+    locks, so a job for the old key can commit between the service's coverage
+    reading and the deleting statement. The statement then refuses, and the run
+    must say so — including when the key held **nothing** when it started, where
+    trusting a pre-delete count of zero would have announced a retirement that
+    never happened.
 
-    Here the reading is made to say "covered" while the corpus is not, which is
-    exactly what that interval looks like from the service's side.
+    The insert here is a real transaction in another session, hung on the first
+    call of the real coverage query rather than replacing its answer.
     """
     await upload(client, 1)
-    await upload(client, 2)
+    intruder = await upload(client, 2)
     await drain_queue(engine)
     async with engine.begin() as connection:
+        # The intruder must end up holding the **old** key and not the new one,
+        # so it has neither to begin with: leaving its replacement vector in
+        # place would make the corpus covered again and the delete would
+        # rightly proceed.
         await connection.execute(
-            sa.text("DELETE FROM embeddings WHERE model = :model"), {"model": DINOV2_LARGE}
+            sa.text("DELETE FROM embeddings WHERE asset_id = :asset_id"),
+            {"asset_id": intruder},
         )
+        if key_starts_empty:
+            await connection.execute(
+                sa.text("DELETE FROM embeddings WHERE model = :model"), {"model": CLIP_VIT_L14}
+            )
+    before = (await counts(engine)).get(CLIP_VIT_L14, 0)
+    assert before == (0 if key_starts_empty else 1)
+
     truth = EmbeddingRepository.uncovered
-    calls = {"n": 0}
+    first = {"done": False}
 
-    async def covered_the_first_time(self: EmbeddingRepository, **keywords: str) -> int:
-        calls["n"] += 1
-        return 0 if calls["n"] == 1 else await truth(self, **keywords)
+    async def then_somebody_writes(self: EmbeddingRepository, **keywords: str) -> int:
+        answer = await truth(self, **keywords)
+        if not first["done"]:
+            first["done"] = True
+            # Another session, its own transaction, committed before the delete.
+            async with sessions() as other, other.begin():
+                await EmbeddingRepository(other).upsert(
+                    asset_id=UUID(intruder),
+                    model=CLIP_VIT_L14,
+                    vector=a_clip_vector(),
+                )
+        return answer
 
-    monkeypatch.setattr(EmbeddingRepository, "uncovered", covered_the_first_time)
+    monkeypatch.setattr(EmbeddingRepository, "uncovered", then_somebody_writes)
 
     lines = await indexing.retire(
         session_factory=sessions, settings=settings, key=CLIP_VIT_L14, replaced_by=DINOV2_LARGE
     )
 
-    assert (await counts(engine))[CLIP_VIT_L14] == 2, "the statement refused"
+    assert (await counts(engine))[CLIP_VIT_L14] == before + 1, "the statement deleted nothing"
     assert any("corpus changed while this ran" in line for line in lines), lines
+    assert any("1 asset(s)" in line for line in lines), lines
     assert not any("retired:" in line for line in lines), lines

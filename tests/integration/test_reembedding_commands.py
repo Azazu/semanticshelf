@@ -653,3 +653,70 @@ async def test_a_run_whose_work_fails_terminally_is_not_complete(
     assert not report.complete
     lines = indexing.describe_rebuild(report, settings=settings)
     assert any("not complete" in line for line in lines), lines
+
+
+@pytest.mark.parametrize(
+    ("state", "sql"),
+    [
+        ("pending", "SELECT 1"),
+        (
+            "expired",
+            "UPDATE indexing_jobs SET status = 'running', "
+            "lease_expires_at = now() - interval '1 minute'",
+        ),
+        ("delayed", "UPDATE indexing_jobs SET available_at = now() + interval '1 hour'"),
+    ],
+)
+async def test_a_plan_counts_only_its_own_selection(
+    client: httpx.AsyncClient, engine: AsyncEngine, settings: Settings, state: str, sql: str
+) -> None:
+    """A plan whose counts came from the whole key would promise work the run
+    will not do, which is the opposite of what a dry run is for.
+
+    Three shapes of unrelated work, because they are reported on three different
+    lines and each could leak in separately.
+    """
+    outsider = await upload(client, 2)
+    async with engine.begin() as connection:
+        await connection.execute(sa.text("DELETE FROM indexing_jobs"))
+        await connection.execute(
+            sa.text("DELETE FROM embeddings WHERE asset_id = :asset_id"), {"asset_id": outsider}
+        )
+        await connection.execute(
+            sa.text("INSERT INTO indexing_jobs (asset_id, model) VALUES (:asset_id, :model)"),
+            {"asset_id": outsider, "model": CLIP_VIT_L14},
+        )
+        await connection.execute(sa.text(sql))
+
+    result = await run_cli(["models", "reembed", CLIP_VIT_L14], settings)
+
+    assert "vectors to compute: 0" in result.output, result.output
+    assert "already waiting: 0" in result.output, f"{state}: {result.output}"
+    assert "retry not yet due" not in result.output, f"{state}: {result.output}"
+
+
+async def test_a_plan_still_names_a_live_claim_anywhere_on_the_key(
+    client: httpx.AsyncClient,
+    engine: AsyncEngine,
+    sessions: async_sessionmaker[AsyncSession],
+    settings: Settings,
+) -> None:
+    """Key-wide on purpose: a repair refuses on any live claim, whichever assets
+    it covers, because nothing can say which weights that runner holds."""
+    outsider = await upload(client, 2)
+    async with engine.begin() as connection:
+        await connection.execute(sa.text("DELETE FROM indexing_jobs"))
+        await connection.execute(
+            sa.text("DELETE FROM embeddings WHERE asset_id = :asset_id"), {"asset_id": outsider}
+        )
+        await connection.execute(
+            sa.text("INSERT INTO indexing_jobs (asset_id, model) VALUES (:asset_id, :model)"),
+            {"asset_id": outsider, "model": CLIP_VIT_L14},
+        )
+    async with sessions() as session, session.begin():
+        await IndexingJobRepository(session).claim(limit=1, lease_seconds=600)
+
+    result = await run_cli(["models", "reembed", CLIP_VIT_L14], settings)
+
+    assert "already waiting: 0" in result.output, result.output
+    assert f"live claims anywhere on {CLIP_VIT_L14}: 1" in result.output, result.output
