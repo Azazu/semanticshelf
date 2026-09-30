@@ -138,6 +138,17 @@ class IndexingJobRepository:
         """Queue one model's work for every stored asset that has none."""
         return await self._queue(model=model, already_has_one=False)
 
+    async def queue_replacing(self, *, model: str, answering_for: str) -> MissingWork:
+        """Queue one model's work for the assets **another** key answers for.
+
+        What a migration needs, and not the same as `queue_missing`: a corpus
+        can hold assets the old key never answered for either, and pulling them
+        in would turn a replacement into a backfill of something nobody asked
+        for. The selection is exactly the set the retirement will later be
+        measured against.
+        """
+        return await self._queue(model=model, already_has_one=False, answering_for=answering_for)
+
     async def queue_rebuild(self, *, model: str) -> MissingWork:
         """Queue one model's work for every stored asset that **already has** one.
 
@@ -148,7 +159,9 @@ class IndexingJobRepository:
         """
         return await self._queue(model=model, already_has_one=True)
 
-    async def _queue(self, *, model: str, already_has_one: bool) -> MissingWork:
+    async def _queue(
+        self, *, model: str, already_has_one: bool, answering_for: str | None = None
+    ) -> MissingWork:
         """Queue work for the assets a selection names.
 
         Every asset the selection matches that has no work for this model
@@ -201,6 +214,14 @@ class IndexingJobRepository:
             .exists()
         )
         selected = has_vector if already_has_one else ~has_vector
+        if answering_for is not None:
+            if answering_for not in EMBEDDING_MODELS:
+                raise UnknownModelError(f"unknown embedding model: {answering_for!r}")
+            selected = selected & (
+                sa.select(sa.literal(1))
+                .where(EmbeddingRow.asset_id == AssetRow.id, EmbeddingRow.model == answering_for)
+                .exists()
+            )
         skipped = (
             await self._session.execute(
                 sa.select(AssetRow.id)
@@ -221,6 +242,28 @@ class IndexingJobRepository:
             )
         ).scalars()
         return MissingWork(queued=list(queued), skipped_failed=list(skipped))
+
+    async def lock_models(self, models: Sequence[str]) -> None:
+        """Take the queue's own per-model lock for each of these, in the order given.
+
+        The order is the caller's and must not depend on which key is being
+        retired: two retirements in opposite directions take the same two locks,
+        and taking them in the same order is what makes them queue up instead of
+        deadlocking.
+
+        Transaction-scoped, like every other use of it here, so the caller's
+        transaction is what holds them.
+        """
+        for model in models:
+            if model not in EMBEDDING_MODELS:
+                raise UnknownModelError(f"unknown embedding model: {model!r}")
+            await self._session.execute(
+                sa.select(
+                    sa.func.pg_advisory_xact_lock(
+                        ADVISORY_LOCK_NAMESPACE, sa.func.hashtext(sa.literal(model, sa.Text))
+                    )
+                )
+            )
 
     async def outstanding(self, *, model: str) -> "Outstanding":
         """What a key still owes, in the five states that need different acts.

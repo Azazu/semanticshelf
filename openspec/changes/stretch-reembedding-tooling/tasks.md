@@ -22,7 +22,7 @@
 
 ## 2. The engine and its two sentences
 
-- [ ] 2.1 One engine over the existing queue: given a selection, queue the work,
+- [x] 2.1 One engine over the existing queue: given a selection, queue the work,
   and carry out **both what it queued and what its selection already had
   outstanding** (design decision 6), with the leases, the at-least-once
   guarantee and the idempotent upsert untouched (ADR-003). It queues nothing
@@ -32,7 +32,7 @@
   which queues nothing and drains what was waiting; work under a live claim is
   left alone and reported as held; work that failed terminally is neither queued
   nor run and is reported as failed; the three outcomes are reported apart.
-- [ ] 2.2 The runner switch, unchanged (design decision 6 and the
+- [x] 2.2 The runner switch, unchanged (design decision 6 and the
   `indexing-jobs` delta): under a configuration where a runner of its own
   executes the queue, both commands enqueue and execute nothing, say which
   configuration decided it, and refuse any step that needs the work to be done.

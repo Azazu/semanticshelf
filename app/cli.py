@@ -15,6 +15,7 @@ from typing import Annotated, Any
 import typer
 
 from app.core.settings import Settings
+from app.domain import EMBEDDING_MODELS
 
 app = typer.Typer(help="SemanticShelf operations.", no_args_is_help=True)
 models_app = typer.Typer(help="Embedding models.", no_args_is_help=True)
@@ -47,6 +48,148 @@ def warm() -> None:
         embedder = get_embedder(key, settings)
         elapsed = time.monotonic() - started
         typer.echo(f"{key}: {embedder.dim} dimensions, loaded in {elapsed:.1f}s")
+
+
+@models_app.command("reembed")
+def models_reembed(
+    key: Annotated[str, typer.Argument(help="The model key whose vectors to recompute.")],
+    apply: Annotated[
+        bool,
+        typer.Option("--apply", help="Do the work. Without it, nothing is queued or computed."),
+    ] = False,
+) -> None:
+    """Recompute every vector stored under one key, and replace it.
+
+    What a checkpoint that moved leaves behind: vectors computed with weights
+    this build no longer reads, which nothing in the store can tell apart from
+    the others (ADR-007). Hours of CPU, so it reports first and does nothing
+    without `--apply`.
+
+    Before running it, make sure every process that writes this key is already
+    running the new configuration — change the setting, restart the writers,
+    then repair. A process that loaded the model earlier keeps it, and a queued
+    job carries a key, not a revision.
+    """
+    settings = Settings()  # type: ignore[call-arg]
+    _check_key(key, settings)
+    for line in asyncio.run(_run_rebuild(settings, model=key, answering_for=None, apply=apply)):
+        typer.echo(line)
+
+
+@models_app.command("migrate")
+def models_migrate(
+    old_key: Annotated[str, typer.Argument(help="The key being replaced.")],
+    new_key: Annotated[str, typer.Argument(help="The key replacing it.")],
+    apply: Annotated[
+        bool,
+        typer.Option("--apply", help="Do the work. Without it, nothing is queued or computed."),
+    ] = False,
+    retire: Annotated[
+        bool,
+        typer.Option(
+            "--retire",
+            help="After filling, delete the old key's vectors. Refused unless the new key "
+            "covers every asset the old one does and the queue owes nothing.",
+        ),
+    ] = False,
+) -> None:
+    """Fill one key for the assets another answers for, and optionally retire it.
+
+    Filling is additive and deleting is not, so they are separate words:
+    `--apply` fills, `--apply --retire` fills and then deletes. The deletion is
+    refused unless the replacement covers every asset — tested inside the
+    statement that deletes — and unless the queue owes nothing for the new key.
+    """
+    settings = Settings()  # type: ignore[call-arg]
+    if old_key == new_key:
+        typer.echo(
+            f"{old_key!r} cannot replace itself; `models reembed {old_key}` recomputes a key "
+            "in place",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    _check_key(old_key, settings)
+    _check_key(new_key, settings)
+    lines = asyncio.run(
+        _run_rebuild(settings, model=new_key, answering_for=old_key, apply=apply, retire=retire)
+    )
+    for line in lines:
+        typer.echo(line)
+
+
+def _check_key(key: str, settings: Settings) -> None:
+    """A key the schema forbids, or this build cannot run, before anything else.
+
+    Queued work for a model nothing can run is work nobody will ever carry out,
+    so it is refused here rather than left in the table.
+    """
+    if key not in EMBEDDING_MODELS:
+        typer.echo(
+            f"unknown model key {key!r}; the schema allows: {', '.join(sorted(EMBEDDING_MODELS))}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    if key not in settings.enabled_models:
+        typer.echo(
+            f"model {key!r} is not enabled in this build; "
+            f"enabled: {', '.join(settings.enabled_models) or 'none'}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+
+async def _run_rebuild(
+    settings: Settings,
+    *,
+    model: str,
+    answering_for: str | None,
+    apply: bool,
+    retire: bool = False,
+) -> list[str]:
+    from app.db.engine import create_engine, create_session_factory
+    from app.ml.pool import create_pool
+    from app.services import indexing
+    from app.storage import MediaStorage
+
+    engine = create_engine(settings)
+    pool = create_pool(settings)
+    try:
+        factory = create_session_factory(engine)
+        storage = MediaStorage.at(settings.media_root)
+        if not apply:
+            return await indexing.describe_plan(
+                session_factory=factory,
+                settings=settings,
+                model=model,
+                answering_for=answering_for,
+                retire=retire,
+            )
+        index = indexing.carries_out_work(settings)
+        try:
+            report = await indexing.rebuild(
+                session_factory=factory,
+                storage=storage,
+                settings=settings,
+                pool=pool,
+                model=model,
+                answering_for=answering_for,
+                index=index,
+                refuse_while_held=answering_for is None,
+            )
+        except indexing.HeldElsewhere as refusal:
+            return [f"nothing done: {refusal}"]
+        lines = indexing.describe_rebuild(report, settings=settings)
+        if retire:
+            lines += await indexing.retire(
+                session_factory=factory,
+                settings=settings,
+                key=answering_for or model,
+                replaced_by=model,
+            )
+        return lines
+    finally:
+        pool.shutdown(wait=True)
+        await engine.dispose()
 
 
 @app.command("index-folder")
