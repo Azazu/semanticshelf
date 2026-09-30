@@ -1,7 +1,7 @@
 # Handoff — stretch-reembedding-tooling
 
 **Updated:** 2026-09-30 · claude
-**State:** proposing
+**State:** awaiting-gate-1
 **Branch:** change/stretch-reembedding-tooling
 
 ## Done this session
@@ -50,9 +50,43 @@ references tooling it does not have.
 - **Risk tier.** `high`: deletion of embeddings is on this project's own trigger
   list, and so is a migration if the model allowlist has to change.
 
+## What the proposal decided
+
+The five questions the handoff opened with are answered, and one of them changed
+the shape of the change.
+
+- **§9's command and ADR-007's repair are not the same operation.** §9 wants two
+  different keys; ADR-007 wants one key rebuilt because its weights changed.
+  Underneath they differ by one predicate, so there is **one engine with two
+  subcommands**: `models migrate <old> <new>` and `models reembed <key>`. Built
+  only as §9 wrote it, the command would have had nothing to run against — the
+  allowlist holds two keys of different spaces, and migrating between them is
+  meaningless. `reembed` is the half this repository can exercise end to end.
+- **"Without downtime" needs nothing built.** Which key answers a search is the
+  request's own `model`, defaulting to a constant in `app/domain.py` — not a
+  setting and not a database row. A second key can fill while the first keeps
+  answering, and switching is a separate deliberate act.
+- **Both subcommands report and change nothing without `--apply`**, following
+  `storage prune`. The second reason is this machine: the work is hours of CPU,
+  and the report answers "can I afford this now" from one query with no model
+  loaded.
+- **Completeness is counted inside the deleting statement**, not before it.
+  Checked earlier and acted on later it is a race, and an upload in between
+  would leave an asset whose old vector is gone and whose new one never existed.
+- **`--retire` is separate from `--apply`.** Filling is additive, deleting is
+  not, and one flag covering both would make the safe half carry the dangerous
+  half's weight.
+- **Retiring is not disabling.** The command deletes vectors and touches neither
+  the configuration, the constant, nor the schema — it says in its report that a
+  key left enabled will be queued for on the next upload.
+- **Risk-Tier: high** — deletion of embeddings, and running models over a whole
+  corpus.
+
 ## Next step
 
-`/opsx:propose stretch-reembedding-tooling`.
+`/gate-review stretch-reembedding-tooling 1` — Gate 1 on the artifacts.
+`scripts/pregate-verify.sh gate1 stretch-reembedding-tooling` passes (16 tasks,
+tier declared, applicability table present, links resolve).
 
 ## Blockers
 
