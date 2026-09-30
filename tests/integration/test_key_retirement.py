@@ -26,6 +26,7 @@ from app.db.engine import create_session_factory
 from app.domain import CLIP_VIT_L14, DINOV2_LARGE
 from app.main import create_app
 from app.ml.pool import create_pool
+from app.repositories import EmbeddingRepository
 from app.repositories.jobs import IndexingJobRepository
 from app.services import indexing
 from app.storage import MediaStorage
@@ -331,3 +332,44 @@ async def test_two_retirements_in_opposite_directions_cannot_undo_each_other(
         f"one key survives; the asset is not left with nothing: {remaining}, {first}, {second}"
     )
     assert any("refused" in line for line in (*first, *second)), (first, second)
+
+
+async def test_the_deleting_statement_deletes_nothing_when_it_is_not_covered(
+    client: httpx.AsyncClient, engine: AsyncEngine, sessions: async_sessionmaker[AsyncSession]
+) -> None:
+    """The condition is part of the DELETE, not only of the service that calls it.
+
+    The service refuses first, so its own test never reaches this statement —
+    and the statement is where the guarantee lives: tested earlier and acted on
+    later it is a race, which is the whole reason it was put there.
+    """
+    await upload(client, 1)
+    await upload(client, 2)
+    await drain_queue(engine)
+    async with engine.begin() as connection:
+        await connection.execute(
+            sa.text("DELETE FROM embeddings WHERE model = :model"), {"model": DINOV2_LARGE}
+        )
+
+    async with sessions() as session, session.begin():
+        removed = await EmbeddingRepository(session).retire(
+            key=CLIP_VIT_L14, replaced_by=DINOV2_LARGE
+        )
+
+    assert removed == 0
+    assert (await counts(engine))[CLIP_VIT_L14] == 2
+
+
+async def test_the_deleting_statement_removes_what_is_covered(
+    client: httpx.AsyncClient, engine: AsyncEngine, sessions: async_sessionmaker[AsyncSession]
+) -> None:
+    await upload(client, 1)
+    await drain_queue(engine)
+
+    async with sessions() as session, session.begin():
+        removed = await EmbeddingRepository(session).retire(
+            key=CLIP_VIT_L14, replaced_by=DINOV2_LARGE
+        )
+
+    assert removed == 1
+    assert await counts(engine) == {DINOV2_LARGE: 1}
