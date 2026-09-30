@@ -73,7 +73,7 @@
 
 ## 3. Retiring a key
 
-- [ ] 3.1 `--retire`, separate from `--apply` (design decisions 3 and 4): delete
+- [x] 3.1 `--retire`, separate from `--apply` (design decisions 3 and 4): delete
   the old key's vectors **in a statement whose own condition is that every asset
   holding one has a vector under the new key**, refuse as a whole when any asset
   would be left uncovered, naming how many, and refuse while the queue owes
@@ -84,7 +84,7 @@
   under the retiring key after the fill ended** is refused on the count taken
   inside the delete; `--apply` without `--retire` deletes nothing whatever the
   state.
-- [ ] 3.2 Two retirements cannot undo each other (design decision 3): the
+- [x] 3.2 Two retirements cannot undo each other (design decision 3): the
   retirement holds the queue's per-model advisory lock for **both** keys, in an
   order sorted by key name so it does not depend on which is being retired, for
   the whole of the coverage test and the delete. Verify: a two-session
@@ -92,7 +92,7 @@
   both — asserting that they serialise, that the second refuses, and that no
   asset is left without a vector under either key; and a test that a fill of
   either key cannot overlap a retirement of it.
-- [ ] 3.3 Retiring is not disabling (design decision 5): the command touches
+- [x] 3.3 Retiring is not disabling (design decision 5): the command touches
   neither `ENABLED_MODELS`, nor `EMBEDDING_MODELS`, nor the schema's CHECK, and
   says in its report that a key left enabled will be queued for on the next
   upload. Verify: a test that the settings and the schema are unchanged after a
