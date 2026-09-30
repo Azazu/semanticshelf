@@ -1,7 +1,7 @@
 # Handoff — pin-model-revisions
 
 **Updated:** 2026-09-29 · claude
-**State:** ready-to-merge
+**State:** merged
 **Branch:** change/pin-model-revisions
 
 ## Done this session
