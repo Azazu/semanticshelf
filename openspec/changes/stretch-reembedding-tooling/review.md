@@ -41,3 +41,25 @@
 - Checked the existing transaction-scoped queue lock, claim eligibility (including expired leases and available_at), finish_work reporting, runner configuration contract, process-local model cache and ADR-007 against current source.
 - `scripts/pregate-verify.sh gate1 stretch-reembedding-tooling` passed, including strict OpenSpec validation, with zero warnings. `git diff --check` for the requested commit range passed.
 - This is an artifacts-only Gate 1 confirmation; implementation tests and failing-input demonstrations remain future tasks. Only review.md was modified; no git write commands were run.
+
+## Confirmation 2 · Gate 1 · Round 1
+**Reviewer:** codex
+**Date:** 2026-09-30
+**Reviewed-Commit:** c89e9a39d895f409b34feb3c1160a2167a1222ab
+**Verdict:** confirmed
+
+### Findings
+| # | Resolution |
+|---|------------|
+| 1 | confirmed — Decision 3 and the embedding-storage delta require the existing transaction-scoped advisory locks for both keys in consistent key-name order across coverage checking and deletion. Tasks 3.2 and 5.1 require the two-session opposite-retirement regression and failing-input evidence for the lock. The growth regression in task 3.1 introduces an old-key vector after the fill, rather than relying on an upload with neither vector. |
+| 2 | confirmed — The proposal and indexing-jobs delta preserve queue-only behavior under INDEXING_RUNNER=worker and require reporting the configuration responsible. Task 2.2 covers both commands under both runner configurations. Decision 3, the embedding-storage delta and task 3.1 require refusing retirement while replacement work remains outstanding, independently of coverage. |
+| 3 | confirmed — Decisions 6 and 7 now distinguish live claims from pending work and expired claims: only live claims prevent repair from starting; selected pending and expired work is drained without double-queuing. The indexing-jobs delta explicitly reports delayed retries without claiming completion and preserves terminal-failure reset semantics. Tasks 2.1, 2.3 and 2.6 cover interrupted pending-work recovery, acceptance and execution of expired claims, live-claim refusal, terminal failures and delayed retries; task 2.2 distinguishes actual execution from work left queued. The blanket refusal identified in Confirmation 1 no longer prevents the recovery engine from running. |
+| 4 | confirmed — Decision 7 retains the supported operational precondition: change configuration, restart every writer, then repair, with mixed-checkpoint search limits documented through task 4.3. Task 2.6 now explicitly requires two distinguishable fake checkpoints, an abandoned old-checkpoint claim that expires, repair with the new checkpoint, and a subsequent rejected stale finish; final vectors are asserted by value. It also requires verification of the supported restart sequence. This is consistent with finding 3's recovery path: reclaiming expired work changes the lease token, and completion clears it, so the old runner cannot overwrite the repaired result through the existing conditional finish. Task 5.1 requires failing-input evidence for that protection. |
+
+### Validation
+
+- Reviewed only the diff from 95669971444978df7d672f6f41d4f224e2ac5f89 to c89e9a39d895f409b34feb3c1160a2167a1222ab and collateral contracts reachable from findings 1–4; no unrelated findings were introduced.
+- Branch and HEAD match the request; the working tree was clean before confirmation. All four source findings were dispositioned as fixed.
+- Checked the current queue advisory lock, due-work and expired-claim selection, conditional lease-token finish and atomic vector write, runner configuration, process-local model cache, indexing-jobs contract and ADR-007. Searched related artifacts for the superseded outstanding-work refusal; the handoff describes its replacement after recounting the earlier attempt.
+- `scripts/pregate-verify.sh gate1 stretch-reembedding-tooling` passed, including strict OpenSpec validation, with zero warnings. `git diff --check` for the requested commit range passed.
+- This confirms the Gate 1 plan; implementation regressions and failing-input demonstrations remain future tasks. Only review.md was modified; no git write commands were run.
